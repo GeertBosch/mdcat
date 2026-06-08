@@ -299,6 +299,7 @@ struct Emulator {
     int cr = 0, cc = 0;      // cursor, screen-relative
     Attr pen;                // current pen
     int sr = 0, sc = 0;      // DECSC save
+    size_t stop = 0;         // DECSC save of `top` (see decsc/decrc)
     Attr spen;
 
     // parser state
@@ -336,8 +337,15 @@ struct Emulator {
     void col(int c) { cc = std::min(std::max(0, c), W - 1); }
     void row(int r) { cr = std::min(std::max(0, r), H - 1); }
     void cup(int r, int c) { row(r); col(c); }
-    void decsc() { sr = cr; sc = cc; spen = pen; }
-    void decrc() { cr = sr; cc = sc; pen = spen; }
+    // DECSC/DECRC save and restore the ABSOLUTE cursor position (top + cr), not just
+    // the screen-relative cr: a sixel between them advances cr via finishSixel and may
+    // scrollUp() (bumping `top`), which decrc must undo too — else each DECSC/DECRC-
+    // bracketed image (mdcat's table/paragraph placement) leaves `top` one row higher,
+    // and every following image drifts down a row. Saving `top` makes the bracket truly
+    // position-neutral, matching the producer's intent. (timg doesn't bracket its
+    // sixels, so its grid protocol is unaffected.)
+    void decsc() { sr = cr; sc = cc; stop = top; spen = pen; }
+    void decrc() { cr = sr; cc = sc; top = stop; pen = spen; ensure(); }
     void el(int m) {                                       // erase in line
         auto& L = screen(cr);
         if (m == 1) blank(L, 0, cc + 1);
