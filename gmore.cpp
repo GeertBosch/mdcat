@@ -8,7 +8,8 @@
 // and sixel DCS (decoded to RGBA rasters, re-encoded as 18px strips on display).
 // OSC sequences are skipped (OSC 8 hyperlink attrs come next — linkId field reserved).
 //
-// Keys: space/f page down, Enter/j line down, q quit. (Up-scroll deferred.)
+// Keys: space/f page down, b page up, Enter/j line down, k/y line up, q quit.
+// Up-scroll full-repaints the window (an incremental up-paint clobbers image cells).
 // --dump renders the text grid to stdout (no images, for testing).
 // --dump-images renders text + re-encoded sixel strips (for render testing).
 // --imginfo prints decoded image metadata + ASCII rasters.
@@ -735,11 +736,6 @@ int main(int argc, char** argv) {
     int pageH = H - 1;
     size_t viewTop = 0;
 
-    // Initial paint: fill the first page.
-    size_t initEnd = std::min(total, (size_t)pageH);
-    for (size_t r = 0; r < initEnd; ++r) { emitRow(r); std::fputc('\n', stdout); }
-    viewTop = initEnd < (size_t)pageH ? 0 : initEnd - (size_t)pageH;
-
     auto showPrompt = [&] {
         size_t bottom = viewTop + (size_t)pageH;
         if (bottom >= total) std::fputs("\033[7m(END)\033[27m", stdout);
@@ -749,10 +745,17 @@ int main(int argc, char** argv) {
     };
     auto clearPrompt = [&] { std::fputs("\r\033[K", stdout); };
 
+    // Initial paint: fill the first page. Plain top-down onto the (blank) screen —
+    // NO per-line erase, so each image strip's ~4px overspill is left for the next
+    // row's strip to overwrite (the proven-seamless down-paint). Down-scroll keeps
+    // this property; up-scroll is the only path that full-repaints.
+    size_t initEnd = std::min(total, (size_t)pageH);
+    for (size_t r = 0; r < initEnd; ++r) { emitRow(r); std::fputc('\n', stdout); }
+    viewTop = initEnd < (size_t)pageH ? 0 : initEnd - (size_t)pageH;
+
     // Scroll down n rows: emit n new rows at the bottom (full-screen scroll up via
     // the \n at the last visible row; the new strip's 4px overspill goes into the
     // bottom scratch/prompt row, which the locked design reserves for it).
-    // (Up-scroll deferred — it needs a full-repaint that clobbers live image cells.)
     auto advance = [&](int n) {
         size_t bottom = viewTop + (size_t)pageH;
         for (int k = 0; k < n && bottom < total; ++k, ++bottom) {
@@ -762,6 +765,23 @@ int main(int argc, char** argv) {
         viewTop = newBottom > (size_t)pageH ? newBottom - (size_t)pageH : 0;
     };
 
+    // Scroll up n rows: an incremental up-paint would clobber live image cells, so
+    // move the window up and FULL-REPAINT — clear the screen once (\033[2J), then
+    // redraw top-down (the proven-seamless strip order). The single up-front clear
+    // can't interleave with strip overspill; a per-line erase would (it'd wipe the
+    // overspill before the next row repaints it). Separate from down-scroll on
+    // purpose: down-scroll must stay the clean incremental paint.
+    auto retreat = [&](int n) {
+        if (viewTop == 0) return;
+        viewTop = (size_t)n <= viewTop ? viewTop - (size_t)n : 0;
+        std::fputs("\033[2J\033[H", stdout);
+        for (int i = 0; i < pageH; ++i) {
+            size_t r = viewTop + (size_t)i;
+            if (r < total) emitRow(r);
+            std::fputc('\n', stdout);
+        }
+    };
+
     for (;;) {
         showPrompt();
         unsigned char c;
@@ -769,10 +789,15 @@ int main(int argc, char** argv) {
         if (c == 'q' || c == 'Q') break;
         clearPrompt();
         size_t bottom = viewTop + (size_t)pageH;
-        if (bottom >= total) { if (c == ' ') break; }
+        if (bottom >= total && (c == ' ' || c == 'f' || c == 'j' || c == '\r' || c == '\n')) {
+            if (c == ' ') break;     // space at END quits, like more(1)
+            continue;                // other forward keys are no-ops at END
+        }
         switch (c) {
             case ' ': case 'f': advance(pageH); break;
             case '\r': case '\n': case 'j': advance(1); break;
+            case 'b': retreat(pageH); break;
+            case 'k': case 'y': retreat(1); break;
             default: break;
         }
     }
