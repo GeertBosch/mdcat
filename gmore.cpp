@@ -3,14 +3,15 @@
 // with no constraints on the producer — including cursor movement. See
 // docs/adr/0001-gmore-data-model.md for why a cell grid (not line spans).
 //
-// STATUS: foundation. The cell-grid emulator (text, UTF-8, wrap, SGR colour/style,
-// cursor movement, DECSC/DECRC, EL/ED) + a "more" pager over the grid. OSC and
-// sixel-DCS sequences are RECOGNISED and SKIPPED as no-ops for now; the sixel
-// image layer + 18px-strip rendering, and OSC 8 hyperlink attrs, come next (the
-// model already has room — interned Attr has a linkId field reserved).
+// STATUS: sixel decode + encode + strip rendering complete. The cell-grid emulator
+// handles text, UTF-8, wrap, SGR colour/style, cursor movement, DECSC/DECRC, EL/ED,
+// and sixel DCS (decoded to RGBA rasters, re-encoded as 18px strips on display).
+// OSC sequences are skipped (OSC 8 hyperlink attrs come next — linkId field reserved).
 //
-// Keys: space/f page down, Enter/j line down, q quit.   --dump renders the
-// emulated grid to stdout (no paging) for testing.
+// Keys: space/f page down, Enter/j line down, q quit. (Up-scroll deferred.)
+// --dump renders the text grid to stdout (no images, for testing).
+// --dump-images renders text + re-encoded sixel strips (for render testing).
+// --imginfo prints decoded image metadata + ASCII rasters.
 
 #include <algorithm>
 #include <cctype>
@@ -203,6 +204,85 @@ bool decodeSixel(const std::string& s, Image& img) {
         for (int xx = 0; xx < Ph && xx < (int)g[y].size(); ++xx)
             img.px[(size_t)y * Ph + xx] = g[y][xx];
     return true;
+}
+
+// Encode raster pixels [y0, y1) × [0, Ph) of img into a sixel DCS sequence.
+// y0/y1 are pixel rows; caller must clamp to [0, img.Pv). Returns the full
+// ESC P … ST sequence ready to write to the terminal.
+std::string encodeSixel(const Image& img, int y0, int y1) {
+    std::string out;
+    int h = y1 - y0;
+    if (h <= 0 || img.Ph <= 0) return out;
+
+    out += "\033P0;1;0q";
+    // Raster attribute: pixel aspect 1:1, Ph wide, h tall
+    out += '"'; out += "1;1;"; out += std::to_string(img.Ph); out += ';'; out += std::to_string(h); out += '\n';
+
+    // Walk sixel bands (6 px each)
+    for (int band = 0; y0 + band * 6 < y1; ++band) {
+        int py0 = y0 + band * 6;           // first pixel row of this band
+        int py1 = std::min(py0 + 6, y1);   // exclusive
+
+        // Collect unique colours in this band (in encounter order, index 0…)
+        std::vector<uint32_t> palette;          // palette[n] = 0xFFrrggbb
+        std::unordered_map<uint32_t, int> idx;
+        for (int py = py0; py < py1; ++py) {
+            for (int x = 0; x < img.Ph; ++x) {
+                uint32_t c = img.px[(size_t)py * img.Ph + x];
+                if (c && !idx.count(c)) { idx[c] = (int)palette.size(); palette.push_back(c); }
+            }
+        }
+        if (palette.empty()) {
+            // blank band — emit a single transparent sixel row then advance band
+            out += '-';
+            continue;
+        }
+
+        // Emit colour definitions and bitmask rows. Sixel `#n;2;R;G;B` takes the
+        // RGB components as PERCENTAGES (0–100), not 0–255 — so convert (with
+        // rounding, which inverts the decoder's 0–100→0–255 expansion exactly).
+        bool first_color = true;
+        auto to100 = [](int v) { return (v * 100 + 127) / 255; };
+        for (int n = 0; n < (int)palette.size(); ++n) {
+            uint32_t c = palette[n];
+            int r = to100((c >> 16) & 0xFF), g = to100((c >> 8) & 0xFF), b = to100(c & 0xFF);
+            out += '#'; out += std::to_string(n);
+            out += ";2;"; out += std::to_string(r);
+            out += ';';  out += std::to_string(g);
+            out += ';';  out += std::to_string(b);
+
+            // Build the 6-bit bitmask row for this colour
+            // bits[x] = bitmask byte ('?' + bits) for this colour at column x
+            std::vector<unsigned char> bits(img.Ph, 0);
+            for (int py = py0; py < py1; ++py) {
+                int bit = 1 << (py - py0);
+                for (int x = 0; x < img.Ph; ++x) {
+                    if (img.px[(size_t)py * img.Ph + x] == c) bits[x] |= (unsigned char)bit;
+                }
+            }
+
+            // Emit sixel bytes with run-length encoding (threshold: run ≥ 5)
+            out += '#'; out += std::to_string(n);   // select colour register
+            int x = 0;
+            while (x < img.Ph) {
+                unsigned char byte = (unsigned char)('?' + bits[x]);
+                int run = 1;
+                while (x + run < img.Ph && bits[x + run] == bits[x]) ++run;
+                if (run >= 5) {
+                    out += '!'; out += std::to_string(run); out += (char)byte;
+                } else {
+                    for (int k = 0; k < run; ++k) out += (char)byte;
+                }
+                x += run;
+            }
+
+            if (n + 1 < (int)palette.size()) out += '$';  // CR: more colours on same band
+            (void)first_color; first_color = false;
+        }
+        out += '-';  // graphics newline: advance to next band
+    }
+    out += "\033\\";
+    return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -431,10 +511,36 @@ struct Emulator {
                 if (!(c.cp == U' ' && c.attr == 0)) { last = r + 1; break; }
             }
         }
+        for (const Image& img : images) {
+            size_t imgEnd = img.row + (size_t)((img.Pv + cellH - 1) / cellH);
+            if (imgEnd > last) last = imgEnd;
+        }
         return last;
     }
 
-    void renderRow(size_t absRow, std::string& out) const {
+    void renderRow(size_t absRow, std::string& out, bool withImages = true) const {
+        // Emit any image strips that cover this grid row. Each strip is an 18px
+        // (= ceil(cellH/6)*6) sixel painted at the top of this cell row; the next
+        // row's strip overwrites the ~4px overspill with identical pixels, so the
+        // image reassembles seamlessly going top-down (the proven scheme — see
+        // tools/probe-pager-paint.sh). We wrap each strip in DECSC/DECRC (ESC 7 /
+        // ESC 8) so the cursor returns to this row's start no matter how many rows
+        // the sixel advanced — robust against per-terminal cursor-after-sixel
+        // behaviour, unlike a relative CSI <n> A move.
+        if (withImages) {
+            int stripH = ((cellH + 5) / 6) * 6;  // ceil(cellH/6)*6 — e.g. 18 for cellH=14
+            for (const Image& img : images) {
+                size_t imgEnd = img.row + (size_t)((img.Pv + cellH - 1) / cellH);
+                if (absRow < img.row || absRow >= imgEnd) continue;
+                int y0 = (int)(absRow - img.row) * cellH;
+                int y1 = std::min(y0 + stripH, img.Pv);
+                out += "\0337";                                  // DECSC: save cursor
+                if (img.col > 0) { out += "\033["; out += std::to_string(img.col + 1); out += 'G'; }
+                out += encodeSixel(img, y0, y1);
+                out += "\0338";                                  // DECRC: restore cursor
+            }
+        }
+
         if (absRow >= rows.size()) return;
         const std::vector<Cell>& L = rows[absRow];
         int last = -1;
@@ -528,10 +634,11 @@ CellSize queryCellSize16t() {
 }  // namespace
 
 int main(int argc, char** argv) {
-    bool dump = false, imginfo = false;
+    bool dump = false, dumpImages = false, imginfo = false;
     const char* path = nullptr;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--dump") == 0) dump = true;
+        else if (std::strcmp(argv[i], "--dump-images") == 0) { dump = true; dumpImages = true; }
         else if (std::strcmp(argv[i], "--imginfo") == 0) imginfo = true;
         else if (std::strcmp(argv[i], "-") == 0) path = nullptr;
         else path = argv[i];
@@ -596,10 +703,15 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    // --dump is the text-grid test surface; suppress images so tests stay deterministic.
     auto emitRow = [&](size_t r) { std::string s; em.renderRow(r, s); fwrite(s.data(), 1, s.size(), stdout); };
+    auto emitRowText = [&](size_t r) { std::string s; em.renderRow(r, s, false); fwrite(s.data(), 1, s.size(), stdout); };
 
     if (dump) {
-        for (size_t r = 0; r < total; ++r) { emitRow(r); std::fputc('\n', stdout); }
+        for (size_t r = 0; r < total; ++r) {
+            if (dumpImages) emitRow(r); else emitRowText(r);
+            std::fputc('\n', stdout);
+        }
         return 0;
     }
 
@@ -619,17 +731,35 @@ int main(int argc, char** argv) {
     std::signal(SIGINT, onSignal);
     std::signal(SIGTERM, onSignal);
 
-    size_t next = 0;
-    for (; next < static_cast<size_t>(H - 1) && next < total; ++next) { emitRow(next); std::fputc('\n', stdout); }
+    // view = rows [viewTop, viewTop + pageH); pageH = H-1 (bottom row = prompt).
+    int pageH = H - 1;
+    size_t viewTop = 0;
+
+    // Initial paint: fill the first page.
+    size_t initEnd = std::min(total, (size_t)pageH);
+    for (size_t r = 0; r < initEnd; ++r) { emitRow(r); std::fputc('\n', stdout); }
+    viewTop = initEnd < (size_t)pageH ? 0 : initEnd - (size_t)pageH;
 
     auto showPrompt = [&] {
-        if (next >= total) std::fputs("\033[7m(END)\033[27m", stdout);
-        else std::fprintf(stdout, "\033[7m--More--(%d%%)\033[27m", static_cast<int>(next * 100 / total));
+        size_t bottom = viewTop + (size_t)pageH;
+        if (bottom >= total) std::fputs("\033[7m(END)\033[27m", stdout);
+        else std::fprintf(stdout, "\033[7m--More--(%d%%)\033[27m",
+                          static_cast<int>(bottom * 100 / total));
         std::fflush(stdout);
     };
     auto clearPrompt = [&] { std::fputs("\r\033[K", stdout); };
+
+    // Scroll down n rows: emit n new rows at the bottom (full-screen scroll up via
+    // the \n at the last visible row; the new strip's 4px overspill goes into the
+    // bottom scratch/prompt row, which the locked design reserves for it).
+    // (Up-scroll deferred — it needs a full-repaint that clobbers live image cells.)
     auto advance = [&](int n) {
-        for (int k = 0; k < n && next < total; ++k) { emitRow(next); std::fputc('\n', stdout); ++next; }
+        size_t bottom = viewTop + (size_t)pageH;
+        for (int k = 0; k < n && bottom < total; ++k, ++bottom) {
+            emitRow(bottom); std::fputc('\n', stdout);
+        }
+        size_t newBottom = std::min(total, viewTop + (size_t)pageH + (size_t)n);
+        viewTop = newBottom > (size_t)pageH ? newBottom - (size_t)pageH : 0;
     };
 
     for (;;) {
@@ -638,9 +768,10 @@ int main(int argc, char** argv) {
         if (read(gTtyFd, &c, 1) != 1) break;
         if (c == 'q' || c == 'Q') break;
         clearPrompt();
-        if (next >= total) { if (c == ' ') break; continue; }
+        size_t bottom = viewTop + (size_t)pageH;
+        if (bottom >= total) { if (c == ' ') break; }
         switch (c) {
-            case ' ': case 'f': advance(H - 1); break;
+            case ' ': case 'f': advance(pageH); break;
             case '\r': case '\n': case 'j': advance(1); break;
             default: break;
         }

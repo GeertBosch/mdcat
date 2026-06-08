@@ -76,6 +76,44 @@ check "grid same row" \
     'image 1 @0,0 4x6px 1x1cells\nimage 2 @0,8 4x6px 1x1cells\n' \
     iig "$tmp/in"
 
+# ---------------------------------------------------------------------------
+# Encoder / render tests: verify --dump re-emits sixel DCS for image rows.
+# Cell height = 6 so strip height = ceil(6/6)*6 = 6 — one band per strip,
+# making a 6-px-tall image render as exactly one sixel strip per row.
+# ---------------------------------------------------------------------------
+
+# checkgrep LABEL PATTERN CMD...: pass if CMD output contains PATTERN (grep -qF).
+checkgrep() {
+    label=$1; pat=$2; shift 2
+    "$@" > "$tmp/act" 2> "$tmp/err"
+    if grep -qF "$pat" "$tmp/act"; then
+        n=$((n + 1))
+    else
+        echo "gmore-sixel: FAIL [$label] (pattern '$pat' not found)" >&2
+        [ -s "$tmp/err" ] && { echo "  stderr:" >&2; sed 's/^/    /' "$tmp/err" >&2; }
+        fails=$((fails + 1))
+    fi
+}
+
+di6() { GMORE_CELLW=8 GMORE_CELLH=6 "$gmore" --dump-images "$1"; }
+
+# A 4x6 single-colour image (one strip = one sixel).
+# --dump-images should re-emit a DCS sequence (ESC P marker) for that row.
+mkin '\033Pq"1;1;4;6#0;2;100;0;0#0~~~~\033\\'
+checkgrep "render single strip" "$(printf '\033P')" di6 "$tmp/in"
+
+# A 4x12 image (two cell rows, two strips): two DCS sequences in dump output.
+# Each sixel strip starts with ESC P; count ESC bytes (≥2 expected).
+mkin '\033Pq"1;1;4;12#0;2;100;0;0#0~~~~-~~~~\033\\'
+di6 "$tmp/in" > "$tmp/act"
+count=$(tr -cd "$(printf '\033')" < "$tmp/act" | wc -c)
+if [ "$count" -ge 2 ]; then
+    n=$((n + 1))
+else
+    echo "gmore-sixel: FAIL [render two strips] (expected ≥2 ESC, got $count)" >&2
+    fails=$((fails + 1))
+fi
+
 if [ "$fails" -eq 0 ]; then
     echo "gmore-sixel: OK ($n cases)"
     exit 0
