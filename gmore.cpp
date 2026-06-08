@@ -5,8 +5,8 @@
 //
 // STATUS: sixel decode + encode + strip rendering complete. The cell-grid emulator
 // handles text, UTF-8, wrap, SGR colour/style, cursor movement, DECSC/DECRC, EL/ED,
-// and sixel DCS (decoded to RGBA rasters, re-encoded as 18px strips on display).
-// OSC sequences are skipped (OSC 8 hyperlink attrs come next — linkId field reserved).
+// sixel DCS (decoded to RGBA rasters, re-encoded as 18px strips on display), and
+// OSC 8 hyperlinks (parsed, stored as interned linkId, re-emitted on render).
 //
 // Keys: space/f page down, b page up, Enter/j line down, k/y line up, q quit.
 // Up-scroll full-repaints the window (an incremental up-paint clobbers image cells).
@@ -34,7 +34,7 @@ namespace {
 
 // ---------------------------------------------------------------------------
 // Attributes (interned). Colour encoding: 0 = default; tag in the high byte —
-// PAL|idx for a 256-palette index, TRUE|rgb for 24-bit. linkId reserved for OSC 8.
+// PAL|idx for a 256-palette index, TRUE|rgb for 24-bit. linkId 0 = no link.
 // ---------------------------------------------------------------------------
 constexpr uint32_t PAL = 0x01000000u, TRUE = 0x02000000u;
 uint32_t pal(int i) { return PAL | (i & 0xFF); }
@@ -45,7 +45,7 @@ enum { A_BOLD = 1, A_DIM = 2, A_ITALIC = 4, A_UNDER = 8, A_INVERSE = 16 };
 struct Attr {
     uint32_t fg = 0, bg = 0;
     uint16_t flags = 0;
-    uint32_t link = 0;  // OSC 8 (reserved; not set yet)
+    uint32_t link = 0;  // OSC 8 linkId (0 = no link)
     bool operator==(const Attr& o) const {
         return fg == o.fg && bg == o.bg && flags == o.flags && link == o.link;
     }
@@ -67,6 +67,23 @@ uint16_t internAttr(const Attr& a) {
     uint16_t id = static_cast<uint16_t>(gAttrs.size());
     gAttrs.push_back(a);
     gAttrMap.emplace(a, id);
+    return id;
+}
+
+// ---------------------------------------------------------------------------
+// URI interning for OSC 8 hyperlinks. id 0 = no link; ids start at 1.
+// ---------------------------------------------------------------------------
+std::vector<std::string> gUris;  // gUris[0] unused; real URIs start at index 1
+std::unordered_map<std::string, uint32_t> gUriMap;
+
+uint32_t internUri(const std::string& uri) {
+    if (uri.empty()) return 0;
+    auto it = gUriMap.find(uri);
+    if (it != gUriMap.end()) return it->second;
+    if (gUris.empty()) gUris.emplace_back();  // reserve slot 0
+    uint32_t id = static_cast<uint32_t>(gUris.size());
+    gUris.push_back(uri);
+    gUriMap.emplace(uri, id);
     return id;
 }
 
@@ -417,12 +434,21 @@ struct Emulator {
         if (b >= 0x40 && b <= 0x7E) { dispatchCsi(static_cast<char>(b)); st = GROUND; return; }
         seq.push_back(static_cast<char>(b));
     }
-    // OSC: skip until BEL or ST (kept as a no-op; OSC 8 parsing lands here later).
+    // OSC: accumulate until BEL or ST, then dispatch. OSC 8 sets/clears pen.link;
+    // all other OSC sequences are silently consumed (text not garbled, attrs ignored).
     void osc(unsigned char b) {
-        if (b == 0x07) { st = GROUND; return; }
-        if (escPend) { if (b == '\\') { st = GROUND; return; } escPend = false; }
+        if (b == 0x07) { dispatchOsc(); st = GROUND; return; }
+        if (escPend) { if (b == '\\') { dispatchOsc(); st = GROUND; return; } escPend = false; }
         if (b == 0x1B) { escPend = true; return; }
         seq.push_back(static_cast<char>(b));
+    }
+    void dispatchOsc() {
+        // OSC 8 format: "8;<params>;<uri>"  — empty uri closes the link.
+        if (seq.size() >= 2 && seq[0] == '8' && seq[1] == ';') {
+            size_t semi = seq.find(';', 2);
+            std::string uri = (semi != std::string::npos) ? seq.substr(semi + 1) : std::string{};
+            pen.link = internUri(uri);
+        }
     }
     // DCS (sixel): accumulate until ST, then decode + anchor the image.
     void dcs(unsigned char b) {
@@ -556,10 +582,20 @@ struct Emulator {
         for (int i = 0; i < static_cast<int>(L.size()); ++i)
             if (!(L[i].cp == U' ' && L[i].attr == 0)) last = i;
         uint16_t cur = 0;
+        uint32_t curLink = 0;
+        auto emitOsc8 = [&](uint32_t linkId) {
+            out += "\033]8;;";
+            if (linkId && linkId < gUris.size()) out += gUris[linkId];
+            out += "\033\\";
+            curLink = linkId;
+        };
         for (int i = 0; i <= last; ++i) {
             if (L[i].attr != cur) { out += sgrFor(L[i].attr); cur = L[i].attr; }
+            uint32_t lnk = gAttrs[cur].link;
+            if (lnk != curLink) emitOsc8(lnk);
             appendUtf8(out, L[i].cp);
         }
+        if (curLink != 0) emitOsc8(0);   // close any open hyperlink
         if (cur != 0) out += "\033[0m";
     }
 };
