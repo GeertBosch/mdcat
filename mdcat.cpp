@@ -74,6 +74,10 @@ int gWidthOverride = 0;
 // still works over /dev/tty, and the terminal width is read from $COLUMNS / stderr's TIOCGWINSZ.
 bool gForceGraphics = false;
 
+// Directory of the file currently being rendered, used to resolve relative image paths.
+// Empty string means the current working directory. Set by main() before each render() call.
+std::string gFileDir;
+
 // Columns currently consumed by container-block decorations (the block-quote left rule, a list
 // item's marker indent). Every nested container raises it by the width of its prefix while its
 // content is being rendered, so the width that paragraphs reflow to and that tables and rules fill
@@ -728,7 +732,9 @@ bool renderImageBlock(const std::string& text, int availWidth, std::string& out,
     if (!terminalSupportsGraphics()) return fallback("no graphics support");
 
     if (srcIt == attrs.end() || srcIt->second.empty()) return fallback("no src");
-    const std::string& src = srcIt->second;
+    // Resolve relative paths against the directory of the file being rendered.
+    std::string src = srcIt->second;
+    if (!gFileDir.empty() && src[0] != '/') src = gFileDir + "/" + src;
 
     int pw = 0, ph = 0;
     if (!readPngSize(src, pw, ph)) return fallback("not a readable PNG");
@@ -1743,8 +1749,11 @@ int main(int argc, char** argv) {
                 if (usePager) delete out;
                 return 1;
             }
+            size_t slash = path.rfind('/');
+            gFileDir = (slash != std::string::npos) ? path.substr(0, slash) : std::string();
             render(splitLines(f), *out);
         }
+        gFileDir.clear();
     } else {
         render(splitLines(std::cin), *out);
     }
