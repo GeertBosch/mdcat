@@ -21,8 +21,8 @@
 // conformant. As an exception to the "no inline HTML" rule, a paragraph or table cell that
 // consists solely of an <img ...> tag pointing at a local PNG is rendered as an actual image by
 // shelling out to timg(1) on terminals that support sixel graphics; elsewhere (e.g. Apple's
-// Terminal.app) it falls back to the tag's alt text or filename. See renderImageBlock. All other
-// inline HTML is passed through literally.
+// Terminal.app) it falls back to the tag's alt text or filename. See renderImageBlock. Supported
+// formats: PNG, JPG, GIF, SVG. All other inline HTML is passed through literally.
 //
 // Build:  c++ -std=c++17 -O2 -o mdcat mdcat.cpp
 // Usage:  mdcat [--width N] [--] [file ...]   (reads standard input when given no file arguments)
@@ -558,33 +558,54 @@ std::string renderInline(const std::string& text) {
 // ---------------------------------------------------------------------------
 //
 // As an exception to the "inline HTML is literal" rule, a paragraph or table cell whose entire
-// content is a single <img ...> tag referring to a local PNG is rendered as a real image. We read
-// the PNG's intrinsic pixel size from its fixed header, decide a target size in character cells,
-// and let timg(1) paint it with sixel graphics. If anything goes wrong (not a lone PNG <img>, file
-// unreadable, timg missing or failing) we fall back to the tag's alt text, or the literal tag.
+// content is a single <img ...> tag referring to a local supported image file is rendered as a
+// real image. We let timg(1) paint it with sixel graphics. For PNG we read the intrinsic pixel
+// size from its fixed header; for other formats (JPG, GIF, SVG) we verify the file exists and
+// rely on the width/height attributes (or let timg fill the available width). If anything goes
+// wrong (unsupported format, file unreadable, timg missing or failing) we fall back to the tag's
+// alt text, or the literal tag.
 
-// Read the pixel dimensions of a PNG from its 8-byte signature + IHDR chunk. The layout is fixed:
-// bytes 0..7 are the PNG signature, then a length+type, then IHDR data beginning at byte 16 with
-// big-endian uint32 width (offset 16) and height (offset 20). Returns false if `path` is not a
-// readable PNG. No image data is decoded — only the 24-byte header is touched.
-bool readPngSize(const std::string& path, int& width, int& height) {
-    static const unsigned char kSig[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+// Supported image extensions (lowercase). timg handles all of these.
+bool isSupportedImageExt(const std::string& path) {
+    static const char* exts[] = { ".png", ".jpg", ".jpeg", ".gif", ".svg", nullptr };
+    size_t dot = path.rfind('.');
+    if (dot == std::string::npos) return false;
+    std::string ext = path.substr(dot);
+    for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    for (int i = 0; exts[i]; ++i)
+        if (ext == exts[i]) return true;
+    return false;
+}
+
+// Read the pixel dimensions of a supported image file. For PNG the size is read directly from
+// the fixed IHDR header (24 bytes). For other formats the file is verified to exist but the
+// dimensions are returned as 0×0 — callers must rely on width/height attributes or let timg
+// pick the geometry. Returns false if the file cannot be opened or (for PNG) has a bad header.
+bool readImageSize(const std::string& path, int& width, int& height) {
+    width = height = 0;
+    if (!isSupportedImageExt(path)) return false;
     std::ifstream f(path, std::ios::binary);
     if (!f) return false;
-    unsigned char h[24];
-    if (!f.read(reinterpret_cast<char*>(h), sizeof h)) return false;
-    for (int i = 0; i < 8; ++i)
-        if (h[i] != kSig[i]) return false;
-    // The IHDR chunk must follow the signature; its type tag sits at bytes 12..15.
-    if (h[12] != 'I' || h[13] != 'H' || h[14] != 'D' || h[15] != 'R') return false;
-    auto be32 = [](const unsigned char* p) {
-        return (static_cast<uint32_t>(p[0]) << 24) | (static_cast<uint32_t>(p[1]) << 16) |
-               (static_cast<uint32_t>(p[2]) << 8) | static_cast<uint32_t>(p[3]);
-    };
-    uint32_t w = be32(h + 16), ht = be32(h + 20);
-    if (w == 0 || ht == 0) return false;
-    width = static_cast<int>(w);
-    height = static_cast<int>(ht);
+    // For PNG, read the intrinsic size from the IHDR chunk.
+    size_t dot = path.rfind('.');
+    std::string ext = path.substr(dot);
+    for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    if (ext == ".png") {
+        static const unsigned char kSig[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+        unsigned char h[24];
+        if (!f.read(reinterpret_cast<char*>(h), sizeof h)) return false;
+        for (int i = 0; i < 8; ++i)
+            if (h[i] != kSig[i]) return false;
+        if (h[12] != 'I' || h[13] != 'H' || h[14] != 'D' || h[15] != 'R') return false;
+        auto be32 = [](const unsigned char* p) {
+            return (static_cast<uint32_t>(p[0]) << 24) | (static_cast<uint32_t>(p[1]) << 16) |
+                   (static_cast<uint32_t>(p[2]) << 8) | static_cast<uint32_t>(p[3]);
+        };
+        uint32_t w = be32(h + 16), ht = be32(h + 20);
+        if (w == 0 || ht == 0) return false;
+        width = static_cast<int>(w);
+        height = static_cast<int>(ht);
+    }
     return true;
 }
 
@@ -737,10 +758,12 @@ bool renderImageBlock(const std::string& text, int availWidth, std::string& out,
     if (!gFileDir.empty() && src[0] != '/') src = gFileDir + "/" + src;
 
     int pw = 0, ph = 0;
-    if (!readPngSize(src, pw, ph)) return fallback("not a readable PNG");
+    if (!readImageSize(src, pw, ph)) return fallback("not a supported image");
 
     // Target pixel size: an explicit width/height overrides the intrinsic size. With only one of the
     // two given, the other is derived to preserve the aspect ratio; with both, the ratio is free.
+    // When the intrinsic size is unknown (non-PNG formats return 0×0), only attribute dimensions are
+    // available; if neither is given we fall back to a width-bound geometry below.
     auto attrInt = [&](const char* key, int& dst) {
         auto it = attrs.find(key);
         if (it == attrs.end()) return false;
@@ -753,8 +776,8 @@ bool renderImageBlock(const std::string& text, int availWidth, std::string& out,
     int aw = 0, ah = 0;
     bool haveW = attrInt("width", aw), haveH = attrInt("height", ah);
     if (haveW && haveH) { tw = aw; th = ah; }
-    else if (haveW)     { tw = aw; th = std::max(1, ph * aw / pw); }
-    else if (haveH)     { th = ah; tw = std::max(1, pw * ah / ph); }
+    else if (haveW)     { tw = aw; th = (ph > 0 && pw > 0) ? std::max(1, ph * aw / pw) : 0; }
+    else if (haveH)     { th = ah; tw = (pw > 0 && ph > 0) ? std::max(1, pw * ah / ph) : 0; }
 
     // Convert the target pixel size to character cells (timg detects the real cell size itself, so a
     // -g in cells is honoured). Then pick a SINGLE governing dimension so the other follows the true
@@ -771,8 +794,8 @@ bool renderImageBlock(const std::string& text, int availWidth, std::string& out,
     std::string geom;
     if (forceWidthBound && availWidth > 0)
         geom = std::to_string(availWidth) + "x";          // caller demands an exact column width
-    else if (availWidth > 0 && wCells > availWidth)
-        geom = std::to_string(availWidth) + "x";          // width-bound: clamp to the column
+    else if (availWidth > 0 && (wCells == 0 || wCells > availWidth))
+        geom = std::to_string(availWidth) + "x";          // width-bound: no size or too wide
     else if (haveH && !haveW)
         geom = "x" + std::to_string(hCells);              // height-bound: width follows aspect
     else
