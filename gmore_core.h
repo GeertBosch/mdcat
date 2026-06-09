@@ -699,7 +699,9 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
     if (!cellH) cellH = 16;
 
     // Not a terminal and not --dump/--imginfo: pass through verbatim (pager-as-cat).
-    if (!isatty(STDOUT_FILENO) && !dump && !imginfo) {
+    // GMORE_KEYS forces the pager path even off-tty so a scripted session can be
+    // captured to a file for inspection.
+    if (!isatty(STDOUT_FILENO) && !dump && !imginfo && !std::getenv("GMORE_KEYS")) {
         fwrite(data.data(), 1, data.size(), stdout);
         return 0;
     }
@@ -742,19 +744,46 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
         return 0;
     }
 
-    gTtyFd = open("/dev/tty", O_RDWR);
-    if (gTtyFd < 0) gTtyFd = STDIN_FILENO;
-    if (!enterRaw()) {
-        for (size_t r = 0; r < total; ++r) { emitRow(r); std::fputc('\n', stdout); }
-        return 0;
+    // GMORE_KEYS replays a scripted key sequence with no tty (output can be a
+    // pipe/file) — skip raw mode entirely in that case.
+    const bool scripted = std::getenv("GMORE_KEYS") != nullptr;
+    if (!scripted) {
+        gTtyFd = open("/dev/tty", O_RDWR);
+        if (gTtyFd < 0) gTtyFd = STDIN_FILENO;
+        if (!enterRaw()) {
+            for (size_t r = 0; r < total; ++r) { emitRow(r); std::fputc('\n', stdout); }
+            return 0;
+        }
+        std::atexit(restoreTty);
+        std::signal(SIGINT, onSignal);
+        std::signal(SIGTERM, onSignal);
     }
-    std::atexit(restoreTty);
-    std::signal(SIGINT, onSignal);
-    std::signal(SIGTERM, onSignal);
 
     // view = rows [viewTop, viewTop + pageH); pageH = H-1 (bottom row = prompt).
     int pageH = H - 1;
     size_t viewTop = 0;
+
+    // Observability: GMORE_DEBUG logs paint operations to stderr (which absolute
+    // grid rows we paint onto which screen lines, and where image strips land), so
+    // the scroll logic can be reasoned about without a sixel-capable tty.
+    const bool dbg = std::getenv("GMORE_DEBUG") != nullptr;
+    auto trace = [&](const char* what) {
+        if (!dbg) return;
+        std::fprintf(stderr, "[gmore] %-10s viewTop=%zu pageH=%d total=%zu\n",
+                     what, viewTop, pageH, total);
+    };
+    // For an image-bearing absolute row, report which screen line it's being
+    // painted on and the image's anchor row — a mismatch is the drift bug.
+    auto traceRow = [&](size_t absRow, int screenLine) {
+        if (!dbg) return;
+        for (size_t k = 0; k < em.images.size(); ++k) {
+            const Image& I = em.images[k];
+            size_t imgEnd = I.row + (size_t)((I.Pv + cellH - 1) / cellH);
+            if (absRow >= I.row && absRow < imgEnd)
+                std::fprintf(stderr, "[gmore]   row=%zu -> screenLine=%d  img%zu anchorRow=%zu strip=%zu\n",
+                             absRow, screenLine, k, I.row, absRow - I.row);
+        }
+    };
 
     auto showPrompt = [&] {
         size_t bottom = viewTop + (size_t)pageH;
@@ -770,15 +799,18 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
     // row's strip to overwrite (the proven-seamless down-paint). Down-scroll keeps
     // this property; up-scroll is the only path that full-repaints.
     size_t initEnd = std::min(total, (size_t)pageH);
-    for (size_t r = 0; r < initEnd; ++r) { emitRow(r); std::fputc('\n', stdout); }
+    trace("init");
+    for (size_t r = 0; r < initEnd; ++r) { traceRow(r, (int)r); emitRow(r); std::fputc('\n', stdout); }
     viewTop = initEnd < (size_t)pageH ? 0 : initEnd - (size_t)pageH;
 
     // Scroll down n rows: emit n new rows at the bottom (full-screen scroll up via
     // the \n at the last visible row; the new strip's 4px overspill goes into the
     // bottom scratch/prompt row, which the locked design reserves for it).
     auto advance = [&](int n) {
+        trace("advance");
         size_t bottom = viewTop + (size_t)pageH;
         for (int k = 0; k < n && bottom < total; ++k, ++bottom) {
+            traceRow(bottom, pageH - 1);   // new content lands on the bottom screen line after scroll
             emitRow(bottom); std::fputc('\n', stdout);
         }
         size_t newBottom = std::min(total, viewTop + (size_t)pageH + (size_t)n);
@@ -786,26 +818,45 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
     };
 
     // Scroll up n rows: an incremental up-paint would clobber live image cells, so
-    // move the window up and FULL-REPAINT — clear the screen once (\033[2J), then
-    // redraw top-down (the proven-seamless strip order). The single up-front clear
-    // can't interleave with strip overspill; a per-line erase would (it'd wipe the
+    // move the window up and FULL-REPAINT — wipe the screen once, then redraw
+    // top-down (the proven-seamless strip order). The single up-front wipe can't
+    // interleave with strip overspill; a per-line erase would (it'd wipe the
     // overspill before the next row repaints it). Separate from down-scroll on
     // purpose: down-scroll must stay the clean incremental paint.
+    //
+    // We use a FULL RESET (ESC c / RIS), not ESC[2J. On VSCode's terminal, ESC[2J
+    // erases the text cells but NOT a sixel raster that was relocated by the
+    // down-scroll mechanism (advance's bottom-line paint + the scrolling newline) —
+    // so the scrolled-off images ghosted at the top after the repaint homed the
+    // cursor. ESC[3J, soft reset (ESC[!p), cell-overwrite, and even an opaque cover
+    // sixel were all tried and left artifacts; only RIS fully clears the raster
+    // (verified live against the captured mdcat stream). gmore relies on no terminal
+    // state that RIS disturbs — it re-emits every SGR/color per row on repaint, uses
+    // no scroll region or custom charset, and raw mode is kernel-side (untouched).
     auto retreat = [&](int n) {
         if (viewTop == 0) return;
         viewTop = (size_t)n <= viewTop ? viewTop - (size_t)n : 0;
-        std::fputs("\033[2J\033[H", stdout);
+        trace("retreat");
+        std::fputs("\033c", stdout);
         for (int i = 0; i < pageH; ++i) {
             size_t r = viewTop + (size_t)i;
-            if (r < total) emitRow(r);
+            if (r < total) { traceRow(r, i); emitRow(r); }
             std::fputc('\n', stdout);
         }
     };
 
+    // GMORE_KEYS scripts the keystroke stream (one char = one key) instead of
+    // reading the tty, so a session like "jk" can be replayed non-interactively
+    // and its exact output (escapes + sixel strips) captured for inspection.
+    const char* scriptedKeys = std::getenv("GMORE_KEYS");
+    size_t keyPos = 0;
     for (;;) {
         showPrompt();
         unsigned char c;
-        if (read(gTtyFd, &c, 1) != 1) break;
+        if (scriptedKeys) {
+            if (!scriptedKeys[keyPos]) break;
+            c = (unsigned char)scriptedKeys[keyPos++];
+        } else if (read(gTtyFd, &c, 1) != 1) break;
         if (c == 'q' || c == 'Q') break;
         clearPrompt();
         size_t bottom = viewTop + (size_t)pageH;
