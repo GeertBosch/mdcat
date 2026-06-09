@@ -22,6 +22,12 @@ absent on purpose to exercise the filename fallback.
 
 <img src="chess-piece.png" alt="A black chess knight (alt text)">
 
-<img src="missing.png">
+<img src="missing.png" alt="A missing image (alt text)">
 
 <img src="chess-piece.png" alt="A black chess knight (alt text)" width="64" height="64">
+
+<img src="img/joan-mitchell.jpg" alt="JPEG image of Joan L. Mitchell who co-invented the format (alt text)">
+
+<img src="img/sunflower.gif" alt="GIF image of a sunflower (alt text)">
+
+<img src="img/chessboard.svg" alt="SVG image of a 3x4 square chessboard with all distinct chess pieces (alt text)" height="180">
