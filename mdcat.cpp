@@ -44,6 +44,8 @@
 #include <string>
 #include <vector>
 
+#include "gmore_core.h"
+
 namespace {
 
 // ---------------------------------------------------------------------------
@@ -1724,6 +1726,10 @@ int main(int argc, char** argv) {
     }
     for (; a < argc; ++a) files.emplace_back(argv[a]);
 
+    // When stdout is a tty, capture render output and page it through gmore.
+    bool usePager = isatty(STDOUT_FILENO);
+    std::ostream* out = usePager ? static_cast<std::ostream*>(new std::ostringstream) : &std::cout;
+
     if (!files.empty()) {
         // Render each file independently and concatenate the results, rather than merging the files'
         // lines into one document. This keeps the boundary between files clean: the last block of one
@@ -1734,12 +1740,19 @@ int main(int argc, char** argv) {
             std::ifstream f(path);
             if (!f) {
                 std::cerr << "mdcat: " << path << ": cannot open file\n";
+                if (usePager) delete out;
                 return 1;
             }
-            render(splitLines(f), std::cout);
+            render(splitLines(f), *out);
         }
     } else {
-        render(splitLines(std::cin), std::cout);
+        render(splitLines(std::cin), *out);
+    }
+
+    if (usePager) {
+        std::string data = static_cast<std::ostringstream*>(out)->str();
+        delete out;
+        return gmore::run(std::move(data));
     }
     return 0;
 }

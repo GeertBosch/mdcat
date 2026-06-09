@@ -3,11 +3,11 @@ CXXFLAGS ?= -std=c++17 -O2 -Wall
 
 all: mdcat gmore
 
-mdcat: mdcat.cpp
-	$(CXX) $(CXXFLAGS) -o $@ $<
+mdcat: mdcat.cpp gmore_core.h
+	$(CXX) $(CXXFLAGS) -o $@ mdcat.cpp
 
-gmore: gmore.cpp
-	$(CXX) $(CXXFLAGS) -o $@ $<
+gmore: gmore.cpp gmore_core.h
+	$(CXX) $(CXXFLAGS) -o $@ gmore.cpp
 
 TESTS := \
 	tests/property-concat.sh \
