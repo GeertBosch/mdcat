@@ -683,7 +683,8 @@ std::string runTimg(const std::string& path, const std::string& geom) {
         else quoted += c;
     }
     quoted += "'";
-    cmd << "timg -ps -g" << geom << " " << quoted << " 2>/dev/null";
+    if (!geom.empty()) cmd << "timg -ps -g" << geom << " " << quoted << " 2>/dev/null";
+    else               cmd << "timg -ps " << quoted << " 2>/dev/null";
     FILE* p = popen(cmd.str().c_str(), "r");
     if (!p) return std::string();
     std::string out;
@@ -779,27 +780,26 @@ bool renderImageBlock(const std::string& text, int availWidth, std::string& out,
     else if (haveW)     { tw = aw; th = (ph > 0 && pw > 0) ? std::max(1, ph * aw / pw) : 0; }
     else if (haveH)     { th = ah; tw = (pw > 0 && ph > 0) ? std::max(1, pw * ah / ph) : 0; }
 
-    // Convert the target pixel size to character cells (timg detects the real cell size itself, so a
-    // -g in cells is honoured). Then pick a SINGLE governing dimension so the other follows the true
-    // aspect ratio rather than our own rounding double-constraining the box:
-    //   - too wide for the available columns -> width-bound ("<availWidth>x");
-    //   - an explicit height with no explicit width -> height-bound ("x<rows>");
-    //   - otherwise a full box ("<cols>x<rows>") from both target dimensions.
-    // The exact footprint is then read back from the painted sixel, which reflects timg's fit.
-    // Geometry uses the NOMINAL cell (real cell, height capped) so a requested pixel size maps to a
-    // sensible cell box independent of display DPI; the footprint below uses the real cell.
+    // Decide the -g geometry to pass to timg. Rules, in priority order:
+    //   - forceWidthBound: caller (table layout) demands an exact column width.
+    //   - Image is wider than available columns: clamp to the column budget.
+    //   - Explicit height only: height-bound, width follows aspect ratio.
+    //   - Explicit width or both dimensions: full box.
+    //   - No constraint at all (no attrs, intrinsic size fits or is unknown): omit -g entirely
+    //     and let timg choose its own size; the footprint is read back from the sixel header.
     CellMetrics cell = cellMetrics();
     int wCells = cell.pxToColsNominal(tw);
     int hCells = cell.pxToRowsNominal(th);
     std::string geom;
     if (forceWidthBound && availWidth > 0)
         geom = std::to_string(availWidth) + "x";          // caller demands an exact column width
-    else if (availWidth > 0 && (wCells == 0 || wCells > availWidth))
-        geom = std::to_string(availWidth) + "x";          // width-bound: no size or too wide
+    else if (availWidth > 0 && wCells > availWidth)
+        geom = std::to_string(availWidth) + "x";          // width-bound: intrinsic size too wide
     else if (haveH && !haveW)
         geom = "x" + std::to_string(hCells);              // height-bound: width follows aspect
-    else
-        geom = std::to_string(wCells) + "x" + std::to_string(hCells);
+    else if (haveW || haveH)
+        geom = std::to_string(wCells) + "x" + std::to_string(hCells);  // explicit box
+    // else: geom stays empty — no -g, timg picks its own size
 
     std::string img = runTimg(src, geom);
     if (img.empty()) return fallback("timg failed");
