@@ -30,7 +30,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <fcntl.h>
@@ -577,36 +576,11 @@ bool isSupportedImageExt(const std::string& path) {
     return false;
 }
 
-// Read the pixel dimensions of a supported image file. For PNG the size is read directly from
-// the fixed IHDR header (24 bytes). For other formats the file is verified to exist but the
-// dimensions are returned as 0×0 — callers must rely on width/height attributes or let timg
-// pick the geometry. Returns false if the file cannot be opened or (for PNG) has a bad header.
-bool readImageSize(const std::string& path, int& width, int& height) {
-    width = height = 0;
+// Verify that path is a supported image format and the file exists.
+bool readImageSize(const std::string& path) {
     if (!isSupportedImageExt(path)) return false;
     std::ifstream f(path, std::ios::binary);
-    if (!f) return false;
-    // For PNG, read the intrinsic size from the IHDR chunk.
-    size_t dot = path.rfind('.');
-    std::string ext = path.substr(dot);
-    for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    if (ext == ".png") {
-        static const unsigned char kSig[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
-        unsigned char h[24];
-        if (!f.read(reinterpret_cast<char*>(h), sizeof h)) return false;
-        for (int i = 0; i < 8; ++i)
-            if (h[i] != kSig[i]) return false;
-        if (h[12] != 'I' || h[13] != 'H' || h[14] != 'D' || h[15] != 'R') return false;
-        auto be32 = [](const unsigned char* p) {
-            return (static_cast<uint32_t>(p[0]) << 24) | (static_cast<uint32_t>(p[1]) << 16) |
-                   (static_cast<uint32_t>(p[2]) << 8) | static_cast<uint32_t>(p[3]);
-        };
-        uint32_t w = be32(h + 16), ht = be32(h + 20);
-        if (w == 0 || ht == 0) return false;
-        width = static_cast<int>(w);
-        height = static_cast<int>(ht);
-    }
-    return true;
+    return f.good();
 }
 
 // Whitespace test usable on signed char without the locale surprises of std::isspace.
@@ -758,8 +732,7 @@ bool renderImageBlock(const std::string& text, int availWidth, std::string& out,
     std::string src = srcIt->second;
     if (!gFileDir.empty() && src[0] != '/') src = gFileDir + "/" + src;
 
-    int pw = 0, ph = 0;
-    if (!readImageSize(src, pw, ph)) return fallback("not a supported image");
+    if (!readImageSize(src)) return fallback("not a supported image");
 
     // Target pixel size: an explicit width/height overrides the intrinsic size. With only one of the
     // two given, the other is derived to preserve the aspect ratio; with both, the ratio is free.
@@ -773,12 +746,11 @@ bool renderImageBlock(const std::string& text, int availWidth, std::string& out,
         dst = v;
         return true;
     };
-    int tw = pw, th = ph;
+    int tw = 0, th = 0;
     int aw = 0, ah = 0;
     bool haveW = attrInt("width", aw), haveH = attrInt("height", ah);
-    if (haveW && haveH) { tw = aw; th = ah; }
-    else if (haveW)     { tw = aw; th = (ph > 0 && pw > 0) ? std::max(1, ph * aw / pw) : 0; }
-    else if (haveH)     { th = ah; tw = (pw > 0 && ph > 0) ? std::max(1, pw * ah / ph) : 0; }
+    if (haveW) tw = aw;
+    if (haveH) th = ah;
 
     // Decide the -g geometry to pass to timg. Rules, in priority order:
     //   - forceWidthBound: caller (table layout) demands an exact column width.
