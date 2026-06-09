@@ -581,13 +581,19 @@ struct Emulator {
             out += "\033\\";
             curLink = linkId;
         };
+        auto visualEq = [](uint16_t a, uint16_t b) {
+            // Two attr indices are visually equivalent if their SGR-visible fields match.
+            const Attr& A = gAttrs[a]; const Attr& B = gAttrs[b];
+            return A.flags == B.flags && A.fg == B.fg && A.bg == B.bg;
+        };
         for (int i = 0; i <= last; ++i) {
-            if (L[i].attr != cur) { out += sgrFor(L[i].attr); cur = L[i].attr; }
+            bool needSgr = withImages ? (L[i].attr != cur) : !visualEq(L[i].attr, cur);
+            if (needSgr) { out += sgrFor(L[i].attr); cur = L[i].attr; }
             uint32_t lnk = gAttrs[cur].link;
-            if (lnk != curLink) emitOsc8(lnk);
+            if (withImages && lnk != curLink) emitOsc8(lnk);
             appendUtf8(out, L[i].cp);
         }
-        if (curLink != 0) emitOsc8(0);   // close any open hyperlink
+        if (withImages && curLink != 0) emitOsc8(0);   // close any open hyperlink
         if (cur != 0) out += "\033[0m";
     }
 };
