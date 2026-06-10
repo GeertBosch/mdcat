@@ -738,26 +738,24 @@ static inline bool getWinsize(struct winsize& w) {
     return false;
 }
 
-// Ask the terminal for its cell pixel size via the CSI 16t report (reply
-// "ESC[6;H;Wt"), over /dev/tty so it works when piped, in raw mode with a short
-// timeout. Needed because VSCode's terminal does not report pixels via
-// TIOCGWINSZ; without this gmore defaulted to a wrong cell height, so its
-// post-sixel cursor advance disagreed with timg's grid moves (image drift).
-struct CellSize { int w, h; };
-static inline CellSize queryCellSize16t() {
+// Send `CSI <arg> t` to /dev/tty and read the reply (so it works even when stdout
+// is piped, e.g. timg | gmore). Raw mode + a short inter-byte timeout keep the
+// reply from being echoed/line-buffered and stop us hanging if none arrives. The
+// reply is read up to its terminating 't'. Returns "" on no controlling tty / no
+// answer. Shared by the cell-size queries below.
+static inline std::string queryCsiT(const char* arg) {
     int fd = open("/dev/tty", O_RDWR | O_NOCTTY);
-    if (fd < 0) return {0, 0};
+    if (fd < 0) return std::string();
     struct termios saved {};
-    if (tcgetattr(fd, &saved) != 0) { close(fd); return {0, 0}; }
+    if (tcgetattr(fd, &saved) != 0) { close(fd); return std::string(); }
     struct termios raw = saved;
     raw.c_lflag &= ~static_cast<tcflag_t>(ICANON | ECHO);
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 2;  // 0.2s inter-byte timeout
     tcsetattr(fd, TCSANOW, &raw);
-    static const char query[] = "\033[16t";
-    CellSize cs{0, 0};
-    if (write(fd, query, sizeof query - 1) == static_cast<ssize_t>(sizeof query - 1)) {
-        std::string reply;
+    std::string query = std::string("\033[") + arg + "t";
+    std::string reply;
+    if (write(fd, query.data(), query.size()) == static_cast<ssize_t>(query.size())) {
         char c;
         while (reply.size() < 32) {
             ssize_t n = read(fd, &c, 1);
@@ -765,12 +763,33 @@ static inline CellSize queryCellSize16t() {
             reply += c;
             if (c == 't') break;
         }
-        int h = 0, w = 0;
-        if (std::sscanf(reply.c_str(), "\033[6;%d;%dt", &h, &w) == 2 && w > 0 && h > 0) cs = {w, h};
     }
     tcsetattr(fd, TCSANOW, &saved);
     close(fd);
-    return cs;
+    return reply;
+}
+
+// Determine the terminal's character-cell pixel size by querying it. Two methods:
+//   CSI 16t -> "ESC[6;H;Wt": cell size directly (VSCode reports it only this way).
+//   CSI 14t -> "ESC[4;H;Wt" (text-area px) and CSI 18t -> "ESC[8;R;Ct" (text-area
+//     cells): cell = areaPx / areaCells. iTerm2 ignores 16t but answers 14t/18t.
+// Needed because some terminals (VSCode, iTerm2) don't report pixels via
+// TIOCGWINSZ; without a real cell size gmore's row-reservation and scroll-clip math
+// (rows*cellH) would be wrong, scaling with font size — e.g. a 21px cell vs the 16
+// default mis-clips a scrolled image by ~5px/row. Returns {0,0} if neither answers.
+struct CellSize { int w, h; };
+static inline CellSize queryCellSize() {
+    // Method A: direct cell size.
+    int h = 0, w = 0;
+    if (std::sscanf(queryCsiT("16").c_str(), "\033[6;%d;%dt", &h, &w) == 2 && w > 0 && h > 0)
+        return {w, h};
+    // Method B: derive from text-area px / text-area cells.
+    int ah = 0, aw = 0, rows = 0, cols = 0;
+    bool gotPx   = std::sscanf(queryCsiT("14").c_str(), "\033[4;%d;%dt", &ah, &aw) == 2;
+    bool gotCell = std::sscanf(queryCsiT("18").c_str(), "\033[8;%d;%dt", &rows, &cols) == 2;
+    if (gotPx && gotCell && aw > 0 && ah > 0 && cols > 0 && rows > 0)
+        return {aw / cols, ah / rows};
+    return {0, 0};
 }
 
 // ---------------------------------------------------------------------------
@@ -795,13 +814,15 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
         if (!cellH && ws.ws_ypixel > 0 && ws.ws_row > 0) cellH = ws.ws_ypixel / ws.ws_row;
     }
     if (!cellW || !cellH) {
-        CellSize cs = queryCellSize16t();
+        CellSize cs = queryCellSize();
         if (cs.w > 0 && cs.h > 0) { if (!cellW) cellW = cs.w; if (!cellH) cellH = cs.h; }
     }
     if (!H) H = 24;
     if (!W) W = 80;
     if (!cellW) cellW = 8;
     if (!cellH) cellH = 16;
+    if (std::getenv("GMORE_DEBUG"))
+        std::fprintf(stderr, "[gmore] geometry W=%d H=%d cell=%dx%d\n", W, H, cellW, cellH);
 
     // Not a terminal and not --dump/--imginfo: pass through verbatim (pager-as-cat).
     // GMORE_KEYS forces the pager path even off-tty so a scripted session can be
