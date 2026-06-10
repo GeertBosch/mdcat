@@ -302,29 +302,37 @@ static std::string encodeSixel(const Image& img, int y0, int y1) {
 }
 
 // Build a full `ESC P … ST` sequence that replays a producer's original sixel
-// payload (`img.sixel`, the bytes after `ESC P`), clipped to the first `keepPx`
-// pixel rows. Replaying verbatim is highest-fidelity: the producer (timg) defines
-// its ≤256-colour palette ONCE up front with stable register indices, which is what
-// terminals expect — unlike our per-band re-encoder, which redefines registers
-// every band with shifting indices and some terminals (iTerm2) render garbled.
+// payload (`img.sixel`, the bytes after `ESC P`), showing only the pixel-row range
+// [skipPx, img.Pv) clipped to `keepPx` rows. Replaying verbatim is highest-fidelity:
+// the producer (timg) defines its ≤256-colour palette ONCE up front with stable
+// register indices, which is what terminals expect — unlike our per-band re-encoder,
+// which redefines registers every band with shifting indices and some terminals
+// (iTerm2) render garbled.
 //
 // A sixel payload is: intro params up to `q`, the raster attribute `"Pan;Pad;Ph;Pv`,
 // the `#`-colour definitions, then 6px BANDS delimited by `-` (graphics newline; the
-// only structural `-`, since pixel data is `?`..`~`). Bottom-clipping keeps the
-// prefix (params + raster attr + colour defs, needed by every band) plus the first
-// ceil(keepPx/6) bands, and rewrites Pv. It only DROPS trailing bands — never drops
-// a colour a kept band needs, never adds one.
-static std::string replaySixel(const Image& img, int keepPx) {
+// only structural `-`, since pixel data is `?`..`~`). timg emits all colour defs
+// before the first band (verified), so dropping leading bands (skipPx, top-clip when
+// an image has scrolled partly off the top) or trailing bands (keepPx, bottom-clip
+// when it runs past the screen) only removes rows — never drops a colour a kept band
+// needs, never adds one. We keep the up-front palette, the bands covering the
+// requested rows, and rewrite Pv to the kept height.
+static std::string replaySixel(const Image& img, int skipPx, int keepPx) {
     const std::string& s = img.sixel;
-    int outPv = (keepPx > 0 && keepPx < img.Pv) ? keepPx : img.Pv;
-    if (s.empty()) return encodeSixel(img, 0, outPv);   // no original bytes: re-encode (small imgs)
+    int skipBands = (skipPx > 0) ? skipPx / 6 : 0;     // align top clip to a band boundary
+    int alignedSkip = skipBands * 6;
+    int avail = img.Pv - alignedSkip;
+    if (avail <= 0) return std::string();              // nothing visible
+    int outPv = (keepPx > 0 && keepPx < avail) ? keepPx : avail;
 
-    std::string out = "\033P";
-    if (outPv >= img.Pv) { out += s; out += "\033\\"; return out; }   // whole image, verbatim
+    if (s.empty()) return encodeSixel(img, alignedSkip, alignedSkip + outPv);  // no bytes: re-encode
+
+    // Whole image, verbatim — the common case (image fits the window).
+    if (skipBands == 0 && outPv >= img.Pv) { return "\033P" + s + "\033\\"; }
 
     size_t q = s.find('q');
     size_t quote = (q == std::string::npos) ? std::string::npos : s.find('"', q);
-    if (quote == std::string::npos) return encodeSixel(img, 0, outPv);  // no raster attr: fallback
+    if (quote == std::string::npos) return encodeSixel(img, alignedSkip, alignedSkip + outPv);
 
     // Parse `Pan;Pad;Ph;Pv`; rewrite Pv to outPv.
     size_t p = quote + 1;
@@ -333,17 +341,48 @@ static std::string replaySixel(const Image& img, int keepPx) {
     int pan = 1, pad = 1, ph = img.Ph, pv = img.Pv;
     std::sscanf(nums.c_str(), "%d;%d;%d;%d", &pan, &pad, &ph, &pv);
 
-    // Keep ceil(outPv/6) bands: cut at the separator after the last kept band.
+    // The segment from `p` to the first `-` holds the colour defs (and band 0's pixel
+    // data). Find the first band separator; the colour defs are the `#n;…;…;…;…`
+    // (5-number) statements within that segment.
+    size_t firstDash = s.find('-', p);
+    if (firstDash == std::string::npos) firstDash = s.size();
+
+    // Locate the first KEPT band's start (after skipBands separators) and the cut
+    // (after skipBands + ceil(outPv/6) separators).
     int keepBands = (outPv + 5) / 6;
+    size_t firstKept = p;
     size_t cut = s.size();
     int seen = 0;
-    for (size_t i = p; i < s.size(); ++i)
-        if (s[i] == '-' && ++seen >= keepBands) { cut = i; break; }
+    for (size_t i = p; i < s.size(); ++i) {
+        if (s[i] != '-') continue;
+        ++seen;
+        if (seen == skipBands) firstKept = i + 1;          // band `skipBands` begins here
+        if (seen == skipBands + keepBands) { cut = i; break; }
+    }
 
-    out += s.substr(0, quote + 1);               // through the opening '"'
+    std::string out = "\033P";
+    out += s.substr(0, quote + 1);                         // through the opening '"'
     out += std::to_string(pan); out += ';'; out += std::to_string(pad); out += ';';
     out += std::to_string(ph);  out += ';'; out += std::to_string(outPv);
-    out += s.substr(p, cut - p);                 // colour defs + kept bands
+    if (skipBands == 0) {
+        out += s.substr(p, cut - p);                       // colour defs + kept bands (from top)
+    } else {
+        // Keep the up-front colour defs, then the kept bands. Extract just the
+        // `#n;2;R;G;B` defines from the pre-first-band segment (skip band-0 pixels).
+        std::string seg = s.substr(p, firstDash - p);
+        for (size_t i = 0; i < seg.size();) {
+            if (seg[i] == '#') {
+                size_t j = i + 1; int semis = 0;
+                while (j < seg.size() && (std::isdigit((unsigned char)seg[j]) || seg[j] == ';')) {
+                    if (seg[j] == ';') ++semis;
+                    ++j;
+                }
+                if (semis >= 3) out += seg.substr(i, j - i);   // a #n;Pu;R;G;B colour define
+                i = j;
+            } else ++i;
+        }
+        out += s.substr(firstKept, cut - firstKept);       // then the kept bands
+    }
     out += "\033\\";
     return out;
 }
@@ -609,23 +648,27 @@ struct Emulator {
     // (highest fidelity — see replaySixel) on the image's top row, bracketed in
     // DECSC/DECRC so the cursor is restored however the terminal moves it.
     //
-    // The image paints on its own anchor row (`img.row`). `viewBot` (absolute row
-    // just past the visible window; 0 = no clip, used by --dump) bottom-clips a tall
-    // image to what fits. An image whose top has scrolled above the window is not
-    // repainted here — both scroll paths full-repaint from a viewTop at or above
-    // every visible image's anchor, so this case doesn't arise in the pager.
+    // An image paints once, on its topmost VISIBLE row: its own anchor row `img.row`
+    // when that is on screen, or the window's top row `viewTop` when the image's top
+    // has scrolled above the window (then we skip the off-screen leading rows). The
+    // bottom is clipped to `viewBot` (absolute row just past the window; 0 = no clip,
+    // used by --dump). replaySixel does the top/bottom band clipping on the original
+    // bytes — both directions only drop rows, never colours.
     void renderRow(size_t absRow, std::string& out, bool withImages = true,
                    size_t viewTop = 0, size_t viewBot = 0) const {
-        (void)viewTop;
         if (withImages) {
             for (const Image& img : images) {
-                if (absRow != img.row) continue;             // paint once, at the image's top
-                int keepPx = img.Pv;
-                if (viewBot > img.row)                        // clip to the window bottom
-                    keepPx = std::min(keepPx, (int)(viewBot - img.row) * cellH);
+                size_t imgEnd = img.row + (size_t)((img.Pv + cellH - 1) / cellH);
+                if (absRow < img.row || absRow >= imgEnd) continue;   // row not within the image
+                size_t firstVisible = std::max(img.row, viewTop);
+                if (absRow != firstVisible) continue;        // paint only on the top visible row
+                int skipPx = (int)(firstVisible - img.row) * cellH;   // off-screen rows above
+                int keepPx = img.Pv - skipPx;
+                if (viewBot > firstVisible)                  // clip to the window bottom
+                    keepPx = std::min(keepPx, (int)(viewBot - firstVisible) * cellH);
                 out += "\0337";                              // DECSC: save cursor
                 if (img.col > 0) { out += "\033["; out += std::to_string(img.col + 1); out += 'G'; }
-                out += replaySixel(img, keepPx);
+                out += replaySixel(img, skipPx, keepPx);
                 out += "\0338";                              // DECRC: restore cursor
             }
         }
