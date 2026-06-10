@@ -137,6 +137,12 @@ struct Image {
     int col = 0;          // column of the image's left edge
     int Ph = 0, Pv = 0;   // painted pixel size
     std::vector<uint32_t> px;
+    // The producer's original DCS payload (everything after `ESC P`, before ST).
+    // We replay these exact bytes when painting (verbatim is highest-fidelity and
+    // avoids re-encoding artifacts — our re-encoder redefines the palette per band
+    // with shifting indices, which some terminals, e.g. iTerm2, render wrong). The
+    // decoded `px` raster is kept for layout, --imginfo, and clipped re-encoding.
+    std::string sixel;
 };
 
 // Decode a sixel DCS payload (everything after `ESC P`, up to but not including ST)
@@ -291,6 +297,53 @@ static std::string encodeSixel(const Image& img, int y0, int y1) {
         }
         out += '-';  // graphics newline: advance to next band
     }
+    out += "\033\\";
+    return out;
+}
+
+// Build a full `ESC P … ST` sequence that replays a producer's original sixel
+// payload (`img.sixel`, the bytes after `ESC P`), clipped to the first `keepPx`
+// pixel rows. Replaying verbatim is highest-fidelity: the producer (timg) defines
+// its ≤256-colour palette ONCE up front with stable register indices, which is what
+// terminals expect — unlike our per-band re-encoder, which redefines registers
+// every band with shifting indices and some terminals (iTerm2) render garbled.
+//
+// A sixel payload is: intro params up to `q`, the raster attribute `"Pan;Pad;Ph;Pv`,
+// the `#`-colour definitions, then 6px BANDS delimited by `-` (graphics newline; the
+// only structural `-`, since pixel data is `?`..`~`). Bottom-clipping keeps the
+// prefix (params + raster attr + colour defs, needed by every band) plus the first
+// ceil(keepPx/6) bands, and rewrites Pv. It only DROPS trailing bands — never drops
+// a colour a kept band needs, never adds one.
+static std::string replaySixel(const Image& img, int keepPx) {
+    const std::string& s = img.sixel;
+    int outPv = (keepPx > 0 && keepPx < img.Pv) ? keepPx : img.Pv;
+    if (s.empty()) return encodeSixel(img, 0, outPv);   // no original bytes: re-encode (small imgs)
+
+    std::string out = "\033P";
+    if (outPv >= img.Pv) { out += s; out += "\033\\"; return out; }   // whole image, verbatim
+
+    size_t q = s.find('q');
+    size_t quote = (q == std::string::npos) ? std::string::npos : s.find('"', q);
+    if (quote == std::string::npos) return encodeSixel(img, 0, outPv);  // no raster attr: fallback
+
+    // Parse `Pan;Pad;Ph;Pv`; rewrite Pv to outPv.
+    size_t p = quote + 1;
+    std::string nums;
+    while (p < s.size() && (std::isdigit((unsigned char)s[p]) || s[p] == ';')) nums += s[p++];
+    int pan = 1, pad = 1, ph = img.Ph, pv = img.Pv;
+    std::sscanf(nums.c_str(), "%d;%d;%d;%d", &pan, &pad, &ph, &pv);
+
+    // Keep ceil(outPv/6) bands: cut at the separator after the last kept band.
+    int keepBands = (outPv + 5) / 6;
+    size_t cut = s.size();
+    int seen = 0;
+    for (size_t i = p; i < s.size(); ++i)
+        if (s[i] == '-' && ++seen >= keepBands) { cut = i; break; }
+
+    out += s.substr(0, quote + 1);               // through the opening '"'
+    out += std::to_string(pan); out += ';'; out += std::to_string(pad); out += ';';
+    out += std::to_string(ph);  out += ';'; out += std::to_string(outPv);
+    out += s.substr(p, cut - p);                 // colour defs + kept bands
     out += "\033\\";
     return out;
 }
@@ -454,6 +507,7 @@ struct Emulator {
         Image img;
         if (!decodeSixel(seq, img)) return;
         img.row = top + cr; img.col = cc;
+        img.sixel = seq;   // keep the producer's exact bytes for verbatim replay
         images.push_back(std::move(img));
         int rowsCells = (images.back().Pv + cellH - 1) / cellH;
         cc = 0;
@@ -545,26 +599,34 @@ struct Emulator {
         return last;
     }
 
-    void renderRow(size_t absRow, std::string& out, bool withImages = true) const {
-        // Emit any image strips that cover this grid row. Each strip is an 18px
-        // (= ceil(cellH/6)*6) sixel painted at the top of this cell row; the next
-        // row's strip overwrites the ~4px overspill with identical pixels, so the
-        // image reassembles seamlessly going top-down (the proven scheme — see
-        // tools/probe-pager-paint.sh). We wrap each strip in DECSC/DECRC (ESC 7 /
-        // ESC 8) so the cursor returns to this row's start no matter how many rows
-        // the sixel advanced — robust against per-terminal cursor-after-sixel
-        // behaviour, unlike a relative CSI <n> A move.
+    // Paint images as ONE sixel each, clipped to the visible row window, rather than
+    // a stack of per-row strips. The old per-row scheme relied on each sixel
+    // advancing the cursor exactly one cell so the next strip overwrote the prior's
+    // overspill; that holds on some terminals but NOT iTerm2 (where a sixel leaves
+    // the cursor on the same row — see tools/probe-cursor-after-sixel.sh), so the
+    // strips tore. A single sixel renders seamlessly everywhere (its own 6px bands
+    // stack internally), so we replay the producer's ORIGINAL sixel verbatim
+    // (highest fidelity — see replaySixel) on the image's top row, bracketed in
+    // DECSC/DECRC so the cursor is restored however the terminal moves it.
+    //
+    // The image paints on its own anchor row (`img.row`). `viewBot` (absolute row
+    // just past the visible window; 0 = no clip, used by --dump) bottom-clips a tall
+    // image to what fits. An image whose top has scrolled above the window is not
+    // repainted here — both scroll paths full-repaint from a viewTop at or above
+    // every visible image's anchor, so this case doesn't arise in the pager.
+    void renderRow(size_t absRow, std::string& out, bool withImages = true,
+                   size_t viewTop = 0, size_t viewBot = 0) const {
+        (void)viewTop;
         if (withImages) {
-            int stripH = ((cellH + 5) / 6) * 6;  // ceil(cellH/6)*6 — e.g. 18 for cellH=14
             for (const Image& img : images) {
-                size_t imgEnd = img.row + (size_t)((img.Pv + cellH - 1) / cellH);
-                if (absRow < img.row || absRow >= imgEnd) continue;
-                int y0 = (int)(absRow - img.row) * cellH;
-                int y1 = std::min(y0 + stripH, img.Pv);
-                out += "\0337";                                  // DECSC: save cursor
+                if (absRow != img.row) continue;             // paint once, at the image's top
+                int keepPx = img.Pv;
+                if (viewBot > img.row)                        // clip to the window bottom
+                    keepPx = std::min(keepPx, (int)(viewBot - img.row) * cellH);
+                out += "\0337";                              // DECSC: save cursor
                 if (img.col > 0) { out += "\033["; out += std::to_string(img.col + 1); out += 'G'; }
-                out += encodeSixel(img, y0, y1);
-                out += "\0338";                                  // DECRC: restore cursor
+                out += replaySixel(img, keepPx);
+                out += "\0338";                              // DECRC: restore cursor
             }
         }
 
@@ -727,7 +789,10 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
     }
 
     // --dump is the text-grid test surface; suppress images so tests stay deterministic.
-    auto emitRow = [&](size_t r) { std::string s; em.renderRow(r, s); fwrite(s.data(), 1, s.size(), stdout); };
+    // vTop/vBot give the visible row window so an image paints one sixel clipped to it
+    // (vBot==0 => no clip: paint the whole image at its anchor, used by --dump-images).
+    auto emitRow = [&](size_t r, size_t vTop = 0, size_t vBot = 0) {
+        std::string s; em.renderRow(r, s, true, vTop, vBot); fwrite(s.data(), 1, s.size(), stdout); };
     auto emitRowText = [&](size_t r) { std::string s; em.renderRow(r, s, false); fwrite(s.data(), 1, s.size(), stdout); };
 
     if (dump) {
@@ -794,55 +859,48 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
     };
     auto clearPrompt = [&] { std::fputs("\r\033[K", stdout); };
 
-    // Initial paint: fill the first page. Plain top-down onto the (blank) screen —
-    // NO per-line erase, so each image strip's ~4px overspill is left for the next
-    // row's strip to overwrite (the proven-seamless down-paint). Down-scroll keeps
-    // this property; up-scroll is the only path that full-repaints.
+    // Initial paint: fill the first page top-down. Each image paints as ONE sixel
+    // (clipped to the visible window) on its topmost visible row — see renderRow.
     size_t initEnd = std::min(total, (size_t)pageH);
     trace("init");
-    for (size_t r = 0; r < initEnd; ++r) { traceRow(r, (int)r); emitRow(r); std::fputc('\n', stdout); }
+    for (size_t r = 0; r < initEnd; ++r) { traceRow(r, (int)r); emitRow(r, 0, initEnd); std::fputc('\n', stdout); }
     viewTop = initEnd < (size_t)pageH ? 0 : initEnd - (size_t)pageH;
 
-    // Scroll down n rows: emit n new rows at the bottom (full-screen scroll up via
-    // the \n at the last visible row; the new strip's 4px overspill goes into the
-    // bottom scratch/prompt row, which the locked design reserves for it).
-    auto advance = [&](int n) {
-        trace("advance");
-        size_t bottom = viewTop + (size_t)pageH;
-        for (int k = 0; k < n && bottom < total; ++k, ++bottom) {
-            traceRow(bottom, pageH - 1);   // new content lands on the bottom screen line after scroll
-            emitRow(bottom); std::fputc('\n', stdout);
+    // Repaint the whole visible window for the current viewTop. Both scroll
+    // directions use this: with whole-sixel image painting (one clipped sixel per
+    // image, not a per-row strip stack — see renderRow) an incremental scroll can't
+    // cleanly relocate a sixel whose top has moved off-screen, so we full-repaint
+    // every move. Each row's image (if any) paints once, clipped to [viewTop, vBot).
+    //
+    // We wipe with a FULL RESET (ESC c / RIS), not ESC[2J. On VSCode's terminal
+    // ESC[2J erases text cells but NOT a relocated sixel raster, so scrolled-off
+    // images ghosted at the top; ESC[3J, soft reset (ESC[!p), cell-overwrite and an
+    // opaque cover sixel all left artifacts. Only RIS fully clears the raster
+    // (verified live). gmore relies on no terminal state RIS disturbs — it re-emits
+    // every SGR/color per row, uses no scroll region or custom charset, and raw mode
+    // is kernel-side (untouched).
+    auto repaint = [&] {
+        size_t vBot = std::min(total, viewTop + (size_t)pageH);
+        std::fputs("\033c", stdout);
+        for (int i = 0; i < pageH; ++i) {
+            size_t r = viewTop + (size_t)i;
+            if (r < total) { traceRow(r, i); emitRow(r, viewTop, vBot); }
+            std::fputc('\n', stdout);
         }
-        size_t newBottom = std::min(total, viewTop + (size_t)pageH + (size_t)n);
-        viewTop = newBottom > (size_t)pageH ? newBottom - (size_t)pageH : 0;
     };
 
-    // Scroll up n rows: an incremental up-paint would clobber live image cells, so
-    // move the window up and FULL-REPAINT — wipe the screen once, then redraw
-    // top-down (the proven-seamless strip order). The single up-front wipe can't
-    // interleave with strip overspill; a per-line erase would (it'd wipe the
-    // overspill before the next row repaints it). Separate from down-scroll on
-    // purpose: down-scroll must stay the clean incremental paint.
-    //
-    // We use a FULL RESET (ESC c / RIS), not ESC[2J. On VSCode's terminal, ESC[2J
-    // erases the text cells but NOT a sixel raster that was relocated by the
-    // down-scroll mechanism (advance's bottom-line paint + the scrolling newline) —
-    // so the scrolled-off images ghosted at the top after the repaint homed the
-    // cursor. ESC[3J, soft reset (ESC[!p), cell-overwrite, and even an opaque cover
-    // sixel were all tried and left artifacts; only RIS fully clears the raster
-    // (verified live against the captured mdcat stream). gmore relies on no terminal
-    // state that RIS disturbs — it re-emits every SGR/color per row on repaint, uses
-    // no scroll region or custom charset, and raw mode is kernel-side (untouched).
+    // Scroll down/up n rows: move the window, then full-repaint (see `repaint`).
+    auto advance = [&](int n) {
+        trace("advance");
+        size_t maxTop = total > (size_t)pageH ? total - (size_t)pageH : 0;
+        viewTop = std::min(maxTop, viewTop + (size_t)n);
+        repaint();
+    };
     auto retreat = [&](int n) {
         if (viewTop == 0) return;
         viewTop = (size_t)n <= viewTop ? viewTop - (size_t)n : 0;
         trace("retreat");
-        std::fputs("\033c", stdout);
-        for (int i = 0; i < pageH; ++i) {
-            size_t r = viewTop + (size_t)i;
-            if (r < total) { traceRow(r, i); emitRow(r); }
-            std::fputc('\n', stdout);
-        }
+        repaint();
     };
 
     // GMORE_KEYS scripts the keystroke stream (one char = one key) instead of

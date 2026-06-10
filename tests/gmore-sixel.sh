@@ -77,9 +77,9 @@ check "grid same row" \
     iig "$tmp/in"
 
 # ---------------------------------------------------------------------------
-# Encoder / render tests: verify --dump re-emits sixel DCS for image rows.
-# Cell height = 6 so strip height = ceil(6/6)*6 = 6 — one band per strip,
-# making a 6-px-tall image render as exactly one sixel strip per row.
+# Encoder / render tests: verify --dump-images re-emits sixel DCS for images.
+# Each image is painted as ONE whole sixel (not a per-row strip stack — see
+# renderRow), so an image of any height yields exactly one DCS sequence.
 # ---------------------------------------------------------------------------
 
 # checkgrep LABEL PATTERN CMD...: pass if CMD output contains PATTERN (grep -qF).
@@ -97,20 +97,21 @@ checkgrep() {
 
 di6() { GMORE_CELLW=8 GMORE_CELLH=6 "$gmore" --dump-images "$1"; }
 
-# A 4x6 single-colour image (one strip = one sixel).
-# --dump-images should re-emit a DCS sequence (ESC P marker) for that row.
-mkin '\033Pq"1;1;4;6#0;2;100;0;0#0~~~~\033\\'
-checkgrep "render single strip" "$(printf '\033P')" di6 "$tmp/in"
+# Count DCS introducers (ESC P) in CMD's output.
+dcscount() { "$@" > "$tmp/act" 2>"$tmp/err"; tr -cd "$(printf '\033')P" < "$tmp/act" \
+    | tr "$(printf '\033')" '\n' | grep -c '^P'; }
 
-# A 4x12 image (two cell rows, two strips): two DCS sequences in dump output.
-# Each sixel strip starts with ESC P; count ESC bytes (≥2 expected).
+# A 4x6 single-colour image: --dump-images re-emits one DCS sequence (ESC P).
+mkin '\033Pq"1;1;4;6#0;2;100;0;0#0~~~~\033\\'
+checkgrep "render image as sixel" "$(printf '\033P')" di6 "$tmp/in"
+
+# A 4x12 image (two cell rows) renders as ONE whole sixel, not one strip per row.
 mkin '\033Pq"1;1;4;12#0;2;100;0;0#0~~~~-~~~~\033\\'
-di6 "$tmp/in" > "$tmp/act"
-count=$(tr -cd "$(printf '\033')" < "$tmp/act" | wc -c)
-if [ "$count" -ge 2 ]; then
+got=$(dcscount di6 "$tmp/in")
+if [ "$got" -eq 1 ]; then
     n=$((n + 1))
 else
-    echo "gmore-sixel: FAIL [render two strips] (expected ≥2 ESC, got $count)" >&2
+    echo "gmore-sixel: FAIL [render whole sixel] (expected 1 DCS, got $got)" >&2
     fails=$((fails + 1))
 fi
 
