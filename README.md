@@ -45,14 +45,6 @@ Per-column alignment from the delimiter row is honored: `:---` (or plain `---`)
 left-aligns, `:--:` centers, and `---:` right-aligns. The chosen alignment
 applies to the header, the body cells, and every line of a cell that wraps.
 
-| Piece  | Symbol | Value |
-| :----- | :----: | ----: |
-| Pawn   | P      | 1     |
-| Knight | N      | 3     |
-| Bishop | B      | 3     |
-| Rook   | R      | 5     |
-| Queen  | Q      | 9     |
-
 Alignment also holds across wrapping. In a narrow terminal the description
 column below wraps onto several lines; the left column stays flush left, the
 numeric column stays flush right, and the centered notes stay centered — line by
@@ -60,9 +52,9 @@ line.
 
 | Opening          | Idea                                                      | Eval |
 | :--------------- | :------------------------------------------------------: | ---: |
-| Ruy Lopez        | White pins the knight defending e5 and builds a slow center. | +0.3 |
-| Sicilian Defense | Black answers 1.e4 with c5, fighting for the center asymmetrically. | -0.1 |
-| French Defense   | Black plays ...e6 and ...d5 for a cramped but solid structure. | +0.2 |
+| Ruy Lopez        | White pins the knight that defends e5, then slowly builds a strong pawn center with d4 and c3. | +0.3 |
+| Sicilian Defense | Black answers 1.e4 with c5, side-stepping a symmetric position and fighting for the center asymmetrically from the start. | -0.1 |
+| French Defense   | Black plays ...e6 and ...d5 to challenge the center early, accepting a cramped but solid and resilient pawn structure. | +0.2 |
 
 ### Block quotes
 
