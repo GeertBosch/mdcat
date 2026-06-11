@@ -95,7 +95,9 @@ Image paths are resolved relative to the markdown file's directory. On
 terminals without sixel support (Apple Terminal, plain xterm, piped output)
 the image falls back to its alt text, or the filename if no alt is given.
 
-<img src="tests/chess-piece.png" alt="A black chess knight">
+| PNG | JPEG | GIF | SVG |
+| --- | ---- | --- | --- |
+| <img src="tests/img/lichess.png" alt="Lichess logo (PNG)"> | <img src="tests/img/joan-mitchell.jpg" alt="Joan Mitchell painting (JPEG)"> | <img src="tests/img/sunflower.gif" alt="Sunflower (GIF)"> | <img src="tests/img/chessboard.svg" alt="Chessboard (SVG)"> |
 
 ### Block quotes
 
