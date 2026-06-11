@@ -645,13 +645,13 @@ bool readImageSize(const std::string& path) {
 // Whitespace test usable on signed char without the locale surprises of std::isspace.
 inline bool isSpaceCh(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
 
-// Parse markdown image syntax ![alt](url) into an attrs map with "alt" and "src" keys.
-// Returns false if `text` is not exactly one markdown image with nothing before or after it.
-bool parseMdImage(const std::string& text, std::map<std::string, std::string>& attrs) {
-    const std::string& s = text;
+// Scan a markdown image ![alt](src) starting at s[i]. On success, sets alt/src and advances i
+// past the closing ')'; returns true. i must point at '!'.
+static bool scanMdImageAt(const std::string& s, size_t& i,
+                           std::string& alt, std::string& src) {
     size_t n = s.size();
-    if (n < 5 || s[0] != '!' || s[1] != '[') return false;
-    size_t close = 2;
+    if (i + 4 >= n || s[i] != '!' || s[i + 1] != '[') return false;
+    size_t close = i + 2;
     int depth = 1;
     while (close < n) {
         if (s[close] == '\\' && close + 1 < n) { close += 2; continue; }
@@ -660,7 +660,7 @@ bool parseMdImage(const std::string& text, std::map<std::string, std::string>& a
         ++close;
     }
     if (close >= n || close + 1 >= n || s[close + 1] != '(') return false;
-    std::string alt = s.substr(2, close - 2);
+    alt = s.substr(i + 2, close - (i + 2));
     size_t up = close + 2;
     std::string url;
     int pd = 1;
@@ -672,10 +672,56 @@ bool parseMdImage(const std::string& text, std::map<std::string, std::string>& a
         url += c;
         ++up;
     }
-    if (up >= n || s[up] != ')' || up + 1 != n) return false;
-    attrs["alt"] = alt;
-    attrs["src"] = trim(url);
+    if (up >= n || s[up] != ')') return false;
+    src = trim(url);
+    i = up + 1;
     return true;
+}
+
+// Parse markdown image syntax into an attrs map with "alt", "src" (and optionally "href") keys.
+// Handles plain images ![alt](src) and linked images [![alt](src)](href).
+// Returns false if `text` is not exactly one such pattern with nothing before or after it.
+bool parseMdImage(const std::string& text, std::map<std::string, std::string>& attrs) {
+    const std::string& s = text;
+    size_t n = s.size();
+
+    // [![alt](src)](href) — linked image
+    if (n > 5 && s[0] == '[' && s[1] == '!') {
+        size_t i = 1;  // points at '!'
+        std::string alt, src;
+        if (scanMdImageAt(s, i, alt, src) && i < n && s[i] == '(') {
+            size_t up = i + 1;
+            std::string href;
+            int pd = 1;
+            while (up < n) {
+                char c = s[up];
+                if (c == '\\' && up + 1 < n) { href += s[up + 1]; up += 2; continue; }
+                if (c == '(') ++pd;
+                else if (c == ')') { if (--pd == 0) break; }
+                href += c;
+                ++up;
+            }
+            if (up < n && s[up] == ')' && up + 1 == n) {
+                attrs["alt"] = alt;
+                attrs["src"] = src;
+                attrs["href"] = trim(href);
+                return true;
+            }
+        }
+    }
+
+    // ![alt](src) — plain image
+    if (n > 4 && s[0] == '!') {
+        size_t i = 0;
+        std::string alt, src;
+        if (scanMdImageAt(s, i, alt, src) && i == n) {
+            attrs["alt"] = alt;
+            attrs["src"] = src;
+            return true;
+        }
+    }
+
+    return false;
 }
 
 // Parse a single HTML start tag of the form <img key="value" key2="value2" ...> into a map of
@@ -810,7 +856,11 @@ bool renderImageBlock(const std::string& text, int availWidth, std::string& out,
         if (altIt != attrs.end() && !altIt->second.empty()) label = altIt->second;
         else if (srcIt != attrs.end() && !srcIt->second.empty()) label = srcIt->second;
         else label = text;
-        out = renderInline(label);
+        auto hrefIt = attrs.find("href");
+        if (hrefIt != attrs.end() && !hrefIt->second.empty())
+            out = "\033]8;;" + hrefIt->second + "\033\\" + renderInline(label) + "\033]8;;\033\\";
+        else
+            out = renderInline(label);
         cellWidth = displayWidth(out);
         cellHeight = 1;
         return true;
@@ -879,7 +929,11 @@ bool renderImageBlock(const std::string& text, int availWidth, std::string& out,
         cellWidth = wCells;
         cellHeight = hCells;
     }
-    out = img;
+    auto hrefIt = attrs.find("href");
+    if (hrefIt != attrs.end() && !hrefIt->second.empty())
+        out = "\033]8;;" + hrefIt->second + "\033\\" + img + "\033]8;;\033\\";
+    else
+        out = img;
     return true;
 }
 
