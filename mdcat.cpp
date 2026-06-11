@@ -689,7 +689,8 @@ bool parseMdImage(const std::string& text, std::map<std::string, std::string>& a
     if (n > 5 && s[0] == '[' && s[1] == '!') {
         size_t i = 1;  // points at '!'
         std::string alt, src;
-        if (scanMdImageAt(s, i, alt, src) && i < n && s[i] == '(') {
+        if (scanMdImageAt(s, i, alt, src) && i < n && s[i] == ']' && i + 1 < n && s[i + 1] == '(') {
+            ++i;  // skip ']'
             size_t up = i + 1;
             std::string href;
             int pd = 1;
