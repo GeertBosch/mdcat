@@ -3,42 +3,6 @@
 A terminal Markdown renderer with inline images, tables, and hyperlinks.
 Companion pager `gmore` handles sixel graphics natively.
 
-## Programs
-
-### mdcat
-
-Renders Markdown to the terminal with ANSI styling, sixel images, and OSC 8
-hyperlinks.
-
-```
-mdcat [--width N] [--img] [--] [file ...]
-```
-
-| Flag | Description |
-| ---- | ----------- |
-| `--width N` / `-w N` | Force render width in columns (overrides `$COLUMNS` and terminal size) |
-| `--img` | Emit sixel output even when stdout is not a TTY (for piping into gmore) |
-| `--` | End option parsing (allows filenames starting with `-`) |
-
-Reads stdin when no files are given. Multiple files are concatenated.
-
-### gmore
-
-A graphics-aware pager that understands sixel images and OSC 8 hyperlinks.
-`mdcat` pipes into it automatically when stdout is a TTY.
-
-```
-gmore [--dump] [--dump-images] [file]
-```
-
-| Key | Action |
-| --- | ------ |
-| `Space` / `f` | Page down |
-| `b` | Page up |
-| `Enter` / `j` | Line down |
-| `k` / `y` | Line up |
-| `q` | Quit |
-
 ## Features
 
 ### Headings
@@ -97,7 +61,7 @@ the image falls back to its alt text, or the filename if no alt is given.
 
 | PNG | JPEG | GIF | SVG |
 | --- | ---- | --- | --- |
-| <img src="tests/img/lichess.png" alt="Lichess logo (PNG)"> | <img src="tests/img/joan-mitchell.jpg" alt="Joan Mitchell painting (JPEG)"> | <img src="tests/img/sunflower.gif" alt="Sunflower (GIF)"> | <img src="tests/img/chessboard.svg" alt="Chessboard (SVG)"> |
+| <img src="tests/img/example.png" alt="example.png (PNG)"> | <img src="tests/img/joan-mitchell.jpg" alt="Joan Mitchell painting (JPEG)"> | <img src="tests/img/sunflower.gif" alt="Sunflower (GIF)"> | <img src="tests/img/chessboard.svg" alt="Chessboard (SVG)"> |
 
 ### Block quotes
 
@@ -132,6 +96,43 @@ inline parsing.
 def hello():
     print("hello, world")
 ```
+
+
+## Programs
+
+### mdcat
+
+Renders Markdown to the terminal with ANSI styling, sixel images, and OSC 8
+hyperlinks.
+
+```
+mdcat [--width N] [--img] [--] [file ...]
+```
+
+| Flag | Description |
+| ---- | ----------- |
+| `--width N` / `-w N` | Force render width in columns (overrides `$COLUMNS` and terminal size) |
+| `--img` | Emit sixel output even when stdout is not a TTY (for piping into gmore) |
+| `--` | End option parsing (allows filenames starting with `-`) |
+
+Reads stdin when no files are given. Multiple files are concatenated.
+
+### gmore
+
+A graphics-aware pager that understands sixel images and OSC 8 hyperlinks.
+`mdcat` pipes into it automatically when stdout is a TTY.
+
+```
+gmore [--dump] [--dump-images] [file]
+```
+
+| Key | Action |
+| --- | ------ |
+| `Space` / `f` | Page down |
+| `b` | Page up |
+| `Enter` / `j` | Line down |
+| `k` / `y` | Line up |
+| `q` | Quit |
 
 ## Requirements
 
