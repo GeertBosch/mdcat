@@ -386,7 +386,7 @@ public:
 private:
     const std::string& s_;
 
-    enum class Kind { Text, Code, Link, Delim };
+    enum class Kind { Text, Code, Link, Image, Delim };
     struct Token {
         Kind kind;
         std::string text;   // Text: literal; Code: content; Link: rendered link text
@@ -427,6 +427,7 @@ private:
                 continue;
             }
             if (c == '`') { if (scanCode(i)) continue; }
+            if (c == '!' && i + 1 < n && s_[i + 1] == '[') { if (scanImage(i)) continue; }
             if (c == '[') { if (scanLink(i)) continue; }
             if (c == '*' || c == '_') { scanDelim(i); continue; }
             int len = utf8SequenceLength(static_cast<unsigned char>(c));
@@ -455,6 +456,38 @@ private:
             } else ++j;
         }
         return false;  // unmatched: fall through and treat the backticks as text
+    }
+
+    // ![alt](url): markdown image. Captures alt text and url; the '!' is at position i.
+    bool scanImage(size_t& i) {
+        size_t j = i + 1;  // j points at '['
+        size_t close = j + 1;
+        int depth = 1;
+        while (close < s_.size()) {
+            if (s_[close] == '\\' && close + 1 < s_.size()) { close += 2; continue; }
+            if (s_[close] == '[') ++depth;
+            else if (s_[close] == ']') { if (--depth == 0) break; }
+            ++close;
+        }
+        if (close >= s_.size() || close + 1 >= s_.size() || s_[close + 1] != '(') return false;
+        size_t up = close + 2;
+        std::string url;
+        int pd = 1;
+        while (up < s_.size()) {
+            char c = s_[up];
+            if (c == '\\' && up + 1 < s_.size()) { url += s_[up + 1]; up += 2; continue; }
+            if (c == '(') ++pd;
+            else if (c == ')') { if (--pd == 0) break; }
+            url += c;
+            ++up;
+        }
+        if (up >= s_.size() || s_[up] != ')') return false;
+        Token tk; tk.kind = Kind::Image;
+        tk.text = s_.substr(j + 1, close - (j + 1));  // raw alt text
+        tk.url = trim(url);
+        toks_.push_back(std::move(tk));
+        i = up + 1;
+        return true;
     }
 
     // [text](url): link text is inline-rendered by a *separate* renderer over just that slice,
@@ -554,6 +587,10 @@ private:
                 case Kind::Link:
                     out += "\033]8;;" + t.url + "\033\\" + t.text + "\033]8;;\033\\";
                     break;
+                case Kind::Image:
+                    // Inline image: show alt text (we can't fetch remote URLs inline).
+                    out += t.text;
+                    break;
                 case Kind::Delim: {
                     // Closers emit their off-codes first, then any opens, then leftover literals.
                     for (int k = 0; k < t.closeEm; ++k) out += kItalicOff;
@@ -607,6 +644,39 @@ bool readImageSize(const std::string& path) {
 
 // Whitespace test usable on signed char without the locale surprises of std::isspace.
 inline bool isSpaceCh(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
+
+// Parse markdown image syntax ![alt](url) into an attrs map with "alt" and "src" keys.
+// Returns false if `text` is not exactly one markdown image with nothing before or after it.
+bool parseMdImage(const std::string& text, std::map<std::string, std::string>& attrs) {
+    const std::string& s = text;
+    size_t n = s.size();
+    if (n < 5 || s[0] != '!' || s[1] != '[') return false;
+    size_t close = 2;
+    int depth = 1;
+    while (close < n) {
+        if (s[close] == '\\' && close + 1 < n) { close += 2; continue; }
+        if (s[close] == '[') ++depth;
+        else if (s[close] == ']') { if (--depth == 0) break; }
+        ++close;
+    }
+    if (close >= n || close + 1 >= n || s[close + 1] != '(') return false;
+    std::string alt = s.substr(2, close - 2);
+    size_t up = close + 2;
+    std::string url;
+    int pd = 1;
+    while (up < n) {
+        char c = s[up];
+        if (c == '\\' && up + 1 < n) { url += s[up + 1]; up += 2; continue; }
+        if (c == '(') ++pd;
+        else if (c == ')') { if (--pd == 0) break; }
+        url += c;
+        ++up;
+    }
+    if (up >= n || s[up] != ')' || up + 1 != n) return false;
+    attrs["alt"] = alt;
+    attrs["src"] = trim(url);
+    return true;
+}
 
 // Parse a single HTML start tag of the form <img key="value" key2="value2" ...> into a map of
 // attribute names (lowercased) to values. Only the simple quoted-value form described by the task
@@ -726,7 +796,7 @@ bool sixelPixelSize(const std::string& sixel, int& pw, int& ph) {
 bool renderImageBlock(const std::string& text, int availWidth, std::string& out, int& cellWidth,
                       int& cellHeight, bool forceWidthBound = false) {
     std::map<std::string, std::string> attrs;
-    if (!parseImgTag(text, attrs)) return false;
+    if (!parseImgTag(text, attrs) && !parseMdImage(text, attrs)) return false;
 
     auto srcIt = attrs.find("src");
 
