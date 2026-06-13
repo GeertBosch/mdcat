@@ -321,6 +321,28 @@ std::string padTo(const std::string& s, int width) {
     return out;
 }
 
+// Per-column text alignment derived from a GFM delimiter row (:--, --:, :-:).
+enum class Align { Left, Right, Center };
+
+// Pad `s` to `width` display columns, placing the content per `a`. Spaces are added before and/or
+// after; padding never appears inside the styled content, so ANSI escapes are unaffected. A cell
+// wider than `width` is returned unchanged (layout sizes columns to fit, so this is the rare
+// re-render-rounding case, where overflowing is preferable to truncating).
+std::string padAligned(const std::string& s, int width, Align a) {
+    int w = displayWidth(s);
+    if (w >= width) return s;
+    int pad = width - w;
+    switch (a) {
+        case Align::Right:  return std::string(pad, ' ') + s;
+        case Align::Center: {
+            int left = pad / 2;
+            return std::string(left, ' ') + s + std::string(pad - left, ' ');
+        }
+        case Align::Left:
+        default:            return s + std::string(pad, ' ');
+    }
+}
+
 // Trim ASCII spaces and tabs from both ends.
 std::string trim(const std::string& s) {
     size_t b = 0, e = s.size();
@@ -1006,6 +1028,22 @@ std::vector<std::string> splitTableRow(const std::string& raw) {
     return cells;
 }
 
+// Parse the per-column alignment from a delimiter row. Each cell is one of `---` (left, the
+// default), `:--` (left), `--:` (right), or `:-:` (center); a leading colon means "left edge
+// pinned", a trailing colon "right edge pinned". Cells are split the same way as data rows.
+std::vector<Align> parseTableAlignment(const std::string& delimiter) {
+    std::vector<Align> aligns;
+    for (const std::string& cell : splitTableRow(delimiter)) {
+        std::string c = trim(cell);
+        bool left = !c.empty() && c.front() == ':';
+        bool right = !c.empty() && c.back() == ':';
+        if (left && right) aligns.push_back(Align::Center);
+        else if (right)    aligns.push_back(Align::Right);
+        else               aligns.push_back(Align::Left);
+    }
+    return aligns;
+}
+
 // Split a string on '\n' into its constituent lines (no trailing empty element added for a final
 // newline; an empty string yields a single empty line).
 std::vector<std::string> splitOnNewlines(const std::string& s) {
@@ -1031,6 +1069,11 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
     for (auto& r : rows) ncols = std::max(ncols, r.size());
     for (auto& r : rows) r.resize(ncols);  // pad short rows with empty cells
     if (ncols == 0) return;
+
+    // Per-column alignment from the delimiter row, padded to ncols with the Left default for any
+    // columns the delimiter did not specify.
+    std::vector<Align> aligns = parseTableAlignment(rawRows[1]);
+    aligns.resize(ncols, Align::Left);
 
     const int W = terminalWidth();
     int budget = W - 2 * static_cast<int>(ncols - 1);
@@ -1205,7 +1248,7 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
                     std::string piece =
                         static_cast<size_t>(k) < cellLines[j].size() ? cellLines[j][k] : std::string();
                     if (bold && !piece.empty()) piece = kBoldOn + piece + kBoldOff;
-                    line += padTo(piece, widths[j]);
+                    line += padAligned(piece, widths[j], aligns[j]);
                 }
             }
             out << line << '\n';
