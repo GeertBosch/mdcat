@@ -102,6 +102,8 @@ sixel whose top has moved off-screen. So **every move full-repaints** the window
   mdcat's `emitImageParagraph` uses (newlines reserve a band — scrolling existing
   content into scrollback — then a relative `CSI N A` back up). Net cursor motion is
   down N / up N / down N while painting, so the blank-screen case is unchanged.
+  Verified live on VSCode and iTerm2 (the two terminals with divergent post-sixel
+  cursor behaviour) with the repro above: images align on first paint.
 
   A later page-up/down repaints via RIS and so masks the bug — which is exactly why the
   symptom was "first paint only."
