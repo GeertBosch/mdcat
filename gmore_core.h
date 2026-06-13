@@ -867,8 +867,27 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
         return 0;
     }
 
+    // Scroll-safety for the first paint. gmore models a clean grid from row 0, but the
+    // REAL terminal may start with a non-blank screen and the cursor near the bottom.
+    // Painting top-down from there makes each tall sixel force the terminal to scroll to
+    // make room — and a scroll mid-row invalidates the DECSC/DECRC anchors, so the
+    // second and later images in a table row cascade down a row each (the reported bug;
+    // a later page-up/down repaints via RIS and fixes it). The cure is the same trick
+    // mdcat's emitImageParagraph uses: print `n` newlines first to reserve the band
+    // (this scrolls any existing content into scrollback, guaranteeing room below), then
+    // move the cursor back up `n` rows (relative, so the scroll doesn't matter) to the
+    // top of the freshly-cleared region, and paint there. No row emission then forces a
+    // scroll, so every sixel anchors correctly — without clearing the screen (RIS), which
+    // would be wrong for short output that doesn't need paging.
+    auto reserveRows = [&](size_t n) {
+        if (n == 0) return;
+        for (size_t i = 0; i < n; ++i) std::fputc('\n', stdout);
+        std::fprintf(stdout, "\033[%zuA", n);
+    };
+
     // Fits on one screen: print and exit, no prompt.
     if (total <= static_cast<size_t>(H - 1)) {
+        reserveRows(total);
         for (size_t r = 0; r < total; ++r) { emitRow(r); std::fputc('\n', stdout); }
         return 0;
     }
@@ -927,6 +946,7 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
     // (clipped to the visible window) on its topmost visible row — see renderRow.
     size_t initEnd = std::min(total, (size_t)pageH);
     trace("init");
+    reserveRows((size_t)pageH);   // make room below so no sixel forces a mid-paint scroll
     for (size_t r = 0; r < initEnd; ++r) { traceRow(r, (int)r); emitRow(r, 0, initEnd); std::fputc('\n', stdout); }
     viewTop = initEnd < (size_t)pageH ? 0 : initEnd - (size_t)pageH;
 
