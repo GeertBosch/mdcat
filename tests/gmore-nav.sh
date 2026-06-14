@@ -63,6 +63,13 @@ check "count 99j clamps" '99j'  'top=27 bottom=50 total=50 pct=100% END'
 check "count overflow"   '999999999999999999999j' 'top=27 bottom=50 total=50 pct=100% END'
 check "count then back"  '20j5k' 'top=15 bottom=38 total=50 pct=76% more'
 check "count resets"     '5jj'  'top=6 bottom=29 total=50 pct=58% more'
+# Go to top / bottom; g/G with a count go to line N (1-based).
+check "G to bottom"      'G'    'top=27 bottom=50 total=50 pct=100% END'
+check "g to top"         'Gg'   'top=0 bottom=23 total=50 pct=46% more'
+check "G3 line 3"        'G3G'  'top=2 bottom=25 total=50 pct=50% more'
+check "g count line 10"  '10g'  'top=9 bottom=32 total=50 pct=64% more'
+check "G count clamps"   '99G'  'top=27 bottom=50 total=50 pct=100% END'
+check "g works at end"   'Gg'   'top=0 bottom=23 total=50 pct=46% more'
 # Forward steps clamp at maxTop (27); (END) reached.
 check "page to end"      'fff'  'top=27 bottom=50 total=50 pct=100% END'
 # more(1) quirk: space at (END) quits (script stops there); other fwd keys no-op.

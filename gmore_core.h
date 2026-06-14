@@ -818,6 +818,8 @@ struct Nav {
 
     void down(size_t n) { viewTop = std::min(maxTop(), viewTop + n); }
     void up(size_t n)   { viewTop = n <= viewTop ? viewTop - n : 0; }
+    // Put 1-based line `ln` at the top of the view, clamped to [0, maxTop].
+    void gotoLine(size_t ln) { viewTop = std::min(maxTop(), ln ? ln - 1 : 0); }
 
     // Apply a command key with repeat count `count` (0 = "not given"; commands
     // pick their own default). Returns the action run() must take. Keeps the
@@ -832,6 +834,9 @@ struct Nav {
             case 'b':           up(n > 0 ? (size_t)n : (size_t)pageH);   return REPAINT;
             case '\r': case '\n': case 'j': down(n > 0 ? (size_t)n : 1); return REPAINT;
             case 'k': case 'y': up(n > 0 ? (size_t)n : 1);               return REPAINT;
+            // g/G: go to line N (1-based); default g=first line, G=last line.
+            case 'g': gotoLine(n > 0 ? (size_t)n : 1);              return REPAINT;
+            case 'G': gotoLine(n > 0 ? (size_t)n : total);         return REPAINT;
             default: return NONE;
         }
     }
