@@ -815,7 +815,12 @@ struct Nav {
         return total ? (int)(std::min(bottom, total) * 100 / total) : 100;
     }
 
-    enum Action { NONE, REPAINT, QUIT };
+    // MESSAGE: don't move; run() shows an informational prompt (e.g. = position).
+    enum Action { NONE, REPAINT, QUIT, MESSAGE };
+
+    // 1-based line number at the bottom of the view (the last visible line),
+    // clamped to total — what more(1)'s "=" reports.
+    size_t bottomLine() const { return std::min(viewTop + (size_t)pageH, total); }
 
     void down(size_t n) { viewTop = std::min(maxTop(), viewTop + n); }
     void up(size_t n)   { viewTop = n <= viewTop ? viewTop - n : 0; }
@@ -844,6 +849,8 @@ struct Nav {
             // like more(1). Default step is half the page height (min 1).
             case 'd': case 0x04: if (n > 0) scrollSize = (size_t)n; down(scrollStep()); return REPAINT;
             case 'u': case 0x15: if (n > 0) scrollSize = (size_t)n; up(scrollStep());   return REPAINT;
+            // =/^G: report position (line number + percent) without moving.
+            case '=': case 0x07: return MESSAGE;
             default: return NONE;
         }
     }
@@ -1023,8 +1030,12 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
         }
     };
 
+    // A transient status message (e.g. the = position report) shown on the prompt
+    // row in place of --More-- until the next keystroke, then cleared.
+    std::string message;
     auto showPrompt = [&] {
-        if (nav.atEnd()) std::fputs("\033[7m(END)\033[27m", stdout);
+        if (!message.empty()) std::fprintf(stdout, "\033[7m%s\033[27m", message.c_str());
+        else if (nav.atEnd()) std::fputs("\033[7m(END)\033[27m", stdout);
         else std::fprintf(stdout, "\033[7m--More--(%d%%)\033[27m", nav.percent());
         std::fflush(stdout);
     };
@@ -1085,10 +1096,17 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
         }
         counting = false;
         clearPrompt();
+        message.clear();
         Nav::Action a = nav.dispatch(c, count);
         count = 0;
         if (a == Nav::QUIT) break;
         if (a == Nav::REPAINT) { trace("dispatch"); repaint(); }
+        if (a == Nav::MESSAGE) {
+            char buf[64];
+            std::snprintf(buf, sizeof buf, "line %zu/%zu (%d%%)",
+                          nav.bottomLine(), nav.total, nav.percent());
+            message = buf;
+        }
     }
     clearPrompt();
     std::fflush(stdout);

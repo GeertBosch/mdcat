@@ -9,8 +9,9 @@
 // OSC 8 hyperlinks (parsed, stored as interned linkId, re-emitted on render).
 //
 // Keys: space/f page down, b page up, Enter/j line down, k/y line up, d/u (^D/^U)
-// half-screen down/up, g/G to top/bottom (or line N with a count), q quit. A
-// leading count repeats a motion; a count to d/u sets the half-screen step.
+// half-screen down/up, g/G to top/bottom (or line N with a count), =/^G show the
+// current position, q quit. A leading count repeats a motion; a count to d/u sets
+// the half-screen step.
 // Up-scroll full-repaints the window (an incremental up-paint clobbers image cells).
 // --dump renders the text grid to stdout (no images, for testing).
 // --dump-images renders text + re-encoded sixel strips (for render testing).

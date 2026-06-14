@@ -70,6 +70,8 @@ check "half up u"        'ddu'  'top=11 bottom=34 total=50 pct=68% more'
 check "d count sets step" '5d'  'top=5 bottom=28 total=50 pct=56% more'
 check "d step sticks"    '5dd'  'top=10 bottom=33 total=50 pct=66% more'
 check "u uses d step"    '5ddu' 'top=5 bottom=28 total=50 pct=56% more'
+# Position report (=) does not move the view; trace position is unchanged after it.
+check "= does not move"  '10j=' 'top=10 bottom=33 total=50 pct=66% more'
 # Go to top / bottom; g/G with a count go to line N (1-based).
 check "G to bottom"      'G'    'top=27 bottom=50 total=50 pct=100% END'
 check "g to top"         'Gg'   'top=0 bottom=23 total=50 pct=46% more'
