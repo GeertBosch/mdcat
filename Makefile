@@ -14,7 +14,8 @@ TESTS := \
 	tests/property-width.sh \
 	tests/property-blank-lines.sh \
 	tests/gmore-emulator.sh \
-	tests/gmore-sixel.sh
+	tests/gmore-sixel.sh \
+	tests/gmore-nav.sh
 
 check: mdcat gmore
 	@fail=0; \

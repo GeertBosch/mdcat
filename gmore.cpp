@@ -29,12 +29,13 @@ static std::string readAll(int fd) {
 }
 
 int main(int argc, char** argv) {
-    bool dump = false, dumpImages = false, imginfo = false;
+    bool dump = false, dumpImages = false, imginfo = false, navTrace = false;
     const char* path = nullptr;
     for (int i = 1; i < argc; ++i) {
         if (std::strcmp(argv[i], "--dump") == 0) dump = true;
         else if (std::strcmp(argv[i], "--dump-images") == 0) { dump = true; dumpImages = true; }
         else if (std::strcmp(argv[i], "--imginfo") == 0) imginfo = true;
+        else if (std::strcmp(argv[i], "--nav-trace") == 0) navTrace = true;
         else if (std::strcmp(argv[i], "-") == 0) path = nullptr;
         else path = argv[i];
     }
@@ -48,5 +49,5 @@ int main(int argc, char** argv) {
         data = readAll(STDIN_FILENO);
     }
 
-    return gmore::run(std::move(data), dump, dumpImages, imginfo);
+    return gmore::run(std::move(data), dump, dumpImages, imginfo, navTrace);
 }

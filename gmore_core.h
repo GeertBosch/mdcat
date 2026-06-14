@@ -793,11 +793,57 @@ static inline CellSize queryCellSize() {
 }
 
 // ---------------------------------------------------------------------------
+// Nav — the pager's navigation state machine, factored out of run()'s I/O so
+// the motion commands can be unit-tested without a tty, sixels, or RIS repaints.
+// run() owns viewTop's *rendering*; Nav owns how a key (with an optional repeat
+// count) moves viewTop within [0, maxTop]. dispatch() returns an action telling
+// run() what to do; it never touches stdout. See --nav-trace and the
+// tests/gmore-nav.sh harness, which drive Nav through GMORE_KEYS and assert the
+// resulting view window in plain text.
+// ---------------------------------------------------------------------------
+struct Nav {
+    size_t viewTop = 0;     // top visible grid row
+    int pageH = 1;          // visible rows (screen height minus the prompt line)
+    size_t total = 0;       // total content rows
+
+    size_t maxTop() const { return total > (size_t)pageH ? total - (size_t)pageH : 0; }
+    bool atEnd() const { return viewTop >= maxTop(); }
+    // Percent of content scrolled past the bottom of the view, like more(1).
+    int percent() const {
+        size_t bottom = viewTop + (size_t)pageH;
+        return total ? (int)(std::min(bottom, total) * 100 / total) : 100;
+    }
+
+    enum Action { NONE, REPAINT, QUIT };
+
+    void down(size_t n) { viewTop = std::min(maxTop(), viewTop + n); }
+    void up(size_t n)   { viewTop = n <= viewTop ? viewTop - n : 0; }
+
+    // Apply a command key with repeat count `count` (0 = "not given"; commands
+    // pick their own default). Returns the action run() must take. Keeps the
+    // more(1) quirk that space/forward at (END) quits (space) or no-ops (others).
+    Action dispatch(unsigned char c, long count) {
+        if (c == 'q' || c == 'Q') return QUIT;
+        long n = count > 0 ? count : 0;
+        bool fwd = (c == ' ' || c == 'f' || c == 'j' || c == '\r' || c == '\n');
+        if (atEnd() && fwd) return c == ' ' ? QUIT : NONE;
+        switch (c) {
+            case ' ': case 'f': down(n > 0 ? (size_t)n : (size_t)pageH); return REPAINT;
+            case 'b':           up(n > 0 ? (size_t)n : (size_t)pageH);   return REPAINT;
+            case '\r': case '\n': case 'j': down(n > 0 ? (size_t)n : 1); return REPAINT;
+            case 'k': case 'y': up(n > 0 ? (size_t)n : 1);               return REPAINT;
+            default: return NONE;
+        }
+    }
+};
+
+// ---------------------------------------------------------------------------
 // run() — the gmore pager entry point. Accepts already-read input data.
 // Returns 0 on success. When stdout is not a tty and neither dump nor imginfo
 // mode is requested, passes the data through verbatim (pager-as-cat).
 // ---------------------------------------------------------------------------
-static inline int run(std::string data, bool dump = false, bool dumpImages = false, bool imginfo = false) {
+static inline int run(std::string data, bool dump = false, bool dumpImages = false, bool imginfo = false,
+                      bool navTrace = false) {
     internAttr(Attr{});  // id 0 = default
 
     // Terminal geometry. Env wins (for --dump/tests); then the kernel's TIOCGWINSZ
@@ -867,6 +913,33 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
         return 0;
     }
 
+    // --nav-trace is the navigation test surface: replay the GMORE_KEYS script
+    // through Nav alone (no tty, no painting) and print the final view window as
+    // plain text — "top=R bottom=B total=T pct=P% END?" — so motion commands can
+    // be asserted deterministically. Counts are leading digits before a command.
+    if (navTrace) {
+        Nav t;
+        int H2 = H ? H : 24;
+        t.pageH = H2 - 1;
+        t.total = total;
+        const char* keys = std::getenv("GMORE_KEYS");
+        long count = 0;
+        for (const char* p = keys; p && *p; ++p) {
+            unsigned char c = (unsigned char)*p;
+            if (c >= '0' && c <= '9') {
+                if (count <= (long)total) count = count * 10 + (c - '0');
+                continue;
+            }
+            Nav::Action a = t.dispatch(c, count);
+            count = 0;
+            if (a == Nav::QUIT) break;
+        }
+        std::printf("top=%zu bottom=%zu total=%zu pct=%d%% %s\n",
+                    t.viewTop, std::min(t.viewTop + (size_t)t.pageH, t.total),
+                    t.total, t.percent(), t.atEnd() ? "END" : "more");
+        return 0;
+    }
+
     // Scroll-safety for the first paint. gmore models a clean grid from row 0, but the
     // REAL terminal may start with a non-blank screen and the cursor near the bottom.
     // Painting top-down from there makes each tall sixel force the terminal to scroll to
@@ -908,8 +981,13 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
     }
 
     // view = rows [viewTop, viewTop + pageH); pageH = H-1 (bottom row = prompt).
-    int pageH = H - 1;
-    size_t viewTop = 0;
+    // Navigation lives in Nav (see above); viewTop/pageH are references into it so
+    // the existing paint code reads unchanged.
+    Nav nav;
+    nav.pageH = H - 1;
+    nav.total = total;
+    int& pageH = nav.pageH;
+    size_t& viewTop = nav.viewTop;
 
     // Observability: GMORE_DEBUG logs paint operations to stderr (which absolute
     // grid rows we paint onto which screen lines, and where image strips land), so
@@ -934,10 +1012,8 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
     };
 
     auto showPrompt = [&] {
-        size_t bottom = viewTop + (size_t)pageH;
-        if (bottom >= total) std::fputs("\033[7m(END)\033[27m", stdout);
-        else std::fprintf(stdout, "\033[7m--More--(%d%%)\033[27m",
-                          static_cast<int>(bottom * 100 / total));
+        if (nav.atEnd()) std::fputs("\033[7m(END)\033[27m", stdout);
+        else std::fprintf(stdout, "\033[7m--More--(%d%%)\033[27m", nav.percent());
         std::fflush(stdout);
     };
     auto clearPrompt = [&] { std::fputs("\r\033[K", stdout); };
@@ -973,46 +1049,34 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
         }
     };
 
-    // Scroll down/up n rows: move the window, then full-repaint (see `repaint`).
-    auto advance = [&](int n) {
-        trace("advance");
-        size_t maxTop = total > (size_t)pageH ? total - (size_t)pageH : 0;
-        viewTop = std::min(maxTop, viewTop + (size_t)n);
-        repaint();
-    };
-    auto retreat = [&](int n) {
-        if (viewTop == 0) return;
-        viewTop = (size_t)n <= viewTop ? viewTop - (size_t)n : 0;
-        trace("retreat");
-        repaint();
-    };
-
     // GMORE_KEYS scripts the keystroke stream (one char = one key) instead of
     // reading the tty, so a session like "jk" can be replayed non-interactively
     // and its exact output (escapes + sixel strips) captured for inspection.
+    // Motion logic lives in Nav::dispatch; this loop only does I/O and accumulates
+    // a leading decimal repeat count (more(1)'s "10j", etc.).
     const char* scriptedKeys = std::getenv("GMORE_KEYS");
     size_t keyPos = 0;
+    long count = 0;
+    bool counting = false;   // mid-count: don't reprint the prompt between digits
     for (;;) {
-        showPrompt();
+        if (!counting) showPrompt();
         unsigned char c;
         if (scriptedKeys) {
             if (!scriptedKeys[keyPos]) break;
             c = (unsigned char)scriptedKeys[keyPos++];
         } else if (read(gTtyFd, &c, 1) != 1) break;
-        if (c == 'q' || c == 'Q') break;
+        if (c >= '0' && c <= '9') {
+            // Clamp so a long digit run can't overflow; no motion exceeds `total`.
+            if (count <= (long)total) count = count * 10 + (c - '0');
+            counting = true;
+            continue;
+        }
+        counting = false;
         clearPrompt();
-        size_t bottom = viewTop + (size_t)pageH;
-        if (bottom >= total && (c == ' ' || c == 'f' || c == 'j' || c == '\r' || c == '\n')) {
-            if (c == ' ') break;     // space at END quits, like more(1)
-            continue;                // other forward keys are no-ops at END
-        }
-        switch (c) {
-            case ' ': case 'f': advance(pageH); break;
-            case '\r': case '\n': case 'j': advance(1); break;
-            case 'b': retreat(pageH); break;
-            case 'k': case 'y': retreat(1); break;
-            default: break;
-        }
+        Nav::Action a = nav.dispatch(c, count);
+        count = 0;
+        if (a == Nav::QUIT) break;
+        if (a == Nav::REPAINT) { trace("dispatch"); repaint(); }
     }
     clearPrompt();
     std::fflush(stdout);
