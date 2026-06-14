@@ -805,6 +805,7 @@ struct Nav {
     size_t viewTop = 0;     // top visible grid row
     int pageH = 1;          // visible rows (screen height minus the prompt line)
     size_t total = 0;       // total content rows
+    size_t scrollSize = 0;  // d/u half-screen step; a count to d/u sets it (0 = half page)
 
     size_t maxTop() const { return total > (size_t)pageH ? total - (size_t)pageH : 0; }
     bool atEnd() const { return viewTop >= maxTop(); }
@@ -820,6 +821,8 @@ struct Nav {
     void up(size_t n)   { viewTop = n <= viewTop ? viewTop - n : 0; }
     // Put 1-based line `ln` at the top of the view, clamped to [0, maxTop].
     void gotoLine(size_t ln) { viewTop = std::min(maxTop(), ln ? ln - 1 : 0); }
+    // d/u step: the sticky scrollSize if set, else half a page (at least 1).
+    size_t scrollStep() const { return scrollSize ? scrollSize : (size_t)(pageH > 1 ? pageH / 2 : 1); }
 
     // Apply a command key with repeat count `count` (0 = "not given"; commands
     // pick their own default). Returns the action run() must take. Keeps the
@@ -837,6 +840,10 @@ struct Nav {
             // g/G: go to line N (1-based); default g=first line, G=last line.
             case 'g': gotoLine(n > 0 ? (size_t)n : 1);              return REPAINT;
             case 'G': gotoLine(n > 0 ? (size_t)n : total);         return REPAINT;
+            // d/^D, u/^U: scroll half a screen; a count sets the step and sticks,
+            // like more(1). Default step is half the page height (min 1).
+            case 'd': case 0x04: if (n > 0) scrollSize = (size_t)n; down(scrollStep()); return REPAINT;
+            case 'u': case 0x15: if (n > 0) scrollSize = (size_t)n; up(scrollStep());   return REPAINT;
             default: return NONE;
         }
     }
