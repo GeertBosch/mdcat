@@ -13,6 +13,7 @@ TESTS := \
 	tests/property-concat.sh \
 	tests/property-width.sh \
 	tests/property-blank-lines.sh \
+	tests/property-highlight-escapes.sh \
 	tests/gmore-emulator.sh \
 	tests/gmore-sixel.sh \
 	tests/gmore-nav.sh

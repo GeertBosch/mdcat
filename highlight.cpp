@@ -26,13 +26,16 @@ namespace {
 // Color constants — all are fg-only; the caller keeps the bg active.
 // Changing a color means changing exactly one string here.
 // ---------------------------------------------------------------------------
-const std::string kColReset      = "\033[38;5;236m";   // dark gray — matches kCodeOn fg
-const std::string kColKeyword    = "\033[38;5;26;1m";  // blue bold
-const std::string kColIdentifier = kColReset;           // same as reset (no extra color)
-const std::string kColString     = "\033[38;5;88m";    // dark red
-const std::string kColComment    = "\033[38;5;22;3m";  // dark green italic
-const std::string kColNumber     = "\033[38;5;125m";   // magenta
-const std::string kColPreproc    = "\033[38;5;130m";   // orange/brown
+// kColReset must cancel every attribute that any token color activates (bold=22, italic=23)
+// in addition to restoring the fg.  Using SGR 0 would also reset the background set by the
+// caller's kCodeOn, so we cancel only what we set.
+const std::string kColReset      = "\033[22;23;38;5;236m"; // cancel bold+italic, restore fg
+const std::string kColKeyword    = "\033[38;5;26;1m";      // blue bold
+const std::string kColIdentifier = kColReset;               // same as reset (no extra color)
+const std::string kColString     = "\033[38;5;88m";        // dark red
+const std::string kColComment    = "\033[38;5;22;3m";      // dark green italic
+const std::string kColNumber     = "\033[38;5;125m";       // magenta
+const std::string kColPreproc    = "\033[38;5;130m";       // orange/brown
 
 // ---------------------------------------------------------------------------
 // Language configuration

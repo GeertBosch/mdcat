@@ -1119,11 +1119,15 @@ void emitCodeBlock(const std::vector<std::string>& lines, const std::string& lan
     // Fenced code: print with the light-gray background used for inline code, padded to the
     // width of the widest line so the block reads as a solid panel.  Syntax highlighting is
     // applied when a recognised language tag is present.
+    //
+    // kCodeOff only resets fg/bg; cancel bold+italic explicitly so highlighted attributes
+    // cannot leak past the line boundary into subsequent terminal output.
+    const std::string kAttrOff = "\033[22;23m";  // cancel bold (22) and italic (23)
     const auto highlighted = highlightCode(lines, lang);
     int maxw = 0;
     for (const auto& l : lines) maxw = std::max(maxw, displayWidth(l));
     for (const auto& l : highlighted) {
-        out << kCodeOn << ' ' << padTo(l, maxw) << ' ' << kCodeOff << '\n';
+        out << kCodeOn << ' ' << padTo(l, maxw) << ' ' << kAttrOff << kCodeOff << '\n';
     }
 }
 
