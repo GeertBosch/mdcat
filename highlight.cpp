@@ -512,6 +512,15 @@ struct Tokenizer {
 
             // ----------------------------------------------------------------
             case State::BlockComment: {
+                if (c == '\n') {
+                    // Re-emit the comment color at the start of each line so that
+                    // when the caller splits on '\n' every line carries its own color prefix.
+                    reset();
+                    out += c;
+                    out += kColComment;
+                    ++i;
+                    break;
+                }
                 out += c;
                 ++i;
                 if (!cfg.blockClose.empty()
@@ -546,6 +555,9 @@ struct Tokenizer {
 
             // ----------------------------------------------------------------
             case State::TripleDQ: {
+                if (c == '\n' && !escaped) {
+                    reset(); out += c; out += kColString; ++i; break;
+                }
                 out += c; ++i;
                 if (c == '\\') { escaped = true; break; }
                 if (src.compare(i - 3, 3, "\"\"\"") == 0) { reset(); state = State::Normal; }
@@ -553,6 +565,9 @@ struct Tokenizer {
             }
 
             case State::TripleSQ: {
+                if (c == '\n' && !escaped) {
+                    reset(); out += c; out += kColString; ++i; break;
+                }
                 out += c; ++i;
                 if (c == '\\') { escaped = true; break; }
                 if (src.compare(i - 3, 3, "'''") == 0) { reset(); state = State::Normal; }
