@@ -90,12 +90,41 @@ start numbers. Item bodies reflow and hang under the marker.
 
 ### Code blocks
 
-Fenced code blocks render verbatim with a light-gray background panel and no
-inline parsing.
+Fenced code blocks render on a light-gray background panel. When the opening
+fence carries a language tag, syntax highlighting is applied: keywords in blue
+bold, strings in dark red, comments in dark green italic, numbers in magenta,
+and preprocessor directives in orange.
+
+```cpp
+/*
+ * Compute n! iteratively.
+ * Works for n <= 20 (fits in uint64_t).
+ */
+#include <cstdint>
+#include <stdexcept>
+
+uint64_t factorial(int n) {
+    if (n < 0) throw std::invalid_argument("negative n");
+    uint64_t result = 1;
+    for (int i = 2; i <= n; ++i)
+        result *= i;  // no overflow check — caller's responsibility
+    return result;
+}
+```
 
 ```python
-def hello():
-    print("hello, world")
+def factorial(n: int) -> int:
+    """Return n!, raising ValueError for negative inputs.
+
+    Uses iteration rather than recursion to avoid hitting
+    Python's default recursion limit for large n.
+    """
+    if n < 0:
+        raise ValueError(f"factorial requires n >= 0, got {n}")
+    result = 1
+    for i in range(2, n + 1):
+        result *= i
+    return result
 ```
 
 
