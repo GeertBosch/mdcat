@@ -3,8 +3,8 @@ CXXFLAGS ?= -std=c++17 -O2 -Wall
 
 all: mdcat gmore
 
-mdcat: mdcat.cpp gmore_core.h
-	$(CXX) $(CXXFLAGS) -o $@ mdcat.cpp
+mdcat: mdcat.cpp highlight.cpp highlight.h gmore_core.h
+	$(CXX) $(CXXFLAGS) -o $@ mdcat.cpp highlight.cpp
 
 gmore: gmore.cpp gmore_core.h
 	$(CXX) $(CXXFLAGS) -o $@ gmore.cpp

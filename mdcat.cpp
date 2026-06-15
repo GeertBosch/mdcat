@@ -44,6 +44,7 @@
 #include <vector>
 
 #include "gmore_core.h"
+#include "highlight.h"
 
 namespace {
 
@@ -1113,12 +1114,15 @@ void emitThematicBreak(std::ostream& out) {
     out << horizontalLine(terminalWidth()) << '\n';
 }
 
-void emitCodeBlock(const std::vector<std::string>& lines, std::ostream& out) {
-    // Fenced code: print verbatim with the same light-gray background used for inline code,
-    // padded to the width of the widest line so the block reads as a solid panel.
+void emitCodeBlock(const std::vector<std::string>& lines, const std::string& lang,
+                   std::ostream& out) {
+    // Fenced code: print with the light-gray background used for inline code, padded to the
+    // width of the widest line so the block reads as a solid panel.  Syntax highlighting is
+    // applied when a recognised language tag is present.
+    const auto highlighted = highlightCode(lines, lang);
     int maxw = 0;
     for (const auto& l : lines) maxw = std::max(maxw, displayWidth(l));
-    for (const auto& l : lines) {
+    for (const auto& l : highlighted) {
         out << kCodeOn << ' ' << padTo(l, maxw) << ' ' << kCodeOff << '\n';
     }
 }
@@ -1678,6 +1682,7 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
             char fence = t[0];
             size_t run = 0;
             while (run < t.size() && t[run] == fence) ++run;
+            std::string lang = trim(t.substr(run));  // info string, e.g. "cpp" or "python"
             std::vector<std::string> body;
             size_t j = i + 1;
             for (; j < n; ++j) {
@@ -1687,7 +1692,7 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
                 if (r >= run && tj.find_first_not_of(fence) == std::string::npos) break;  // closing fence
                 body.push_back(lines[j]);
             }
-            emitCodeBlock(body, out);
+            emitCodeBlock(body, lang, out);
             i = (j < n) ? j + 1 : j;  // skip the closing fence if present
             continue;
         }
@@ -1820,7 +1825,7 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
                 body.push_back(stripCodeIndent(lines[j]));
             }
             while (!body.empty() && body.back().empty()) body.pop_back();  // drop trailing blanks
-            emitCodeBlock(body, out);
+            emitCodeBlock(body, "", out);
             // Resume right after the lines that became code; any trailing blank lines we gathered but
             // popped are left for the main loop, which treats blank lines as block separators.
             i += body.size();

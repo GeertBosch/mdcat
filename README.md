@@ -18,6 +18,23 @@ render with appropriate terminal styling — markup characters are consumed,
 not printed. Hyperlinks use OSC 8 escape sequences, which are clickable in
 iTerm2, Kitty, WezTerm, and most modern terminals.
 
+### Images
+
+Inline `<img>` tags and `![alt text](your-image.png)` links render as actual images on
+sixel-capable terminals (iTerm2, VSCode, WezTerm, xterm with sixel enabled).
+Images are scaled to fit the available column width while preserving aspect
+ratio. Supported formats: **PNG**, **JPEG**, **GIF**, **SVG** (via
+[timg](https://github.com/hzeller/timg)).
+
+Image paths are resolved relative to the markdown file's directory. On
+terminals without sixel support (Apple Terminal, plain xterm, piped output)
+the image falls back to its alt text, or the filename if no alt is given.
+
+| PNG | JPEG | GIF | SVG |
+| --- | ---- | --- | --- |
+| ![example.png (PNG)](tests/img/example.png) | <img src="tests/img/joan-mitchell.jpg" alt="Joan Mitchell (JPEG)"> | <img src="tests/img/sunflower.gif" alt="Sunflower (GIF)"> | <img src="tests/img/chessboard.svg" alt="Chessboard (SVG)"> |
+
+
 ### Tables
 
 GFM tables render with a bold header row, a full-width rule, and column
@@ -46,22 +63,6 @@ line.
 | Ruy Lopez        | White pins the knight defending e5 and builds a slow center. | +0.3 |
 | Sicilian Defense | Black answers 1.e4 with c5, fighting for the center asymmetrically. | -0.1 |
 | French Defense   | Black plays ...e6 and ...d5 for a cramped but solid structure. | +0.2 |
-
-### Images
-
-Inline `<img>` tags render as actual images on sixel-capable terminals
-(iTerm2, Kitty, WezTerm, xterm with sixel enabled). Images are scaled to
-fit the available column width while preserving aspect ratio. Supported
-formats: **PNG**, **JPEG**, **GIF**, **SVG** (via
-[timg](https://github.com/hzeller/timg)).
-
-Image paths are resolved relative to the markdown file's directory. On
-terminals without sixel support (Apple Terminal, plain xterm, piped output)
-the image falls back to its alt text, or the filename if no alt is given.
-
-| PNG | JPEG | GIF | SVG |
-| --- | ---- | --- | --- |
-| <img src="tests/img/example.png" alt="example.png (PNG)"> | <img src="tests/img/joan-mitchell.jpg" alt="Joan Mitchell painting (JPEG)"> | <img src="tests/img/sunflower.gif" alt="Sunflower (GIF)"> | <img src="tests/img/chessboard.svg" alt="Chessboard (SVG)"> |
 
 ### Block quotes
 
