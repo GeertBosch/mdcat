@@ -93,15 +93,15 @@ bold, strings in dark red, comments in dark green italic, numbers in magenta,
 and preprocessor directives in orange.
 
 ```cpp
+#include <cstdint>
+#include <stdexcept>
+
 /*
  * Compute n! iteratively.
  * Works for n <= 20 (fits in uint64_t).
  */
-#include <cstdint>
-#include <stdexcept>
-
 uint64_t factorial(int n) {
-    if (n < 0) throw std::invalid_argument("negative n");
+    if (n < 0) throw std::invalid_argument("n < 0 in factorial");
     uint64_t result = 1;
     for (int i = 2; i <= n; ++i)
         result *= i;  // no overflow check — caller's responsibility
@@ -110,14 +110,14 @@ uint64_t factorial(int n) {
 ```
 
 ```python
-def factorial(n: int) -> int:
-    """Return n!, raising ValueError for negative inputs.
+"""Return n!, raising ValueError for negative inputs.
 
-    Uses iteration rather than recursion to avoid hitting
-    Python's default recursion limit for large n.
-    """
+Uses iteration rather than recursion to avoid hitting
+Python's default recursion limit for large n.
+"""
+def factorial(n: int) -> int:
     if n < 0:
-        raise ValueError(f"factorial requires n >= 0, got {n}")
+        raise ValueError("n < 0 in factorial")
     result = 1
     for i in range(2, n + 1):
         result *= i
