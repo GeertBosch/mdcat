@@ -775,19 +775,48 @@ bool parseImgTag(const std::string& text, std::map<std::string, std::string>& at
     return false;  // ran off the end without a closing '>'
 }
 
+// Complete a half-open timg geometry ("Wx" or "xH") into a full "WxH" box by filling the missing
+// dimension with a deliberately loose bound that can never become the binding constraint, so the
+// requested dimension governs and the image keeps its own aspect ratio. We do this ourselves rather
+// than letting timg fill the blank from the terminal: timg >= 1.6.3 reads the terminal size via the
+// controlling tty's window-size ioctl, and when that is unavailable (stdout on a pipe with no usable
+// controlling tty) it refuses a partial -g with "Failed to read size from terminal" and emits no
+// output. Supplying a full box keeps mdcat working regardless of timg version or how it is invoked.
+// The loose bound is the terminal extent in that axis with a generous floor; mdcat reads the actual
+// painted size back from the sixel afterward, so over-specifying costs nothing.
+std::string completeGeom(const std::string& geom) {
+    // A loose bound large enough never to clip: the terminal extent floored at 1000 cells so a small
+    // or undetectable terminal can't accidentally bind the result.
+    int loose = std::max(1000, fullTerminalWidth());
+    size_t x = geom.find('x');
+    // No box at all: timg still needs a size, and on a pipe with no usable controlling tty it cannot
+    // get one from the terminal. Bound the width to the available columns with a loose height; timg
+    // fits the image inside, so a smaller image keeps its intrinsic size and a larger one is scaled
+    // down to the column budget — the same effect timg's own terminal default would give.
+    if (geom.empty() || x == std::string::npos)
+        return std::to_string(fullTerminalWidth()) + "x" + std::to_string(loose);
+    bool haveW = x > 0;
+    bool haveH = x + 1 < geom.size();
+    if (haveW && haveH) return geom;                  // already a full "WxH": leave it
+    if (haveW) return geom + std::to_string(loose);   // "Wx" -> "WxLOOSE"
+    if (haveH) return std::to_string(loose) + geom;   // "xH" -> "LOOSExH"
+    return std::to_string(loose) + "x" + std::to_string(loose);  // bare "x": both loose
+}
+
 // Run timg to render `path` at the given -g geometry with sixel graphics, returning its stdout.
 // `geom` is a timg geometry string in character cells: "WxH" (a full box), "Wx" (width only, height
 // derived from the aspect ratio) or "xH" (height only, width derived). Partial geometry lets a
 // single requested dimension govern, with the other following the true aspect ratio, instead of our
-// own rounding double-constraining the box. Returns an empty string if timg cannot be launched or
-// exits non-zero.
+// own rounding double-constraining the box; completeGeom turns it into a full box before invoking
+// timg so a piped timg never has to query the terminal. Returns an empty string if timg cannot be
+// launched or exits non-zero.
 //
 // The image data is captured (rather than letting timg draw straight to the terminal) for two
 // reasons: with its stdout on a pipe timg emits plain sixel without doing its own cursor/scroll
 // positioning, so we can later replay the bytes at whatever cursor position we choose; and we can
-// read the painted pixel size out of the sixel to compute an exact cell footprint. timg still
-// detects the real cell size via /dev/tty, so `-g` is honoured in actual character cells.
-std::string runTimg(const std::string& path, const std::string& geom) {
+// read the painted pixel size out of the sixel to compute an exact cell footprint.
+std::string runTimg(const std::string& path, const std::string& geomIn) {
+    std::string geom = completeGeom(geomIn);
     std::ostringstream cmd;
     // -ps : sixel pixelation;  -g <geom> : fit inside the given character-cell box.  The path is
     // passed single-quoted with embedded single quotes escaped, so odd filenames stay safe.
