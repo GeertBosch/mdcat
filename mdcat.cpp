@@ -24,7 +24,9 @@
 // Terminal.app) it falls back to the tag's alt text or filename. See renderImageBlock. Supported
 // formats: PNG, JPG, GIF, SVG. As a second exception, an inline <br> tag (in any of the <br>,
 // <br/>, <br /> spellings) is rendered as a hard line break wherever it appears — see scanHardBreak.
-// All other inline HTML is passed through literally.
+// All other inline HTML is passed through literally. LaTeX math between $...$ (inline) or $$...$$
+// (block) is transliterated to Unicode on a best-effort basis — Greek letters, common operator and
+// relation symbols, super/subscripts, and \mathrm/\mathbf wrappers; see renderMath and scanMath.
 //
 // Build:  c++ -std=c++17 -O2 -o mdcat mdcat.cpp
 // Usage:  mdcat [--width N] [--] [file ...]   (reads standard input when given no file arguments)
@@ -355,6 +357,164 @@ std::string trim(const std::string& s) {
 }
 
 // ---------------------------------------------------------------------------
+// LaTeX math -> Unicode
+// ---------------------------------------------------------------------------
+//
+// GitHub renders LaTeX between $...$ (inline) and $$...$$ (block). We don't ship a TeX engine;
+// instead renderMath() does a best-effort transliteration of the common, simple expressions that
+// map cleanly onto Unicode: Greek letters, a handful of operator/relation symbols, super/subscripts
+// of digits and a few characters, and \mathrm/\mathbf wrappers. Anything it can't represent is left
+// as-is (the literal command text), so the output is never worse than the raw source. The function
+// is total: it always returns a string and never throws.
+
+// Greek letters and named symbols, keyed by the LaTeX command without its backslash.
+const std::map<std::string, std::string>& mathSymbols() {
+    static const std::map<std::string, std::string> m = {
+        // Lowercase Greek
+        {"alpha", "α"}, {"beta", "β"}, {"gamma", "γ"}, {"delta", "δ"},
+        {"epsilon", "ε"}, {"varepsilon", "ε"}, {"zeta", "ζ"}, {"eta", "η"},
+        {"theta", "θ"}, {"vartheta", "ϑ"}, {"iota", "ι"}, {"kappa", "κ"},
+        {"lambda", "λ"}, {"mu", "μ"}, {"nu", "ν"}, {"xi", "ξ"},
+        {"omicron", "ο"}, {"pi", "π"}, {"varpi", "ϖ"}, {"rho", "ρ"},
+        {"varrho", "ϱ"}, {"sigma", "σ"}, {"varsigma", "ς"}, {"tau", "τ"},
+        {"upsilon", "υ"}, {"phi", "φ"}, {"varphi", "ϕ"}, {"chi", "χ"},
+        {"psi", "ψ"}, {"omega", "ω"},
+        // Uppercase Greek
+        {"Alpha", "Α"}, {"Beta", "Β"}, {"Gamma", "Γ"}, {"Delta", "Δ"},
+        {"Epsilon", "Ε"}, {"Zeta", "Ζ"}, {"Eta", "Η"}, {"Theta", "Θ"},
+        {"Iota", "Ι"}, {"Kappa", "Κ"}, {"Lambda", "Λ"}, {"Mu", "Μ"},
+        {"Nu", "Ν"}, {"Xi", "Ξ"}, {"Omicron", "Ο"}, {"Pi", "Π"},
+        {"Rho", "Ρ"}, {"Sigma", "Σ"}, {"Tau", "Τ"}, {"Upsilon", "Υ"},
+        {"Phi", "Φ"}, {"Chi", "Χ"}, {"Psi", "Ψ"}, {"Omega", "Ω"},
+        // Operators / relations / misc
+        {"exists", "∃"}, {"in", "∈"}, {"int", "∫"}, {"sum", "∑"},
+        {"prod", "∏"}, {"partial", "∂"}, {"infty", "∞"}, {"perp", "⊥"},
+        {"parallel", "∥"}, {"therefore", "∴"}, {"because", "∵"},
+        {"subset", "⊂"}, {"supset", "⊃"}, {"subseteq", "⊆"}, {"supseteq", "⊇"},
+        {"to", "→"}, {"rightarrow", "→"}, {"longrightarrow", "⟶"},
+        {"leftarrow", "←"}, {"Rightarrow", "⇒"}, {"Leftarrow", "⇐"},
+        {"times", "×"}, {"div", "÷"}, {"pm", "±"}, {"mp", "∓"},
+        {"simeq", "≃"}, {"approx", "≈"}, {"cong", "≅"}, {"equiv", "≡"},
+        {"neq", "≠"}, {"leq", "≤"}, {"geq", "≥"}, {"ll", "≪"}, {"gg", "≫"},
+        {"cdot", "⋅"}, {"cdots", "⋯"}, {"ldots", "…"}, {"dots", "…"},
+        {"nabla", "∇"}, {"forall", "∀"}, {"notin", "∉"}, {"emptyset", "∅"},
+        {"cup", "∪"}, {"cap", "∩"}, {"wedge", "∧"}, {"vee", "∨"},
+        {"neg", "¬"}, {"oplus", "⊕"}, {"otimes", "⊗"}, {"sqrt", "√"},
+        {"angle", "∠"}, {"prime", "′"}, {"circ", "∘"}, {"star", "⋆"},
+        {"langle", "⟨"}, {"rangle", "⟩"}, {"propto", "∝"}, {"mapsto", "↦"},
+    };
+    return m;
+}
+
+// Super/subscript glyphs for the characters that have dedicated Unicode forms. Characters with no
+// form are left unconverted (the whole script group is then rendered literally with ^ or _).
+const std::map<char, std::string>& superscripts() {
+    static const std::map<char, std::string> m = {
+        {'0', "⁰"}, {'1', "¹"}, {'2', "²"}, {'3', "³"}, {'4', "⁴"},
+        {'5', "⁵"}, {'6', "⁶"}, {'7', "⁷"}, {'8', "⁸"}, {'9', "⁹"},
+        {'+', "⁺"}, {'-', "⁻"}, {'=', "⁼"}, {'(', "⁽"}, {')', "⁾"},
+        {'n', "ⁿ"}, {'i', "ⁱ"}, {'.', "·"},
+    };
+    return m;
+}
+const std::map<char, std::string>& subscripts() {
+    static const std::map<char, std::string> m = {
+        {'0', "₀"}, {'1', "₁"}, {'2', "₂"}, {'3', "₃"}, {'4', "₄"},
+        {'5', "₅"}, {'6', "₆"}, {'7', "₇"}, {'8', "₈"}, {'9', "₉"},
+        {'+', "₊"}, {'-', "₋"}, {'=', "₌"}, {'(', "₍"}, {')', "₎"},
+    };
+    return m;
+}
+
+// Translate the body of one \mathrm{...} / \mathbf{...} group verbatim (drop the styling; the inner
+// characters are plain ASCII in the cases we care about). `out` receives the translation.
+// Returns false (leaving `out` untouched) if the requested group can't be rendered.
+
+// Try to convert a super/subscript group at s[i] (the '^' or '_'). On success, appends the Unicode
+// to out, advances i past the consumed text, and returns true. On failure returns false and leaves
+// i/out unchanged so the caller can emit the marker literally.
+bool convertScript(const std::string& s, size_t& i, std::string& out, bool sup) {
+    const auto& table = sup ? superscripts() : subscripts();
+    std::string body;        // the raw characters being scripted
+    size_t j = i + 1;
+    if (j < s.size() && s[j] == '{') {
+        size_t k = j + 1;
+        while (k < s.size() && s[k] != '}') body += s[k++];
+        if (k >= s.size()) return false;   // unbalanced brace: give up
+        j = k + 1;
+    } else if (j < s.size()) {
+        body = s[j];                        // single-character script: x^2, a_i
+        j += 1;
+    } else {
+        return false;
+    }
+    std::string conv;
+    for (char c : body) {
+        auto it = table.find(c);
+        if (it == table.end()) return false;  // a char with no glyph: render the group literally
+        conv += it->second;
+    }
+    out += conv;
+    i = j;
+    return true;
+}
+
+// Best-effort transliteration of a LaTeX math fragment to Unicode. `tex` is the content between the
+// delimiters (without the $'s). Always returns a renderable string.
+std::string renderMath(const std::string& tex) {
+    std::string out;
+    size_t n = tex.size();
+    for (size_t i = 0; i < n;) {
+        char c = tex[i];
+        if (c == '\\') {
+            // Read the command name (letters), or a single-character escape like \{ or \,.
+            size_t j = i + 1;
+            while (j < n && std::isalpha(static_cast<unsigned char>(tex[j]))) ++j;
+            if (j == i + 1) {
+                // Non-letter after backslash: \, \; \! are spacing (drop); \{ \} \$ are literals.
+                char e = (j < n) ? tex[j] : '\0';
+                if (e == ',' || e == ';' || e == ':' || e == '!' || e == ' ') { i = j + 1; continue; }
+                if (e == '{' || e == '}' || e == '$' || e == '%' || e == '&' || e == '#') {
+                    out += e; i = j + 1; continue;
+                }
+                out += c; ++i; continue;   // unknown: keep the backslash literally
+            }
+            std::string cmd = tex.substr(i + 1, j - (i + 1));
+            if (cmd == "quad" || cmd == "qquad") { out += ' '; i = j; continue; }
+            if (cmd == "left" || cmd == "right") { i = j; continue; }  // delimiter sizing: drop
+            if ((cmd == "mathrm" || cmd == "mathbf" || cmd == "mathit" || cmd == "mathsf" ||
+                 cmd == "text" || cmd == "operatorname") && j < n && tex[j] == '{') {
+                // Strip the styling wrapper and recurse on its contents.
+                size_t k = j + 1;
+                int depth = 1;
+                std::string inner;
+                while (k < n && depth > 0) {
+                    if (tex[k] == '{') ++depth;
+                    else if (tex[k] == '}') { if (--depth == 0) break; }
+                    inner += tex[k++];
+                }
+                if (k < n) { out += renderMath(inner); i = k + 1; continue; }
+                // Unbalanced: fall through and emit the command literally.
+            }
+            auto it = mathSymbols().find(cmd);
+            if (it != mathSymbols().end()) { out += it->second; i = j; continue; }
+            out += "\\" + cmd;   // unknown command: leave it as written
+            i = j;
+            continue;
+        }
+        if (c == '^' || c == '_') {
+            if (convertScript(tex, i, out, c == '^')) continue;
+            out += c; ++i; continue;
+        }
+        if (c == '{' || c == '}') { ++i; continue; }  // bare grouping braces have no visual effect
+        int len = utf8SequenceLength(static_cast<unsigned char>(c));
+        out += tex.substr(i, len);
+        i += len;
+    }
+    return out;
+}
+
+// ---------------------------------------------------------------------------
 // Inline parsing
 // ---------------------------------------------------------------------------
 
@@ -430,6 +590,7 @@ private:
                 continue;
             }
             if (c == '`') { if (scanCode(i)) continue; }
+            if (c == '$') { if (scanMath(i)) continue; }
             if (c == '<') { if (scanHardBreak(i)) continue; }
             if (c == '!' && i + 1 < n && s_[i + 1] == '[') { if (scanImage(i)) continue; }
             if (c == '[') { if (scanLink(i)) continue; }
@@ -460,6 +621,38 @@ private:
             } else ++j;
         }
         return false;  // unmatched: fall through and treat the backticks as text
+    }
+
+    // $...$ (inline) or $$...$$ (block) LaTeX math. The content is transliterated to Unicode by
+    // renderMath and emitted as plain text. We follow GitHub's heuristics to avoid mistaking prose
+    // dollar signs (prices) for math: the opener must be followed by a non-space, the closer must
+    // be preceded by a non-space, and a single-$ closer may not be immediately followed by a digit.
+    // The '$' is at position i. On failure, falls through and the '$' is treated as literal text.
+    bool scanMath(size_t& i) {
+        size_t open = (i + 1 < s_.size() && s_[i + 1] == '$') ? 2 : 1;  // $ or $$
+        size_t start = i + open;
+        if (start >= s_.size() || isSpace(s_[start])) return false;     // no space right after opener
+        size_t j = start;
+        while (j < s_.size()) {
+            if (s_[j] == '\\' && j + 1 < s_.size()) { j += 2; continue; }  // skip escaped char
+            if (s_[j] == '$') {
+                size_t run = 0;
+                while (j + run < s_.size() && s_[j + run] == '$') ++run;
+                if (run >= open) {
+                    if (j == start) return false;                    // empty: "$$" is not math
+                    if (isSpace(s_[j - 1])) return false;            // no space right before closer
+                    size_t after = j + open;
+                    // For inline ($) math, a digit right after the closer means it's likely a price.
+                    if (open == 1 && after < s_.size() &&
+                        std::isdigit(static_cast<unsigned char>(s_[after]))) return false;
+                    addText(renderMath(s_.substr(start, j - start)));
+                    i = j + open;
+                    return true;
+                }
+                j += run;
+            } else ++j;
+        }
+        return false;  // unterminated: treat the opening '$' as literal text
     }
 
     // <br>, <br/>, <br />: an HTML hard line break (GFM treats it as a literal line break wherever
