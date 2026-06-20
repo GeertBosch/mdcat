@@ -94,6 +94,11 @@ int gIndent = 0;
 // don't change it — their marker is the number, not a depth-varying glyph. See emitList.
 int gListDepth = 0;
 
+// Nesting depth across *all* lists (bullet and ordered). Used so only the outermost list block gets
+// the two-space left lead that sets a list off from surrounding text; nested lists already step in via
+// their parent item's marker. Raised around any list's items and restored after. See emitList.
+int gListNesting = 0;
+
 // Set just before rendering the content of a *tight* list item. A tight list draws no blank line
 // between its items, and likewise its item bodies should not put a blank line between the item's lead
 // paragraph and an immediately-following nested list (GFM renders a tight item's paragraph without
@@ -1975,6 +1980,11 @@ void emitList(const std::vector<ListItem>& items, const ListMarker& marker, bool
     // marker is padded out to at least four columns. A longer ordered marker (e.g. "10. ") keeps its
     // natural width.
     const int kListIndent = 4;
+    // The outermost list block is set off from surrounding text by a two-space left lead; nested lists
+    // already step in through their parent item's marker, so they add no further lead.
+    const std::string lead = (gListNesting == 0) ? "  " : "";
+    gIndent += static_cast<int>(lead.size());
+    ++gListNesting;
     for (size_t idx = 0; idx < items.size(); ++idx) {
         if (idx && loose) out << '\n';
 
@@ -2001,8 +2011,10 @@ void emitList(const std::vector<ListItem>& items, const ListMarker& marker, bool
 
         std::vector<std::string> body = splitOnNewlines(trimTrailingNewline(buf.str()));
         for (size_t k = 0; k < body.size(); ++k)
-            out << (k == 0 ? mark : pad) << body[k] << '\n';
+            out << lead << (k == 0 ? mark : pad) << body[k] << '\n';
     }
+    --gListNesting;
+    gIndent -= static_cast<int>(lead.size());
 }
 
 // Render the gathered lines of a block quote (markers already stripped) one container level deeper.
