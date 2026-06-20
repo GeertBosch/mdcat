@@ -673,6 +673,11 @@ struct Emulator {
             }
         }
 
+        // (Inline image painting above is kept for --dump-images, which renders a
+        // single row in isolation. The interactive pager uses paintImages() instead:
+        // it commits every text row first, then paints images in a second pass, so a
+        // tall sixel never paints into not-yet-emitted rows — iTerm2 otherwise scrolls
+        // mid-paint and clips the image's top. See run().)
         if (absRow >= rows.size()) return;
         const std::vector<Cell>& L = rows[absRow];
         int last = -1;
@@ -700,6 +705,33 @@ struct Emulator {
         }
         if (withImages && curLink != 0) emitOsc8(0);   // close any open hyperlink
         if (cur != 0) out += "\033[0m";
+    }
+
+    // Paint every image visible in the window [winFirst, winFirst+winRows) as a SECOND
+    // pass, after the caller has already emitted all winRows text lines (so the cursor
+    // sits at column 1 on the line just below the window and every image row is already
+    // committed). For each image we move up to its top-visible screen line with a
+    // relative CUU, save (DECSC), paint the clipped sixel, restore (DECRC), then step
+    // back down — exactly mdcat's emitTable overlay. Painting into committed rows means
+    // no sixel forces a mid-paint scroll, so iTerm2 never clips the image's top.
+    // `winBot` is the absolute row just past the window (for bottom band-clipping).
+    void paintImages(std::string& out, size_t winFirst, int winRows, size_t winBot) const {
+        for (const Image& img : images) {
+            size_t imgEnd = img.row + (size_t)((img.Pv + cellH - 1) / cellH);
+            size_t firstVisible = std::max(img.row, winFirst);
+            if (firstVisible >= imgEnd || firstVisible >= winFirst + (size_t)winRows) continue;
+            int skipPx = (int)(firstVisible - img.row) * cellH;   // rows above the window
+            int keepPx = img.Pv - skipPx;
+            if (winBot > firstVisible)                            // clip to the window bottom
+                keepPx = std::min(keepPx, (int)(winBot - firstVisible) * cellH);
+            int up = winRows - (int)(firstVisible - winFirst);    // lines up from below the window
+            out += "\033["; out += std::to_string(up); out += 'A';  // up to the image's top line
+            out += "\033[";  out += std::to_string(img.col + 1); out += 'G';  // to its column
+            out += "\0337";                                       // DECSC: save the band-top position
+            out += replaySixel(img, skipPx, keepPx);              // paint (cursor left terminal-dependent)
+            out += "\0338";                                       // DECRC: back to the band-top position
+            out += "\033["; out += std::to_string(up); out += 'B'; out += '\r';  // down to below the window
+        }
     }
 };
 
@@ -977,10 +1009,25 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
         std::fprintf(stdout, "\033[%zuA", n);
     };
 
+    // Emit rows [first, first+count) the safe two-pass way: all text first (committing
+    // every line), then images painted into those committed rows (see paintImages).
+    // Leaves the cursor on the line just below the window. vBot is the absolute row past
+    // the window for bottom-clipping (0 => clip to first+count, the whole window).
+    auto paintWindow = [&](size_t first, int count, size_t vBot) {
+        std::string s;
+        for (int i = 0; i < count; ++i) {
+            size_t r = first + (size_t)i;
+            if (r < total) em.renderRow(r, s, /*withImages=*/false);
+            s += '\n';
+        }
+        em.paintImages(s, first, count, vBot ? vBot : first + (size_t)count);
+        fwrite(s.data(), 1, s.size(), stdout);
+    };
+
     // Fits on one screen: print and exit, no prompt.
     if (total <= static_cast<size_t>(H - 1)) {
         reserveRows(total);
-        for (size_t r = 0; r < total; ++r) { emitRow(r); std::fputc('\n', stdout); }
+        paintWindow(0, (int)total, total);
         return 0;
     }
 
@@ -991,7 +1038,7 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
         gTtyFd = open("/dev/tty", O_RDWR);
         if (gTtyFd < 0) gTtyFd = STDIN_FILENO;
         if (!enterRaw()) {
-            for (size_t r = 0; r < total; ++r) { emitRow(r); std::fputc('\n', stdout); }
+            paintWindow(0, (int)total, total);
             return 0;
         }
         std::atexit(restoreTty);
@@ -1041,12 +1088,14 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
     };
     auto clearPrompt = [&] { std::fputs("\r\033[K", stdout); };
 
-    // Initial paint: fill the first page top-down. Each image paints as ONE sixel
-    // (clipped to the visible window) on its topmost visible row — see renderRow.
+    // Initial paint: fill the first page. paintWindow commits all text rows first, then
+    // paints images into them (a tall sixel painted before its rows exist would scroll
+    // the terminal mid-paint and clip the image's top — see paintImages).
     size_t initEnd = std::min(total, (size_t)pageH);
     trace("init");
     reserveRows((size_t)pageH);   // make room below so no sixel forces a mid-paint scroll
-    for (size_t r = 0; r < initEnd; ++r) { traceRow(r, (int)r); emitRow(r, 0, initEnd); std::fputc('\n', stdout); }
+    for (size_t r = 0; r < initEnd; ++r) traceRow(r, (int)r);
+    paintWindow(0, (int)initEnd, initEnd);
     viewTop = initEnd < (size_t)pageH ? 0 : initEnd - (size_t)pageH;
 
     // Repaint the whole visible window for the current viewTop. Both scroll
@@ -1065,11 +1114,8 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
     auto repaint = [&] {
         size_t vBot = std::min(total, viewTop + (size_t)pageH);
         std::fputs("\033c", stdout);
-        for (int i = 0; i < pageH; ++i) {
-            size_t r = viewTop + (size_t)i;
-            if (r < total) { traceRow(r, i); emitRow(r, viewTop, vBot); }
-            std::fputc('\n', stdout);
-        }
+        for (int i = 0; i < pageH; ++i) traceRow(viewTop + (size_t)i, i);
+        paintWindow(viewTop, pageH, vBot);
     };
 
     // GMORE_KEYS scripts the keystroke stream (one char = one key) instead of
