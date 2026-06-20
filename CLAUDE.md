@@ -26,3 +26,7 @@ remembering. Update the affected memories or save new ones accordingly.
 For stray/untracked files you didn't create (scratch output, temp files), just
 leave them be: don't commit them, don't delete them, and don't add them to
 `.gitignore`.
+
+## Canonical definition of MarkDown
+
+Refer to https://github.github.com/gfm for the specification of the MarkDown format.
