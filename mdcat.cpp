@@ -89,7 +89,7 @@ std::string gFileDir;
 // emitList / terminalWidth.
 int gIndent = 0;
 
-// Current bullet-list nesting depth, used to pick the bullet glyph (• ◦ ▪ by depth, like GitHub's
+// Current bullet-list nesting depth, used to pick the bullet glyph (● ○ ▪︎ by depth, like GitHub's
 // disc/circle/square). Raised while a bullet list's items render and restored after. Ordered lists
 // don't change it — their marker is the number, not a depth-varying glyph. See emitList.
 int gListDepth = 0;
@@ -1965,12 +1965,16 @@ struct ListItem {
 // Render a gathered list. Each item's content is a full block sequence rendered recursively (one
 // container level deeper) into a buffer; the buffer's first line is prefixed with the item marker and
 // the rest with equal-width padding so the body hangs under the marker. Bullets use a depth-varying
-// glyph (• ◦ ▪, matching GitHub's disc/circle/square); ordered items keep their number with a '.'.
+// glyph (● ○ ▪︎, matching GitHub's disc/circle/square); ordered items keep their number with a '.'.
 // gListDepth tracks bullet nesting for the glyph; gIndent is raised by the marker width so inner
 // content reflows within the narrower column. A loose list prints a blank line between items.
 void emitList(const std::vector<ListItem>& items, const ListMarker& marker, bool loose,
               std::ostream& out) {
-    static const std::vector<std::string> kBullets = {"•", "◦", "▪"};
+    static const std::vector<std::string> kBullets = {"●", "○", "▪︎"};
+    // Each list level indents its content by four columns (matching most Markdown viewers), so the
+    // marker is padded out to at least four columns. A longer ordered marker (e.g. "10. ") keeps its
+    // natural width.
+    const int kListIndent = 4;
     for (size_t idx = 0; idx < items.size(); ++idx) {
         if (idx && loose) out << '\n';
 
@@ -1981,6 +1985,9 @@ void emitList(const std::vector<ListItem>& items, const ListMarker& marker, bool
         } else {
             mark = kBullets[std::min<size_t>(gListDepth, kBullets.size() - 1)] + std::string(" ");
         }
+        // Pad the marker out to the four-column indent so the body hangs at the indented column.
+        if (displayWidth(mark) < kListIndent)
+            mark += std::string(static_cast<size_t>(kListIndent - displayWidth(mark)), ' ');
         int markWidth = displayWidth(mark);
         std::string pad(static_cast<size_t>(markWidth), ' ');
 

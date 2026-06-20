@@ -67,7 +67,7 @@ Block quotes render with a left-rule decoration; nesting is supported.
 
 ### Lists
 
-Bullet lists use depth-varying glyphs (•, ◦, ▪). Ordered lists honor custom
+Bullet lists use depth-varying glyphs (●, ○, ▪︎). Ordered lists honor custom
 start numbers. Item bodies reflow and hang under the marker.
 
 - Top level

@@ -1,7 +1,7 @@
 # TEST: lists
 
 Lists are a *container* block (GFM §5.2–5.3). Bullet markers (`-`, `+`, `*`) all
-render as a depth-varying glyph (• ◦ ▪, matching GitHub's disc/circle/square);
+render as a depth-varying glyph (● ○ ▪︎, matching GitHub's disc/circle/square);
 ordered markers keep the author's number with a `.`. Item bodies hang under the
 marker, reflowing to the narrower inner width. Tight lists pack their items;
 loose lists (any blank line between or within items) get blank lines between them.
