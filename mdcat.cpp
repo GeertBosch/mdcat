@@ -1512,7 +1512,7 @@ void emitCodeBlock(const std::vector<std::string>& lines, const std::string& lan
     int maxw = 0;
     for (const auto& l : lines) maxw = std::max(maxw, displayWidth(l));
     for (const auto& l : highlighted) {
-        out << kCodeOn << ' ' << padTo(l, maxw) << ' ' << kAttrOff << kCodeOff << '\n';
+        out << kCodeOn << "  " << padTo(l, maxw) << "  " << kAttrOff << kCodeOff << '\n';
     }
 }
 
