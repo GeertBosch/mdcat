@@ -1986,12 +1986,29 @@ struct ListItem {
     bool hadBlank = false;
 };
 
+// If `s` begins with a GFM task-list checkbox — "[ ]", "[x]" or "[X]" followed by a space (or end of
+// the content) — set `checked` and strip the checkbox plus its trailing space, returning true. The
+// checkbox must be the very start of the item's content (GFM task-list extension).
+bool stripTaskCheckbox(std::string& s, bool& checked) {
+    if (s.size() < 3 || s[0] != '[' || s[2] != ']') return false;
+    char c = s[1];
+    if (c == ' ') checked = false;
+    else if (c == 'x' || c == 'X') checked = true;
+    else return false;
+    if (s.size() == 3) { s.clear(); return true; }      // checkbox is the whole content
+    if (s[3] != ' ') return false;                       // must be followed by whitespace
+    s.erase(0, 4);
+    return true;
+}
+
 // Render a gathered list. Each item's content is a full block sequence rendered recursively (one
 // container level deeper) into a buffer; the buffer's first line is prefixed with the item marker and
 // the rest with equal-width padding so the body hangs under the marker. Bullets use a depth-varying
 // glyph (● ○ ▪︎, matching GitHub's disc/circle/square); ordered items keep their number with a '.'.
-// gListDepth tracks bullet nesting for the glyph; gIndent is raised by the marker width so inner
-// content reflows within the narrower column. A loose list prints a blank line between items.
+// An item whose content opens with a task-list checkbox ("[ ]"/"[x]") swaps the marker for a ☐/☑
+// glyph (GFM task-list extension). gListDepth tracks bullet nesting for the glyph; gIndent is raised
+// by the marker width so inner content reflows within the narrower column. A loose list prints a
+// blank line between items.
 void emitList(const std::vector<ListItem>& items, const ListMarker& marker, bool loose,
               std::ostream& out) {
     static const std::vector<std::string> kBullets = {"●", "○", "▪︎"};
@@ -2007,9 +2024,17 @@ void emitList(const std::vector<ListItem>& items, const ListMarker& marker, bool
     for (size_t idx = 0; idx < items.size(); ++idx) {
         if (idx && loose) out << '\n';
 
+        // A task-list item: strip the leading checkbox from its content and remember its state so the
+        // marker becomes a checkbox glyph below.
+        std::vector<std::string> itemLines = items[idx].lines;
+        bool isTask = false, checked = false;
+        if (!itemLines.empty() && stripTaskCheckbox(itemLines[0], checked)) isTask = true;
+
         // Build the marker text and the matching blank padding for continuation lines.
         std::string mark;
-        if (marker.ordered) {
+        if (isTask) {
+            mark = (checked ? "☑" : "☐") + std::string(" ");  // ☑ / ☐
+        } else if (marker.ordered) {
             mark = std::to_string(marker.start + static_cast<int>(idx)) + marker.delim + ' ';
         } else {
             mark = kBullets[std::min<size_t>(gListDepth, kBullets.size() - 1)] + std::string(" ");
@@ -2024,7 +2049,7 @@ void emitList(const std::vector<ListItem>& items, const ListMarker& marker, bool
         gIndent += markWidth;
         if (!marker.ordered) ++gListDepth;
         if (!loose) gTightItem = true;  // suppress lead-paragraph/sublist spacing in a tight item
-        render(items[idx].lines, buf);
+        render(itemLines, buf);
         if (!marker.ordered) --gListDepth;
         gIndent -= markWidth;
 

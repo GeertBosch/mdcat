@@ -79,6 +79,12 @@ start numbers. Item bodies reflow and hang under the marker.
 1. Ordered lists work too
 2. With correct numbering
 
+Task lists (the GitHub extension) render their checkboxes as ☐ and ☑:
+
+- [x] Parse the checkbox marker
+- [x] Render the glyph
+- [ ] Anything still to do
+
 ### Code blocks
 
 Fenced code blocks render on a light-gray background panel. When the opening

@@ -60,4 +60,13 @@ Markup inside items works: **bold**, *italic*, `code`, and [links](https://x).
 - One with `inline code` and **strong** text.
 - [A link item](https://example.com).
 
+Task lists (GFM extension): a checkbox marker `[ ]`/`[x]` becomes ☐/☑.
+
+- [x] Write the parser.
+- [x] Render the checkbox glyph.
+- [ ] Document it.
+- [ ] A task with **bold** and a [link](https://x).
+  - [x] A nested completed subtask.
+  - [ ] A nested pending subtask.
+
 The end.
