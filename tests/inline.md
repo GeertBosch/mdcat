@@ -20,3 +20,7 @@ Combined: ***bold italic***, **bold with `code` inside**, and a trailing
 asterisk * that is not a delimiter.
 
 A link to [Anthropic](https://www.anthropic.com) inside a paragraph.
+
+A paragraph with a hard line break here<br>and the text continues on a new
+line. The forms `<br>`, `<br/>` and `<br />` all work; a malformed `<brx>` stays
+literal.

@@ -22,7 +22,9 @@
 // consists solely of an <img ...> tag pointing at a local PNG is rendered as an actual image by
 // shelling out to timg(1) on terminals that support sixel graphics; elsewhere (e.g. Apple's
 // Terminal.app) it falls back to the tag's alt text or filename. See renderImageBlock. Supported
-// formats: PNG, JPG, GIF, SVG. All other inline HTML is passed through literally.
+// formats: PNG, JPG, GIF, SVG. As a second exception, an inline <br> tag (in any of the <br>,
+// <br/>, <br /> spellings) is rendered as a hard line break wherever it appears — see scanHardBreak.
+// All other inline HTML is passed through literally.
 //
 // Build:  c++ -std=c++17 -O2 -o mdcat mdcat.cpp
 // Usage:  mdcat [--width N] [--] [file ...]   (reads standard input when given no file arguments)
@@ -428,6 +430,7 @@ private:
                 continue;
             }
             if (c == '`') { if (scanCode(i)) continue; }
+            if (c == '<') { if (scanHardBreak(i)) continue; }
             if (c == '!' && i + 1 < n && s_[i + 1] == '[') { if (scanImage(i)) continue; }
             if (c == '[') { if (scanLink(i)) continue; }
             if (c == '*' || c == '_') { scanDelim(i); continue; }
@@ -457,6 +460,24 @@ private:
             } else ++j;
         }
         return false;  // unmatched: fall through and treat the backticks as text
+    }
+
+    // <br>, <br/>, <br />: an HTML hard line break (GFM treats it as a literal line break wherever
+    // it appears in inline content). Emitted as a '\n' Text token; downstream reflow and table-cell
+    // layout split on '\n'. Tag/attribute matching is case-insensitive but otherwise strict: a
+    // malformed run like "<brx" or "<br foo" falls through and is rendered as literal text, matching
+    // how mdcat passes all other inline HTML through unchanged. The '<' is at position i.
+    bool scanHardBreak(size_t& i) {
+        size_t j = i + 1;  // just past '<'
+        auto lower = [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); };
+        if (j + 1 >= s_.size() || lower(s_[j]) != 'b' || lower(s_[j + 1]) != 'r') return false;
+        j += 2;
+        while (j < s_.size() && (s_[j] == ' ' || s_[j] == '\t')) ++j;  // optional whitespace
+        if (j < s_.size() && s_[j] == '/') ++j;                        // optional self-close slash
+        if (j >= s_.size() || s_[j] != '>') return false;             // must end at '>'
+        addText("\n");
+        i = j + 1;
+        return true;
     }
 
     // ![alt](url): markdown image. Captures alt text and url; the '!' is at position i.
@@ -1054,12 +1075,14 @@ std::string closeStylesAtLineBreaks(const std::string& s) {
 std::string reflow(const std::string& s, int width) {
     if (width < 1) width = 1;
 
-    // Split into whitespace-separated words; escapes travel with the word they are attached to.
+    // Split into whitespace-separated words; escapes travel with the word they are attached to. A
+    // '\n' (from a <br> hard break) is kept as a standalone "\n" word that forces a line break below.
     std::vector<std::string> words;
     std::string cur;
     for (size_t i = 0; i < s.size();) {
-        if (s[i] == ' ') {
+        if (s[i] == ' ' || s[i] == '\n') {
             if (!cur.empty()) { words.push_back(cur); cur.clear(); }
+            if (s[i] == '\n') words.push_back("\n");
             ++i;
         } else {
             size_t len = unitLength(s, i);
@@ -1073,6 +1096,12 @@ std::string reflow(const std::string& s, int width) {
     int lineWidth = 0;          // display columns already on the current line
     bool lineEmpty = true;      // nothing placed on the current line yet
     for (std::string w : words) {
+        if (w == "\n") {  // forced hard break from a <br>
+            out += '\n';
+            lineWidth = 0;
+            lineEmpty = true;
+            continue;
+        }
         // A word that cannot fit on a line by itself is hard-cut into width-sized pieces.
         while (displayWidth(w) > width) {
             if (!lineEmpty) { out += '\n'; lineWidth = 0; lineEmpty = true; }
@@ -1274,11 +1303,16 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
     }
 
     // Natural (unwrapped) width of each column = its widest rendered cell. Image cells contribute
-    // their recorded width rather than displayWidth (which can't measure a sixel block).
+    // their recorded width rather than displayWidth (which can't measure a sixel block). A text cell
+    // may already hold its own line breaks (from a <br>), so measure its widest line, not the whole
+    // string (which would wrongly sum the lines and count the '\n').
     std::vector<int> natural(ncols, 0);
     for (size_t i = 0; i < rows.size(); ++i)
-        for (size_t j = 0; j < ncols; ++j)
-            natural[j] = std::max(natural[j], isImage[i][j] ? imgWidth[j] : displayWidth(rows[i][j]));
+        for (size_t j = 0; j < ncols; ++j) {
+            if (isImage[i][j]) { natural[j] = std::max(natural[j], imgWidth[j]); continue; }
+            for (auto& ln : splitOnNewlines(rows[i][j]))
+                natural[j] = std::max(natural[j], displayWidth(ln));
+        }
 
     // Decide a target width per column with max-min fair sharing of the content budget (which already
     // excludes the two-space separators). A column whose natural width is at most its fair share keeps
