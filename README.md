@@ -18,23 +18,6 @@ render with appropriate terminal styling — markup characters are consumed,
 not printed. Hyperlinks use OSC 8 escape sequences, which are clickable in
 iTerm2, Kitty, WezTerm, and most modern terminals.
 
-### Images
-
-Inline `<img>` tags and `![alt text](your-image.png)` links render as actual images on
-sixel-capable terminals (iTerm2, VSCode, WezTerm, xterm with sixel enabled).
-Images are scaled to fit the available column width while preserving aspect
-ratio. Supported formats: **PNG**, **JPEG**, **GIF**, **SVG** (via
-[timg](https://github.com/hzeller/timg)).
-
-Image paths are resolved relative to the markdown file's directory. On
-terminals without sixel support (Apple Terminal, plain xterm, piped output)
-the image falls back to its alt text, or the filename if no alt is given.
-
-| PNG | JPEG | GIF | SVG |
-| --- | ---- | --- | --- |
-| ![example.png (PNG)](tests/img/example.png) | <img src="tests/img/joan-mitchell.jpg" alt="Joan Mitchell (JPEG)"> | <img src="tests/img/sunflower.gif" alt="Sunflower (GIF)"> | <img src="tests/img/chessboard.svg" alt="Chessboard (SVG)"> |
-
-
 ### Tables
 
 GFM tables render with a bold header row, a full-width rule, and column
@@ -55,6 +38,22 @@ line.
 | Ruy Lopez        | White pins the knight that defends e5, then slowly builds a strong pawn center with d4 and c3. | +0.3 |
 | Sicilian Defense | Black answers 1.e4 with c5, side-stepping a symmetric position and fighting for the center asymmetrically from the start. | -0.1 |
 | French Defense   | Black plays ...e6 and ...d5 to challenge the center early, accepting a cramped but solid and resilient pawn structure. | +0.2 |
+
+### Images
+
+Inline `<img>` tags and `![alt text](your-image.png)` links render as actual images on
+sixel-capable terminals (iTerm2, VSCode, WezTerm, xterm with sixel enabled).
+Images are scaled to fit the available column width while preserving aspect
+ratio. Supported formats: **PNG**, **JPEG**, **GIF**, **SVG** (via
+[timg](https://github.com/hzeller/timg)).
+
+Image paths are resolved relative to the markdown file's directory. On
+terminals without sixel support (Apple Terminal, plain xterm, piped output)
+the image falls back to its alt text, or the filename if no alt is given.
+
+| PNG | JPEG | GIF | SVG |
+| --- | ---- | --- | --- |
+| ![example.png (PNG)](tests/img/example.png) | <img src="tests/img/joan-mitchell.jpg" alt="Joan Mitchell (JPEG)"> | <img src="tests/img/sunflower.gif" alt="Sunflower (GIF)"> | <img src="tests/img/chessboard.svg" alt="Chessboard (SVG)"> |
 
 ### Block quotes
 
@@ -118,6 +117,20 @@ def factorial(n: int) -> int:
         result *= i
     return result
 ```
+
+### Math
+
+LaTeX math between `$...$` (inline) and `$$ ... $$` (block) is transliterated to
+Unicode on a best-effort basis: Greek letters, common operator and relation
+symbols, super- and subscripts, blackboard-bold (`\mathbb`), and the
+`\mathrm`/`\mathbf` font wrappers. Bare Latin letters render in math italic, as
+they do in LaTeX. Anything that can't be mapped is left as the literal source,
+so the output is never worse than the input.
+
+The mass–energy equivalence is $E = mc^2$. For all $x \in \mathbb{R}$ there is a
+$y$ with $x \leq y$, and Avogadro's number is $6.022 \times 10^{23}\,\mathrm{mol}^{-1}$.
+
+$$a^2 + b^2 = c^2 \qquad \therefore c = \sqrt{a^2 + b^2}$$
 
 
 ## Programs
