@@ -55,33 +55,42 @@ check() {
 check greek-lower '$\alpha \beta \gamma \omega$'   'α β γ ω'
 check greek-upper '$\Gamma \Delta \Sigma \Omega$'  'Γ Δ Σ Ω'
 
-# Common operators and relations.
-check ops    '$a \times b \cdot c$'                'a × b ⋅ c'
-check rel    '$x \in S, x \perp y$'                'x ∈ S, x ⊥ y'
-check quant  '$\forall x \exists y$'               '∀ x ∃ y'
-check arrows '$x \to y \longrightarrow z$'         'x → y ⟶ z'
-check sets   '$A \subset B \simeq C$'              'A ⊂ B ≃ C'
+# Bare Latin letters render in math italic by default (the Mathematical Italic block); digits,
+# operators and Greek stay upright. Italic lowercase 'h' is the Planck constant ℎ (U+210E).
+check italic-default '$abc$'                        '𝑎𝑏𝑐'
+check italic-upper   '$XYZ$'                        '𝑋𝑌𝑍'
+check italic-h       '$h$'                          'ℎ'
+check italic-mixed   '$f(x) = ax + b$'             '𝑓(𝑥) = 𝑎𝑥 + 𝑏'
 
-# Superscripts and subscripts: braced and single-character.
+# Common operators and relations (letters now italic, symbols upright).
+check ops    '$a \times b \cdot c$'                '𝑎 × 𝑏 ⋅ 𝑐'
+check rel    '$x \in S, x \perp y$'                '𝑥 ∈ 𝑆, 𝑥 ⊥ 𝑦'
+check quant  '$\forall x \exists y$'               '∀ 𝑥 ∃ 𝑦'
+check arrows '$x \to y \longrightarrow z$'         '𝑥 → 𝑦 ⟶ 𝑧'
+check sets   '$A \subset B \simeq C$'              '𝐴 ⊂ 𝐵 ≃ 𝐶'
+
+# Superscripts and subscripts: braced and single-character (scripts use the dedicated Unicode
+# super/subscript glyphs, which have no italic forms; the scripted base letter is italic).
 check super-brace '$10^{3}$'                       '10³'
-check super-single '$x^2$'                         'x²'
-check sub-brace   '$x_{13}$'                       'x₁₃'
-check sub-single  '$H_2$'                          'H₂'
+check super-single '$x^2$'                         '𝑥²'
+check sub-brace   '$x_{13}$'                       '𝑥₁₃'
+check sub-single  '$H_2$'                          '𝐻₂'
 check super-dec   '$10^{1.2}$'                      '10¹·²'
 
 # A typical scientific-notation expression (the motivating case).
 check scinot '$7.92 \times 10^{3}$'                '7.92 × 10³'
 
-# \mathrm / \mathbf strip the styling and keep the contents.
+# \mathrm / \text keep letters upright; \mathbf is bold; \mathit is italic.
 check mathrm '$\mathrm{km}$'                       'km'
-check mathbf '$\mathbf{v} \cdot \mathbf{w}$'       'v ⋅ w'
+check mathbf '$\mathbf{v} \cdot \mathbf{w}$'       '𝐯 ⋅ 𝐰'
+check mathit '$\mathit{ab}$'                        '𝑎𝑏'
 
 # \mathbb maps letters to blackboard-bold Unicode.
 check mathbb-r  '$\mathbb{R}$'                      'ℝ'
-check mathbb-in '$x \in \mathbb{Z}$'               'x ∈ ℤ'
+check mathbb-in '$x \in \mathbb{Z}$'               '𝑥 ∈ ℤ'
 
 # Block math ($$...$$) is transliterated the same way.
-check block '$$E = mc^2$$'                         'E = mc²'
+check block '$$E = mc^2$$'                         '𝐸 = 𝑚𝑐²'
 
 # Prose dollar amounts are not math: a digit right after a single-$ closer, or a
 # space just inside a delimiter, leaves the dollars literal.
@@ -91,7 +100,7 @@ check empty     'a $$ b'                            'a $$ b'
 
 # Unknown commands and non-mappable scripts fall back to readable literals.
 check unknown-cmd '$\foobar$'                       '\foobar'
-check sub-letter  '$x_i$'                           'x_i'
+check sub-letter  '$x_i$'                           '𝑥_𝑖'
 
 # A command with a braced argument that can't be represented is kept verbatim — the WHOLE group,
 # braces included — so a LaTeX-savvy reader still sees the original.

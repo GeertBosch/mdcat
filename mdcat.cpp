@@ -364,6 +364,8 @@ std::string trim(const std::string& s) {
 // instead renderMath() does a best-effort transliteration of the common, simple expressions that
 // map cleanly onto Unicode: Greek letters, a handful of operator/relation symbols, super/subscripts
 // of digits and a few characters, \mathrm/\mathbf wrappers, and \mathbb blackboard-bold letters.
+// Bare Latin letters render in math italic by default (as in LaTeX math mode); \mathrm/\text keep
+// them upright and \mathbf makes them bold.
 // Anything it can't represent is left as-is — and a `\cmd{...}` group that can't be fully rendered
 // is kept verbatim INCLUDING its braces (so a LaTeX reader still sees `\mathbb{R}`, not `\mathbbR`),
 // so the output is never worse than the raw source. The function is total: never throws.
@@ -445,6 +447,52 @@ std::string mathbbLetter(char c) {
     return "";
 }
 
+// Math styling applied to bare Latin letters. In LaTeX math mode the default is italic; \mathrm /
+// \text / \mathsf / \operatorname keep letters upright; \mathbf is bold; \mathit is italic.
+enum class MathStyle { Italic, Upright, Bold };
+
+// Encode a Unicode code point as UTF-8 and append it to `out`.
+void appendUtf8(std::string& out, unsigned cp) {
+    if (cp < 0x80) {
+        out += static_cast<char>(cp);
+    } else if (cp < 0x800) {
+        out += static_cast<char>(0xC0 | (cp >> 6));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    } else if (cp < 0x10000) {
+        out += static_cast<char>(0xE0 | (cp >> 12));
+        out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    } else {
+        out += static_cast<char>(0xF0 | (cp >> 18));
+        out += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+        out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    }
+}
+
+// Map an ASCII letter to its styled Mathematical-Alphanumeric code point, or return the letter
+// unchanged for Upright (which is plain ASCII). The Mathematical Italic and Bold blocks are
+// contiguous A-Z then a-z, except that italic lowercase 'h' is unassigned (its glyph is the Planck
+// constant U+210E). Non-letters pass through unchanged.
+std::string mathStyledLetter(char c, MathStyle style) {
+    bool upper = (c >= 'A' && c <= 'Z');
+    bool lower = (c >= 'a' && c <= 'z');
+    if (!upper && !lower) return std::string(1, c);
+    unsigned idx = upper ? (c - 'A') : 26 + (c - 'a');
+    std::string out;
+    switch (style) {
+        case MathStyle::Upright: return std::string(1, c);
+        case MathStyle::Italic:
+            if (c == 'h') { appendUtf8(out, 0x210E); return out; }  // Planck constant ℎ
+            appendUtf8(out, 0x1D434 + idx);                          // 𝐴..𝑧 (italic)
+            return out;
+        case MathStyle::Bold:
+            appendUtf8(out, 0x1D400 + idx);                          // 𝐀..𝐳 (bold)
+            return out;
+    }
+    return std::string(1, c);
+}
+
 // Try to convert a super/subscript group at s[i] (the '^' or '_'). On success, appends the Unicode
 // to out, advances i past the consumed text, and returns true. On failure returns false and leaves
 // i/out unchanged so the caller can emit the marker literally.
@@ -475,8 +523,10 @@ bool convertScript(const std::string& s, size_t& i, std::string& out, bool sup) 
 }
 
 // Best-effort transliteration of a LaTeX math fragment to Unicode. `tex` is the content between the
-// delimiters (without the $'s). Always returns a renderable string.
-std::string renderMath(const std::string& tex) {
+// delimiters (without the $'s). `style` is the font applied to bare Latin letters (italic by
+// default, as in LaTeX math mode; \mathrm and friends recurse with a different style). Always
+// returns a renderable string.
+std::string renderMath(const std::string& tex, MathStyle style = MathStyle::Italic) {
     std::string out;
     size_t n = tex.size();
     for (size_t i = 0; i < n;) {
@@ -531,12 +581,16 @@ std::string renderMath(const std::string& tex) {
                 continue;
             }
 
-            // \mathrm / \mathbf / ...: styling wrappers. Recurse on the argument, but only accept the
-            // result if it is fully representable (no leftover backslash from an unmapped command);
-            // otherwise keep the entire \cmd{...} so a LaTeX reader still sees the intent.
+            // \mathrm / \mathbf / ...: styling wrappers. Recurse on the argument with the wrapper's
+            // font, but only accept the result if it is fully representable (no leftover backslash
+            // from an unmapped command); otherwise keep the entire \cmd{...} so a LaTeX reader still
+            // sees the intent.
             if (hasArg && (cmd == "mathrm" || cmd == "mathbf" || cmd == "mathit" || cmd == "mathsf" ||
                            cmd == "text" || cmd == "operatorname")) {
-                std::string conv = renderMath(arg);
+                MathStyle inner = cmd == "mathbf" ? MathStyle::Bold
+                                : cmd == "mathit" ? MathStyle::Italic
+                                : MathStyle::Upright;  // mathrm, text, mathsf, operatorname
+                std::string conv = renderMath(arg, inner);
                 if (conv.find('\\') == std::string::npos) { out += conv; i = groupEnd; continue; }
                 out += tex.substr(i, groupEnd - i);  // keep \cmd{...} verbatim
                 i = groupEnd;
@@ -558,6 +612,11 @@ std::string renderMath(const std::string& tex) {
             out += c; ++i; continue;
         }
         if (c == '{' || c == '}') { ++i; continue; }  // bare grouping braces have no visual effect
+        if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+            out += mathStyledLetter(c, style);  // Latin letters take the current math font
+            ++i;
+            continue;
+        }
         int len = utf8SequenceLength(static_cast<unsigned char>(c));
         out += tex.substr(i, len);
         i += len;
