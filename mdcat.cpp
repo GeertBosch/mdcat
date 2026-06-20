@@ -363,9 +363,10 @@ std::string trim(const std::string& s) {
 // GitHub renders LaTeX between $...$ (inline) and $$...$$ (block). We don't ship a TeX engine;
 // instead renderMath() does a best-effort transliteration of the common, simple expressions that
 // map cleanly onto Unicode: Greek letters, a handful of operator/relation symbols, super/subscripts
-// of digits and a few characters, and \mathrm/\mathbf wrappers. Anything it can't represent is left
-// as-is (the literal command text), so the output is never worse than the raw source. The function
-// is total: it always returns a string and never throws.
+// of digits and a few characters, \mathrm/\mathbf wrappers, and \mathbb blackboard-bold letters.
+// Anything it can't represent is left as-is — and a `\cmd{...}` group that can't be fully rendered
+// is kept verbatim INCLUDING its braces (so a LaTeX reader still sees `\mathbb{R}`, not `\mathbbR`),
+// so the output is never worse than the raw source. The function is total: never throws.
 
 // Greek letters and named symbols, keyed by the LaTeX command without its backslash.
 const std::map<std::string, std::string>& mathSymbols() {
@@ -426,9 +427,23 @@ const std::map<char, std::string>& subscripts() {
     return m;
 }
 
-// Translate the body of one \mathrm{...} / \mathbf{...} group verbatim (drop the styling; the inner
-// characters are plain ASCII in the cases we care about). `out` receives the translation.
-// Returns false (leaving `out` untouched) if the requested group can't be rendered.
+// Blackboard-bold (\mathbb) and calligraphic (\mathcal) letters that have dedicated Unicode forms.
+// Returns the mapped string, or empty if the letter has no form (so the caller can keep \mathbb{X}
+// literal rather than dropping the styling).
+std::string mathbbLetter(char c) {
+    switch (c) {
+        case 'A': return "𝔸"; case 'B': return "𝔹"; case 'C': return "ℂ";
+        case 'D': return "𝔻"; case 'E': return "𝔼"; case 'F': return "𝔽";
+        case 'G': return "𝔾"; case 'H': return "ℍ"; case 'I': return "𝕀";
+        case 'J': return "𝕁"; case 'K': return "𝕂"; case 'L': return "𝕃";
+        case 'M': return "𝕄"; case 'N': return "ℕ"; case 'O': return "𝕆";
+        case 'P': return "ℙ"; case 'Q': return "ℚ"; case 'R': return "ℝ";
+        case 'S': return "𝕊"; case 'T': return "𝕋"; case 'U': return "𝕌";
+        case 'V': return "𝕍"; case 'W': return "𝕎"; case 'X': return "𝕏";
+        case 'Y': return "𝕐"; case 'Z': return "ℤ";
+    }
+    return "";
+}
 
 // Try to convert a super/subscript group at s[i] (the '^' or '_'). On success, appends the Unicode
 // to out, advances i past the consumed text, and returns true. On failure returns false and leaves
@@ -482,23 +497,59 @@ std::string renderMath(const std::string& tex) {
             std::string cmd = tex.substr(i + 1, j - (i + 1));
             if (cmd == "quad" || cmd == "qquad") { out += ' '; i = j; continue; }
             if (cmd == "left" || cmd == "right") { i = j; continue; }  // delimiter sizing: drop
-            if ((cmd == "mathrm" || cmd == "mathbf" || cmd == "mathit" || cmd == "mathsf" ||
-                 cmd == "text" || cmd == "operatorname") && j < n && tex[j] == '{') {
-                // Strip the styling wrapper and recurse on its contents.
+
+            // If the command takes a braced argument, read the whole balanced group now. `arg` is the
+            // argument contents; `groupEnd` is the position just past the closing '}'. If there is no
+            // balanced group, argEnd stays == j (no argument) and we keep the bare command logic.
+            std::string arg;
+            size_t groupEnd = j;
+            bool hasArg = false;
+            if (j < n && tex[j] == '{') {
                 size_t k = j + 1;
                 int depth = 1;
-                std::string inner;
                 while (k < n && depth > 0) {
                     if (tex[k] == '{') ++depth;
                     else if (tex[k] == '}') { if (--depth == 0) break; }
-                    inner += tex[k++];
+                    if (depth > 0) arg += tex[k];
+                    ++k;
                 }
-                if (k < n) { out += renderMath(inner); i = k + 1; continue; }
-                // Unbalanced: fall through and emit the command literally.
+                if (k < n) { hasArg = true; groupEnd = k + 1; }  // balanced; else leave hasArg false
             }
+
+            // \mathbb / \mathcal: each letter must have a Unicode form, or the whole group is kept.
+            if (hasArg && (cmd == "mathbb" || cmd == "mathcal")) {
+                std::string conv;
+                bool ok = !arg.empty();
+                for (char ch : arg) {
+                    std::string g = mathbbLetter(ch);
+                    if (g.empty()) { ok = false; break; }
+                    conv += g;
+                }
+                if (ok) { out += conv; i = groupEnd; continue; }
+                out += tex.substr(i, groupEnd - i);  // keep \mathbb{...} verbatim, braces and all
+                i = groupEnd;
+                continue;
+            }
+
+            // \mathrm / \mathbf / ...: styling wrappers. Recurse on the argument, but only accept the
+            // result if it is fully representable (no leftover backslash from an unmapped command);
+            // otherwise keep the entire \cmd{...} so a LaTeX reader still sees the intent.
+            if (hasArg && (cmd == "mathrm" || cmd == "mathbf" || cmd == "mathit" || cmd == "mathsf" ||
+                           cmd == "text" || cmd == "operatorname")) {
+                std::string conv = renderMath(arg);
+                if (conv.find('\\') == std::string::npos) { out += conv; i = groupEnd; continue; }
+                out += tex.substr(i, groupEnd - i);  // keep \cmd{...} verbatim
+                i = groupEnd;
+                continue;
+            }
+
             auto it = mathSymbols().find(cmd);
             if (it != mathSymbols().end()) { out += it->second; i = j; continue; }
-            out += "\\" + cmd;   // unknown command: leave it as written
+
+            // Unknown command: leave it as written, INCLUDING any braced argument, so the source stays
+            // readable (e.g. \mathbb{R} -> "\mathbb{R}", not "\mathbbR").
+            if (hasArg) { out += tex.substr(i, groupEnd - i); i = groupEnd; continue; }
+            out += "\\" + cmd;
             i = j;
             continue;
         }

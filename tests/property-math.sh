@@ -76,6 +76,10 @@ check scinot '$7.92 \times 10^{3}$'                '7.92 × 10³'
 check mathrm '$\mathrm{km}$'                       'km'
 check mathbf '$\mathbf{v} \cdot \mathbf{w}$'       'v ⋅ w'
 
+# \mathbb maps letters to blackboard-bold Unicode.
+check mathbb-r  '$\mathbb{R}$'                      'ℝ'
+check mathbb-in '$x \in \mathbb{Z}$'               'x ∈ ℤ'
+
 # Block math ($$...$$) is transliterated the same way.
 check block '$$E = mc^2$$'                         'E = mc²'
 
@@ -88,6 +92,12 @@ check empty     'a $$ b'                            'a $$ b'
 # Unknown commands and non-mappable scripts fall back to readable literals.
 check unknown-cmd '$\foobar$'                       '\foobar'
 check sub-letter  '$x_i$'                           'x_i'
+
+# A command with a braced argument that can't be represented is kept verbatim — the WHOLE group,
+# braces included — so a LaTeX-savvy reader still sees the original.
+check verbatim-unknown '$\unknown{stuff}$'          '\unknown{stuff}'
+check verbatim-mathbb  '$\mathbb{1}$'               '\mathbb{1}'
+check verbatim-mathrm  '$\mathrm{\foo}$'            '\mathrm{\foo}'
 
 if [ "$status" -eq 0 ]; then
     printf 'property-math: OK (%d cases)\n' "$pass"
