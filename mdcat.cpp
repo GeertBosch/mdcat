@@ -62,7 +62,7 @@ const std::string kBoldOn = "\033[1m";
 const std::string kBoldOff = "\033[22m";
 const std::string kItalicOn = "\033[3m";
 const std::string kItalicOff = "\033[23m";
-const std::string kCodeOn = "\033[48;5;255;38;5;236m";  // light-gray bg, dark-gray fg
+const std::string kCodeOn = "\033[48;5;254;38;5;236m";  // light-gray bg, dark-gray fg
 const std::string kCodeOff = "\033[39;49m";
 const std::string kReset = "\033[0m";
 const std::string kLightGray = "\033[38;5;250m";
@@ -1442,6 +1442,8 @@ std::string reflow(const std::string& s, int width) {
     return closeStylesAtLineBreaks(out);
 }
 
+std::vector<std::string> splitOnNewlines(const std::string& s);  // defined below
+
 void emitParagraph(const std::vector<std::string>& lines, std::ostream& out) {
     // Join the paragraph's source lines (a soft line break becomes a space), render inline markup,
     // then reflow the styled result to the terminal width by display columns.
@@ -1462,8 +1464,25 @@ void emitParagraph(const std::vector<std::string>& lines, std::ostream& out) {
         else                     out << image << '\n';   // one-line text fallback
         return;
     }
+    // A paragraph that is exactly one block-math expression ($$...$$) is centered, the way GitHub
+    // (and TeX display math) sets it off on its own centered line. Each rendered line is centered
+    // independently within the available width.
+    std::string trimmed = trim(joined);
+    bool blockMath = trimmed.size() >= 4 && trimmed.compare(0, 2, "$$") == 0 &&
+                     trimmed.compare(trimmed.size() - 2, 2, "$$") == 0 &&
+                     trimmed.find("$$", 2) == trimmed.size() - 2;
+
     std::string reflowed = reflow(renderInline(joined), terminalWidth());
-    if (!reflowed.empty()) out << reflowed << '\n';
+    if (reflowed.empty()) return;
+    if (blockMath) {
+        for (const std::string& line : splitOnNewlines(reflowed)) {
+            int w = displayWidth(line);
+            int pad = std::max(0, (terminalWidth() - w) / 2);
+            out << std::string(static_cast<size_t>(pad), ' ') << line << '\n';
+        }
+        return;
+    }
+    out << reflowed << '\n';
 }
 
 void emitHeading(int level, const std::string& text, std::ostream& out) {

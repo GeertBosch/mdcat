@@ -26,9 +26,10 @@ if [ ! -x "$mdcat" ]; then
 fi
 
 # Strip ANSI CSI sequences (ESC[ ... letter) and OSC 8 hyperlink sequences
-# (ESC] ... ESC\), leaving only the visible characters.
+# (ESC] ... ESC\), leaving only the visible characters. Also drop leading spaces,
+# which block math ($$...$$) now carries because it renders centered.
 strip() {
-    perl -pe 's/\e\][^\e]*\e\\//g; s/\e\[[0-9;]*[A-Za-z]//g'
+    perl -pe 's/\e\][^\e]*\e\\//g; s/\e\[[0-9;]*[A-Za-z]//g; s/^ +//'
 }
 
 status=0
