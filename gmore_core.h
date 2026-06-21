@@ -83,6 +83,26 @@ static inline uint32_t internUri(const std::string& uri) {
 // ---------------------------------------------------------------------------
 // Cells + UTF-8 helpers
 // ---------------------------------------------------------------------------
+// Search-match highlight for one rendered row: cell-column spans [startCol,endCol)
+// to paint with a blue BACKGROUND (foreground left unchanged, like VSCode's find
+// highlight). The span at index `current` (if any) gets a more saturated blue —
+// the match search just jumped to; the rest get a light blue. Both backgrounds are
+// light enough that black/dark text still contrasts.
+struct Highlight {
+    std::vector<std::pair<int,int>> spans;   // sorted, non-overlapping, in cell columns
+    int current = -1;                        // index into spans of the active match, or -1
+    static constexpr const char* OTHER = "\033[48;5;153m";   // light steel blue
+    static constexpr const char* CUR   = "\033[48;5;75m";    // medium sky blue (#5fafff)
+    bool empty() const { return spans.empty(); }
+    // Which highlight (if any) cell `col` falls in: 0 = none, 1 = other, 2 = current.
+    int at(int col) const {
+        for (size_t k = 0; k < spans.size(); ++k)
+            if (col >= spans[k].first && col < spans[k].second)
+                return (int)k == current ? 2 : 1;
+        return 0;
+    }
+};
+
 struct Cell {
     char32_t cp = U' ';
     uint16_t attr = 0;   // index into gAttrs (0 = default)
@@ -687,9 +707,13 @@ struct Emulator {
     // Plain UTF-8 text of one grid row, with no SGR/links/images — what search
     // matches against. Trailing blanks are dropped; a wide-char continuation cell
     // (width 0, cp 0) contributes nothing, and each cell's combining tail is kept
-    // so an accented letter or emoji sequence reads as it displays.
-    std::string rowText(size_t absRow) const {
+    // so an accented letter or emoji sequence reads as it displays. If `cellAt` is
+    // non-null it is filled so cellAt[byteOffset] = the cell index that contributed
+    // the byte at that offset (one entry per byte, plus a terminating entry) — used
+    // to map a regex match's byte range back to cell columns for highlighting.
+    std::string rowText(size_t absRow, std::vector<int>* cellAt = nullptr) const {
         std::string out;
+        if (cellAt) cellAt->clear();
         if (absRow >= rows.size()) return out;
         const std::vector<Cell>& L = rows[absRow];
         int last = -1;
@@ -697,10 +721,34 @@ struct Emulator {
             if (!(L[i].cp == U' ' || (L[i].cp == 0 && L[i].width == 0))) last = i;
         for (int i = 0; i <= last; ++i) {
             if (L[i].width == 0 && L[i].cp == 0) continue;
+            size_t before = out.size();
             appendUtf8(out, L[i].cp);
             for (char32_t comb : L[i].combine) appendUtf8(out, comb);
+            if (cellAt) cellAt->resize(out.size(), i);   // bytes [before,out.size()) belong to cell i
+            (void)before;
         }
+        if (cellAt) cellAt->push_back((int)L.size());     // terminator: maps end offset past the last cell
         return out;
+    }
+
+    // Cell-column spans [startCol, endCol) of every match of `re` in row `absRow`.
+    // Byte ranges from the regex are mapped through the cellAt table so spans land
+    // on whole cells (wide chars / combining marks included). Empty matches are
+    // skipped (an empty span would highlight nothing and could loop).
+    std::vector<std::pair<int,int>> matchSpans(size_t absRow, const std::regex& re) const {
+        std::vector<std::pair<int,int>> spans;
+        std::vector<int> cellAt;
+        std::string text = rowText(absRow, &cellAt);
+        if (text.empty()) return spans;
+        auto begin = std::sregex_iterator(text.begin(), text.end(), re);
+        for (auto it = begin; it != std::sregex_iterator(); ++it) {
+            size_t b0 = (size_t)it->position(), len = (size_t)it->length();
+            if (len == 0) continue;
+            int startCol = cellAt[std::min(b0, cellAt.size() - 1)];
+            int endCol = cellAt[std::min(b0 + len, cellAt.size() - 1)];   // exclusive
+            if (endCol > startCol) spans.emplace_back(startCol, endCol);
+        }
+        return spans;
     }
 
     size_t contentRows() const {
@@ -738,7 +786,8 @@ struct Emulator {
     // re-emits OSC 8 hyperlinks; it is independent of images — only the plain-text grid
     // (--dump / nav traces) suppresses links so its output stays deterministic.
     void renderRow(size_t absRow, std::string& out, bool withImages = true,
-                   size_t viewTop = 0, size_t viewBot = 0, bool withLinks = true) const {
+                   size_t viewTop = 0, size_t viewBot = 0, bool withLinks = true,
+                   const Highlight* hl = nullptr) const {
         if (withImages) {
             for (const Image& img : images) {
                 size_t imgEnd = img.row + (size_t)((img.Pv + cellH - 1) / cellH);
@@ -779,10 +828,22 @@ struct Emulator {
             const Attr& A = gAttrs[a]; const Attr& B = gAttrs[b];
             return A.flags == B.flags && A.fg == B.fg && A.bg == B.bg;
         };
+        int curHl = 0;   // 0 none, 1 other-match bg, 2 current-match bg
+        auto emitHl = [&](int h) {
+            if (h == 1) out += Highlight::OTHER;
+            else if (h == 2) out += Highlight::CUR;
+            else out += "\033[49m";                     // back to default background
+            curHl = h;
+        };
         for (int i = 0; i <= last; ++i) {
             if (L[i].width == 0 && L[i].cp == 0) continue;  // wide-char continuation: occupies no byte
             bool needSgr = withImages ? (L[i].attr != cur) : !visualEq(L[i].attr, cur);
-            if (needSgr) { out += sgrFor(L[i].attr); cur = L[i].attr; }
+            if (needSgr) { out += sgrFor(L[i].attr); cur = L[i].attr; curHl = 0; }  // sgrFor reset bg
+            // The highlight background rides ON TOP of the cell's own SGR. Re-emit it
+            // whenever the desired state differs from what's live — including right
+            // after an sgrFor() above, which may have reset the background (curHl=0).
+            int wantHl = hl ? hl->at(i) : 0;
+            if (wantHl != curHl) emitHl(wantHl);
             // Track the link from the cell's own attr, not `cur`: visualEq leaves `cur`
             // unchanged when two attrs differ only by link, so reading gAttrs[cur].link
             // would miss link-only transitions and drop the hyperlink.
@@ -792,6 +853,7 @@ struct Emulator {
             for (char32_t comb : L[i].combine) appendUtf8(out, comb);  // grapheme's combining tail
         }
         if (withLinks && curLink != 0) emitOsc8(0);   // close any open hyperlink
+        if (curHl != 0) out += "\033[49m";            // drop any open highlight background
         if (cur != 0) out += "\033[0m";
     }
 
@@ -1187,6 +1249,24 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
         std::fprintf(stdout, "\033[%zuA", n);
     };
 
+    // Search state (the active pattern + the row of the current match). Declared here,
+    // before paintWindow, so paintWindow can highlight matches against search.re.
+    Search search;
+
+    // Per-row search-match highlight for `absRow`: the cell-column spans matching the
+    // active pattern, with the match on the current row (search.cursor) flagged as the
+    // "current" one (more saturated blue). Returns an empty Highlight when there is no
+    // active search, so non-search rendering is byte-for-byte unchanged.
+    auto rowHighlight = [&](size_t absRow) -> Highlight {
+        Highlight h;
+        if (!search.valid) return h;
+        h.spans = em.matchSpans(absRow, search.re);
+        // The match the search jumped to lives on search.cursor's row; mark the first
+        // span there as current (search lands on the first match in a row).
+        if (!h.spans.empty() && (long)absRow == search.cursor) h.current = 0;
+        return h;
+    };
+
     // Emit rows [first, first+count) the safe two-pass way: all text first (committing
     // every line), then images painted into those committed rows (see paintImages).
     // Leaves the cursor on the line just below the window. vBot is the absolute row past
@@ -1195,7 +1275,11 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
         std::string s;
         for (int i = 0; i < count; ++i) {
             size_t r = first + (size_t)i;
-            if (r < total) em.renderRow(r, s, /*withImages=*/false);
+            if (r < total) {
+                Highlight hl = rowHighlight(r);
+                em.renderRow(r, s, /*withImages=*/false, 0, 0, /*withLinks=*/true,
+                             hl.empty() ? nullptr : &hl);
+            }
             s += '\n';
         }
         em.paintImages(s, first, count, vBot ? vBot : first + (size_t)count);
@@ -1232,7 +1316,6 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
     nav.total = total;
     int& pageH = nav.pageH;
     size_t& viewTop = nav.viewTop;
-    Search search;
 
     // Observability: GMORE_DEBUG logs paint operations to stderr (which absolute
     // grid rows we paint onto which screen lines, and where image strips land), so
@@ -1447,8 +1530,11 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
             if (!ok) continue;                            // cancelled — leave the view
             bool fwd = (c == '/');
             if (!search.compile(pat, fwd)) { message = search.error; continue; }
-            size_t prevTop = viewTop;
-            if (runSearch(fwd ? +1 : -1)) paintMove(prevTop);
+            runSearch(fwd ? +1 : -1);
+            // Always full-repaint after a search: the highlight must be applied across
+            // the WHOLE visible window (including matches already on screen), which the
+            // incremental advance() path can't do — it only paints newly-revealed rows.
+            repaint();
             continue;
         }
         if (c == 'n' || c == 'N') {
@@ -1458,8 +1544,7 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
             // n repeats in the search's direction; N reverses it.
             int dir = search.forward ? +1 : -1;
             if (c == 'N') dir = -dir;
-            size_t prevTop = viewTop;
-            if (runSearch(dir)) paintMove(prevTop);
+            if (runSearch(dir)) repaint();   // repaint to (re)highlight the visible window
             continue;
         }
         if (c == 'h') {

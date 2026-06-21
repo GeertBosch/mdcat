@@ -76,9 +76,10 @@ check "g count line 30"  '30gq'      1
 check "G then g"         'Ggq'       2
 # Backward moves always full-repaint.
 check "back page"        'fbq'       1
-# Search to a FAR match jumps -> RIS; a NEAR match within a page does not.
+# Search ALWAYS full-repaints (RIS), near or far: the match highlight must be
+# applied across the whole visible window, which the incremental append can't do.
 check "search far jump"  "/45${nl}q" 1
-check "search near"      "/4${nl}q"  0   # "4" first matches line 4, within page 1
+check "search near"      "/4${nl}q"  1   # "4" first matches line 4, within page 1
 # Quit at the first screen: nothing moves, no RIS.
 check "no move"          'q'         0
 

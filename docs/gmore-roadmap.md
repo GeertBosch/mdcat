@@ -19,7 +19,8 @@ already does, and ranks the remaining gaps by value-to-effort.
 - Count prefixes: leading digits repeat / parameterize the next motion
 - Position report: `=`, `^G` (line number + percent)
 - Forward/backward search: `/pattern`, `?pattern`, `n`/`N` (regex, smart-case,
-  wrap-around), matched against the cell grid's row text
+  wrap-around), matched against the cell grid's row text, with blue-background
+  match highlighting (saturated for the current match, lighter for the others)
 - Help overlay: `h` lists the key bindings, any key dismisses
 - Repaint: `^L` clears and repaints the current screen
 - Quit: `q` / `Q`; `space` at `(END)` quits, like `more(1)`
@@ -35,21 +36,18 @@ it interacts awkwardly with sixel rendering.
 
 ### Tier 1 — high value, do next
 
-1. **Search-match highlighting.**
-   Search now scrolls the hit into view, but matches aren't highlighted. Add
-   reverse-video (or coloured) spans on the matched substring(s) of each visible
-   row. Needs run() to know the match offsets within a row's text and map them
-   back to cell columns when painting — the one piece of search left undone.
+(Search and its highlighting are done — see "what gmore has". The next items are
+all Tier 2.)
 
 ### Tier 2 — high value, moderate effort
 
-3. **Multiple files + `:n` / `:p`.**
+1. **Multiple files + `:n` / `:p`.**
    gmore currently takes one path or stdin. Support `gmore file1 file2 …` and
    next/previous-file navigation. Requires holding several parsed grids (or
    re-parsing on switch) and threading the file list through `run()`. The status
    line should gain the current filename.
 
-4. **Line numbers (`-N` option).**
+2. **Line numbers (`-N` option).**
    Show absolute line numbers in a gutter when requested. Interacts with wrap and
    with the cell grid's notion of a "row" (a wrapped logical line spans several
    grid rows) — needs a decision on whether numbers track logical or screen
@@ -57,18 +55,18 @@ it interacts awkwardly with sixel rendering.
 
 ### Tier 3 — lower value or higher friction
 
-5. **Start position (`+N`, `+/pattern`).**
+3. **Start position (`+N`, `+/pattern`).**
    Open already scrolled to a line or to the first match. Easy now that search
    exists; low demand.
 
-6. **Mark / return (`m<x>`, `'<x>`, `''`).**
+4. **Mark / return (`m<x>`, `'<x>`, `''`).**
    `less`-style marks and "return to previous position." Convenience; small once
    we track a position stack.
 
-7. **Repeat last command (`.`).**
+5. **Repeat last command (`.`).**
    Convenience once the command set is larger; small given a command dispatcher.
 
-8. **Shell-out / editor (`!cmd`, `v`).**
+6. **Shell-out / editor (`!cmd`, `v`).**
    `v` opens `$EDITOR` at the current line; `!cmd` runs a shell command. Useful
    but requires suspending raw mode and the sixel screen state cleanly, then
    repainting — non-trivial given RIS-based repaint, and lower priority for a
@@ -76,10 +74,9 @@ it interacts awkwardly with sixel rendering.
 
 ## Suggested order of work
 
-Search (forward + backward), `n`/`N`, and the help overlay are done. The next
-increments: **match highlighting (1)** to finish search, then **multi-file (3)**
-and **line numbers (4)** as standalone PRs. Everything in Tier 3 is
-opportunistic.
+Search (forward + backward), `n`/`N`, match highlighting, and the help overlay
+are all done. The next increments: **multi-file (1)** and **line numbers (2)** as
+standalone PRs. Everything in Tier 3 is opportunistic.
 
 ## Notes specific to gmore's architecture
 

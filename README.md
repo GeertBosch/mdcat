@@ -203,7 +203,9 @@ gmore [--dump] [--dump-images] [file]
 
 Search is an [ECMAScript regular expression](https://en.cppreference.com/w/cpp/regex/ecmascript)
 and is *smart-case*: case-insensitive unless the pattern contains an uppercase
-letter. `n`/`N` wrap around the end of the file.
+letter. `n`/`N` wrap around the end of the file. Matches are highlighted with a
+blue background — a brighter blue for the current match, a lighter one for the
+others on screen — leaving the text's own colour intact.
 
 ## Requirements
 
