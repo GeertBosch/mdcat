@@ -713,8 +713,12 @@ struct Emulator {
     // bottom is clipped to `viewBot` (absolute row just past the window; 0 = no clip,
     // used by --dump). replaySixel does the top/bottom band clipping on the original
     // bytes — both directions only drop rows, never colours.
+    // `withImages` inline-paints sixels (the --dump-images path); the interactive pager
+    // paints images separately via paintImages() and passes false here. `withLinks`
+    // re-emits OSC 8 hyperlinks; it is independent of images — only the plain-text grid
+    // (--dump / nav traces) suppresses links so its output stays deterministic.
     void renderRow(size_t absRow, std::string& out, bool withImages = true,
-                   size_t viewTop = 0, size_t viewBot = 0) const {
+                   size_t viewTop = 0, size_t viewBot = 0, bool withLinks = true) const {
         if (withImages) {
             for (const Image& img : images) {
                 size_t imgEnd = img.row + (size_t)((img.Pv + cellH - 1) / cellH);
@@ -759,12 +763,15 @@ struct Emulator {
             if (L[i].width == 0 && L[i].cp == 0) continue;  // wide-char continuation: occupies no byte
             bool needSgr = withImages ? (L[i].attr != cur) : !visualEq(L[i].attr, cur);
             if (needSgr) { out += sgrFor(L[i].attr); cur = L[i].attr; }
-            uint32_t lnk = gAttrs[cur].link;
-            if (withImages && lnk != curLink) emitOsc8(lnk);
+            // Track the link from the cell's own attr, not `cur`: visualEq leaves `cur`
+            // unchanged when two attrs differ only by link, so reading gAttrs[cur].link
+            // would miss link-only transitions and drop the hyperlink.
+            uint32_t lnk = gAttrs[L[i].attr].link;
+            if (withLinks && lnk != curLink) emitOsc8(lnk);
             appendUtf8(out, L[i].cp);
             for (char32_t comb : L[i].combine) appendUtf8(out, comb);  // grapheme's combining tail
         }
-        if (withImages && curLink != 0) emitOsc8(0);   // close any open hyperlink
+        if (withLinks && curLink != 0) emitOsc8(0);   // close any open hyperlink
         if (cur != 0) out += "\033[0m";
     }
 
@@ -1015,7 +1022,9 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
     // (vBot==0 => no clip: paint the whole image at its anchor, used by --dump-images).
     auto emitRow = [&](size_t r, size_t vTop = 0, size_t vBot = 0) {
         std::string s; em.renderRow(r, s, true, vTop, vBot); fwrite(s.data(), 1, s.size(), stdout); };
-    auto emitRowText = [&](size_t r) { std::string s; em.renderRow(r, s, false); fwrite(s.data(), 1, s.size(), stdout); };
+    auto emitRowText = [&](size_t r) {
+        std::string s; em.renderRow(r, s, false, 0, 0, /*withLinks=*/false);
+        fwrite(s.data(), 1, s.size(), stdout); };
 
     if (dump) {
         for (size_t r = 0; r < total; ++r) {
