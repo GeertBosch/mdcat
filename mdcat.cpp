@@ -27,6 +27,8 @@
 // All other inline HTML is passed through literally. LaTeX math between $...$ (inline) or $$...$$
 // (block) is transliterated to Unicode on a best-effort basis — Greek letters, common operator and
 // relation symbols, super/subscripts, and \mathrm/\mathbf wrappers; see renderMath and scanMath.
+// A ```mermaid fenced code block is rendered as a diagram via the mermaid CLI (mmdc) when it and a
+// graphics terminal are available; otherwise it falls back to ordinary code. See renderMermaidBlock.
 //
 // Build:  c++ -std=c++17 -O2 -o mdcat mdcat.cpp
 // Usage:  mdcat [--width N] [--] [file ...]   (reads standard input when given no file arguments)
@@ -186,6 +188,18 @@ bool terminalSupportsGraphics() {
         return true;
     }();
     return supported;
+}
+
+// Whether the mermaid CLI (mmdc) is on $PATH, so a ```mermaid code block can be rendered as a
+// diagram. Probed once via `command -v` and cached. When absent, mermaid blocks fall back to being
+// shown as ordinary fenced code. The probe is skipped entirely on terminals that cannot display
+// graphics, since the rendered PNG could not be painted there anyway.
+bool mmdcAvailable() {
+    static const bool available = [] {
+        if (!terminalSupportsGraphics()) return false;
+        return std::system("command -v mmdc >/dev/null 2>&1") == 0;
+    }();
+    return available;
 }
 
 // Metrics for converting an image's pixel footprint (read from the sixel it produces) into a number
@@ -1394,6 +1408,64 @@ bool renderImageBlock(const std::string& text, int availWidth, std::string& out,
     return true;
 }
 
+// Render the source of a ```mermaid fenced code block as a diagram, writing the raw sixel bytes to
+// `out` and the painted cell footprint to `cellWidth`/`cellHeight`. Returns true on success; on any
+// failure (mmdc missing or erroring, timg failing) returns false so the caller can fall back to
+// showing the block as ordinary fenced code.
+//
+// mmdc(1) (the mermaid CLI) renders the diagram to a temporary PNG, which is then handed to the
+// existing <img> pipeline (renderImageBlock) as an absolute path — reusing its geometry/footprint
+// and sixel-capture logic exactly. We go through a temp file rather than mmdc's `-o -` stdout mode
+// so that renderImageBlock can read the PNG's intrinsic size and width-bound it to the terminal.
+bool renderMermaidBlock(const std::vector<std::string>& lines, int availWidth, std::string& out,
+                        int& cellWidth, int& cellHeight) {
+    if (!mmdcAvailable()) return false;
+
+    // Unique temp paths for the mermaid source and the rendered PNG. mkstemp creates the files; we
+    // only need their names (mmdc writes the PNG itself), so the descriptors are closed immediately.
+    char srcPath[] = "/tmp/mdcat-mermaid-XXXXXX";
+    char pngPath[] = "/tmp/mdcat-mermaid-XXXXXX.png";
+    int sfd = mkstemp(srcPath);
+    if (sfd < 0) return false;
+    int pfd = mkstemps(pngPath, 4);  // keep the ".png" suffix so it is a valid image extension
+    if (pfd < 0) { close(sfd); unlink(srcPath); return false; }
+    close(pfd);
+
+    // Write the diagram source to the temp file.
+    {
+        std::string body;
+        for (const auto& l : lines) { body += l; body += '\n'; }
+        ssize_t total = 0, len = static_cast<ssize_t>(body.size());
+        while (total < len) {
+            ssize_t w = write(sfd, body.data() + total, static_cast<size_t>(len - total));
+            if (w <= 0) break;
+            total += w;
+        }
+        close(sfd);
+    }
+
+    auto cleanup = [&] { unlink(srcPath); unlink(pngPath); };
+
+    // Run mmdc: read the source file, emit a PNG. -q suppresses its progress chatter so it never
+    // pollutes the rendered output, and stderr is discarded as a further guard.
+    auto shquote = [](const char* p) {
+        std::string q = "'";
+        for (const char* c = p; *c; ++c) { if (*c == '\'') q += "'\\''"; else q += *c; }
+        q += "'";
+        return q;
+    };
+    std::string cmd = "mmdc -q -i " + shquote(srcPath) + " -e png -o " + shquote(pngPath) +
+                      " >/dev/null 2>&1";
+    if (std::system(cmd.c_str()) != 0) { cleanup(); return false; }
+
+    // Hand the rendered PNG to the <img> pipeline as an absolute path (so gFileDir resolution is a
+    // no-op), reusing all of its geometry and sixel-capture logic.
+    std::string tag = "<img src=\"" + std::string(pngPath) + "\">";
+    bool ok = renderImageBlock(tag, availWidth, out, cellWidth, cellHeight);
+    cleanup();
+    return ok && !out.empty() && cellHeight > 0;
+}
+
 // Whether `s` is sixel image data rather than a text fallback: a sixel contains a DCS introducer
 // (ESC P), which rendered inline text never does (it uses only ESC[ for SGR and ESC] for OSC 8).
 bool isSixelImage(const std::string& s) { return s.find("\033P") != std::string::npos; }
@@ -2258,7 +2330,18 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
                 if (r >= run && tj.find_first_not_of(fence) == std::string::npos) break;  // closing fence
                 body.push_back(lines[j]);
             }
-            emitCodeBlock(body, lang, out);
+            // A ```mermaid block renders as a diagram via the mermaid CLI when it (and a graphics
+            // terminal) are available; otherwise it falls through to being shown as ordinary code.
+            std::string mlang = lang;
+            for (char& c : mlang) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            std::string mimg;
+            int miw = 0, mih = 0;
+            if (mlang == "mermaid" &&
+                renderMermaidBlock(body, terminalWidth(), mimg, miw, mih) && isSixelImage(mimg)) {
+                emitImageParagraph(mimg, mih, out);
+            } else {
+                emitCodeBlock(body, lang, out);
+            }
             i = (j < n) ? j + 1 : j;  // skip the closing fence if present
             continue;
         }
