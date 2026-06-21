@@ -5,8 +5,9 @@
 //
 // STATUS: sixel decode + encode + strip rendering complete. The cell-grid emulator
 // handles text, UTF-8, wrap, SGR colour/style, cursor movement, DECSC/DECRC, EL/ED,
-// sixel DCS (decoded to RGBA rasters, re-encoded as 18px strips on display), and
-// OSC 8 hyperlinks (parsed, stored as interned linkId, re-emitted on render).
+// backspace overstrike (man/nroff `X\bX` bold, `_\bX` underline), sixel DCS (decoded
+// to RGBA rasters, re-encoded as 18px strips on display), and OSC 8 hyperlinks
+// (parsed, stored as interned linkId, re-emitted on render).
 //
 // Keys: space/f page down, b page up, Enter/j line down, k/y line up, d/u (^D/^U)
 // half-screen down/up, g/G to top/bottom (or line N with a count), =/^G show the

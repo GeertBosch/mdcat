@@ -456,6 +456,14 @@ struct Emulator {
     int uneed = 0;
     bool absorbLf = false;   // swallow one LF right after a sixel (cursor is already below it)
 
+    // Overstrike (typewriter convention used by `man`/groff via nroff): bold is
+    // `X \b X`, underline is `_ \b X` (or `X \b _`). When a backspace lands the
+    // cursor back onto the cell `put` just wrote, the next `put` is an overstrike:
+    // we merge the two glyphs into one styled cell instead of overwriting. Both
+    // fields must match for the merge — any other cursor motion clears the back-up.
+    int osRow = -1, osCol = -1;   // cell `put` last wrote (overstrike target)
+    bool osBack = false;          // a bs() just backed the cursor onto (osRow,osCol)
+
     Emulator(int w, int h, int cw, int ch)
         : W(w < 1 ? 1 : w), H(h < 1 ? 1 : h), cellW(cw < 1 ? 1 : cw), cellH(ch < 1 ? 1 : ch) { ensure(); }
 
@@ -497,11 +505,34 @@ struct Emulator {
             return;
         }
         if (w == 0) w = 1;                                 // a stray combiner with no base: show it
+        // Overstrike: the cursor was backspaced onto the cell `put` just wrote, and
+        // we're now writing over it again. `man`/nroff use only two patterns —
+        // `X \b X` → bold, `_ \b X` / `X \b _` → underline — so we merge only those
+        // into one styled cell. Any other backspace-then-write (`b \b c`) is a plain
+        // overwrite (last glyph wins), matching how `less` disambiguates the two.
+        if (osBack && cr == osRow && cc == osCol) {
+            Cell& prev = screen(cr)[cc];
+            bool bold = (prev.cp == cp);
+            bool under = !bold && (prev.cp == U'_' || cp == U'_');
+            if (bold || under) {
+                Attr a = gAttrs[prev.attr]; a.flags |= bold ? A_BOLD : A_UNDER;
+                prev.cp = (cp == U'_' && prev.cp != U'_') ? prev.cp : cp;
+                prev.attr = internAttr(a);
+                baseRow = cr; baseCol = cc; haveBase = true; lastCp = prev.cp;
+                // Candidate stays on this cell so a triple overstrike (X\bX\bX) keeps merging.
+                osBack = false;
+                ++cc;
+                if (prev.width == 2 && cc < W) ++cc;
+                return;
+            }
+            // fall through: plain overwrite
+        }
         if (cc + w > W) { cc = 0; lfWrap(); }              // a wide char won't straddle the edge
         Cell& c = screen(cr)[cc];
         c = Cell{};
         c.cp = cp; c.attr = internAttr(pen); c.width = static_cast<uint8_t>(w);
         baseRow = cr; baseCol = cc; haveBase = true; lastCp = cp;
+        osRow = cr; osCol = cc; osBack = false;            // this cell becomes the overstrike candidate
         ++cc;
         if (w == 2 && cc < W) {                            // continuation cell holds the 2nd column
             Cell& cont = screen(cr)[cc];
@@ -511,7 +542,7 @@ struct Emulator {
         }
     }
     void tab() { cc = std::min(W - 1, ((cc / 8) + 1) * 8); }
-    void bs() { if (cc > 0) --cc; }
+    void bs() { if (cc > 0) --cc; osBack = (cr == osRow && cc == osCol); }
     void up(int n) { cr = std::max(0, cr - n); }
     void down(int n) { cr = std::min(H - 1, cr + n); }
     void right(int n) { cc = std::min(W - 1, cc + n); }

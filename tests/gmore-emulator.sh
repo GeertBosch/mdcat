@@ -82,7 +82,19 @@ check "osc8 skipped"     'click here\n'          dump 80 "$tmp/in"
 mkin 'before\033Pq#0;2;0;0;0#0~~~\033\\after\n'
 check "sixel reserves row" 'before\nafter\n'     dump 80 "$tmp/in"
 
-# 9. non-tty, non-dump: pass the input through verbatim (pager-as-cat)
+# 9. overstrike bold: "X\bX" -> bold X (the typewriter convention `man` emits)
+mkin 'N\bNA\bAM\bME\bE\n'
+check "overstrike bold"  '\033[0;1mNAME\033[0m\n' dump 80 "$tmp/in"
+
+# 10. overstrike underline: "_\bX" -> underlined X (the underscore is dropped)
+mkin '_\bu_\bn_\bd_\be_\br\n'
+check "overstrike under" '\033[0;4munder\033[0m\n' dump 80 "$tmp/in"
+
+# 11. a lone backspace (no matching prior glyph) just moves the cursor, no merge
+mkin 'ab\bc\n'
+check "plain backspace"  'ac\n'                  dump 80 "$tmp/in"
+
+# 12. non-tty, non-dump: pass the input through verbatim (pager-as-cat)
 mkin 'raw\nbytes\n'
 check "cat passthrough"  'raw\nbytes\n'          "$gmore" "$tmp/in"
 
