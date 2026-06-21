@@ -18,6 +18,9 @@ already does, and ranks the remaining gaps by value-to-effort.
 - Go to top / bottom: `g` / `G` (with a count: go to line N)
 - Count prefixes: leading digits repeat / parameterize the next motion
 - Position report: `=`, `^G` (line number + percent)
+- Forward/backward search: `/pattern`, `?pattern`, `n`/`N` (regex, smart-case,
+  wrap-around), matched against the cell grid's row text
+- Help overlay: `h` lists the key bindings, any key dismisses
 - Repaint: `^L` clears and repaints the current screen
 - Quit: `q` / `Q`; `space` at `(END)` quits, like `more(1)`
 - Status line: `--More--(NN%)` / `(END)`, reverse-video
@@ -32,33 +35,21 @@ it interacts awkwardly with sixel rendering.
 
 ### Tier 1 — high value, do next
 
-1. **Forward search (`/pattern`, `n`, `N`).**  *(the big one)*
-   The single biggest reason people use a pager over `cat`. Needs: a prompt-line
-   input editor on the bottom row (we already own it via `showPrompt` /
-   `clearPrompt`), a regex (or literal) match over the cell grid's row text,
-   scroll so the first hit is at the top, `n` to repeat forward and `N` to repeat
-   backward. Match highlighting is a nice-to-have on top.
-   Architecture note: text must be pulled out of the **cell grid** row by row,
-   ignoring attribute and image layers — there is no source-text buffer.
-
-2. **Help screen (`h`).**
-   A static overlay listing the keys, dismissed by any key, then `repaint()`.
-   Cheap, and it makes every other command discoverable. The `MESSAGE` /
-   prompt machinery already exists; this is mostly a string and a redraw.
+1. **Search-match highlighting.**
+   Search now scrolls the hit into view, but matches aren't highlighted. Add
+   reverse-video (or coloured) spans on the matched substring(s) of each visible
+   row. Needs run() to know the match offsets within a row's text and map them
+   back to cell columns when painting — the one piece of search left undone.
 
 ### Tier 2 — high value, moderate effort
 
-3. **Backward search (`?pattern`).**
-   A `less` feature (`more(1)` has `/` only). Nearly free once forward search
-   exists — same input editor, reverse scan direction.
-
-4. **Multiple files + `:n` / `:p`.**
+3. **Multiple files + `:n` / `:p`.**
    gmore currently takes one path or stdin. Support `gmore file1 file2 …` and
    next/previous-file navigation. Requires holding several parsed grids (or
    re-parsing on switch) and threading the file list through `run()`. The status
    line should gain the current filename.
 
-5. **Line numbers (`-N` option).**
+4. **Line numbers (`-N` option).**
    Show absolute line numbers in a gutter when requested. Interacts with wrap and
    with the cell grid's notion of a "row" (a wrapped logical line spans several
    grid rows) — needs a decision on whether numbers track logical or screen
@@ -66,18 +57,18 @@ it interacts awkwardly with sixel rendering.
 
 ### Tier 3 — lower value or higher friction
 
-6. **Start position (`+N`, `+/pattern`).**
-   Open already scrolled to a line or to the first match. Easy once search exists;
-   low demand.
+5. **Start position (`+N`, `+/pattern`).**
+   Open already scrolled to a line or to the first match. Easy now that search
+   exists; low demand.
 
-7. **Mark / return (`m<x>`, `'<x>`, `''`).**
+6. **Mark / return (`m<x>`, `'<x>`, `''`).**
    `less`-style marks and "return to previous position." Convenience; small once
    we track a position stack.
 
-8. **Repeat last command (`.`).**
+7. **Repeat last command (`.`).**
    Convenience once the command set is larger; small given a command dispatcher.
 
-9. **Shell-out / editor (`!cmd`, `v`).**
+8. **Shell-out / editor (`!cmd`, `v`).**
    `v` opens `$EDITOR` at the current line; `!cmd` runs a shell command. Useful
    but requires suspending raw mode and the sixel screen state cleanly, then
    repainting — non-trivial given RIS-based repaint, and lower priority for a
@@ -85,11 +76,9 @@ it interacts awkwardly with sixel rendering.
 
 ## Suggested order of work
 
-**Search (1)** is the highest-value remaining item and deserves its own PR
-because of the input-line editor and grid text-extraction work; the **help
-overlay (2)** can ride along since it reuses the prompt machinery.
-**Backward search (3)** is a cheap follow-up. **Multi-file (4)** and
-**line numbers (5)** are the next standalone PRs. Everything in Tier 3 is
+Search (forward + backward), `n`/`N`, and the help overlay are done. The next
+increments: **match highlighting (1)** to finish search, then **multi-file (3)**
+and **line numbers (4)** as standalone PRs. Everything in Tier 3 is
 opportunistic.
 
 ## Notes specific to gmore's architecture

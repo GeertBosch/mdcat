@@ -188,12 +188,22 @@ gmore [--dump] [--dump-images] [file]
 
 | Key | Action |
 | --- | ------ |
-| `Space` / `f` | Page down |
+| `Space` / `f` | Page down (with a count `N`: forward `N` lines) |
 | `b` | Page up |
-| `Enter` / `j` | Line down |
+| `Enter` / `j` | Line down (with a count `N`: forward `N` lines) |
 | `k` / `y` | Line up |
+| `d` / `Ctrl-D`, `u` / `Ctrl-U` | Half-screen down / up (a count sets the step) |
+| `g` / `G` | Go to first / last line (with a count: line `N`) |
+| `/pat` / `?pat` | Search forward / backward (regex, smart-case) |
+| `n` / `N` | Repeat the search forward / in reverse |
+| `=` / `Ctrl-G` | Show position (line / total / %) |
+| `h` | Help overlay |
 | `Ctrl-L` | Clear and repaint the screen |
 | `q` | Quit |
+
+Search is an [ECMAScript regular expression](https://en.cppreference.com/w/cpp/regex/ecmascript)
+and is *smart-case*: case-insensitive unless the pattern contains an uppercase
+letter. `n`/`N` wrap around the end of the file.
 
 ## Requirements
 

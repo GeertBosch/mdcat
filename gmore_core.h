@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <regex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -683,6 +684,25 @@ struct Emulator {
     }
 
     // Number of meaningful rows = up to the last non-blank row (trailing blanks trimmed).
+    // Plain UTF-8 text of one grid row, with no SGR/links/images — what search
+    // matches against. Trailing blanks are dropped; a wide-char continuation cell
+    // (width 0, cp 0) contributes nothing, and each cell's combining tail is kept
+    // so an accented letter or emoji sequence reads as it displays.
+    std::string rowText(size_t absRow) const {
+        std::string out;
+        if (absRow >= rows.size()) return out;
+        const std::vector<Cell>& L = rows[absRow];
+        int last = -1;
+        for (int i = 0; i < (int)L.size(); ++i)
+            if (!(L[i].cp == U' ' || (L[i].cp == 0 && L[i].width == 0))) last = i;
+        for (int i = 0; i <= last; ++i) {
+            if (L[i].width == 0 && L[i].cp == 0) continue;
+            appendUtf8(out, L[i].cp);
+            for (char32_t comb : L[i].combine) appendUtf8(out, comb);
+        }
+        return out;
+    }
+
     size_t contentRows() const {
         size_t last = 0;
         for (size_t r = 0; r < rows.size(); ++r) {
@@ -800,6 +820,61 @@ struct Emulator {
             out += "\0338";                                       // DECRC: back to the band-top position
             out += "\033["; out += std::to_string(up); out += 'B'; out += '\r';  // down to below the window
         }
+    }
+};
+
+// ---------------------------------------------------------------------------
+// Search — regex matching over the cell grid's row text, the way more(1)/less(1)
+// search. The pattern is an ECMAScript regex; matching is "smart-case" like less:
+// case-insensitive unless the pattern contains an uppercase letter. State (the
+// compiled pattern and whether it's valid) is held so `n`/`N` can repeat it.
+// Search is kept out of Nav: Nav is deliberately grid-free so its motions unit-
+// test without an Emulator, whereas matching needs the grid's text.
+// ---------------------------------------------------------------------------
+struct Search {
+    std::string pattern;     // last pattern (empty = no search yet)
+    bool forward = true;     // direction of the last `/` (n repeats it, N reverses)
+    std::regex re;
+    bool valid = false;
+    std::string error;       // set when compile fails, for the prompt
+    long cursor = -1;        // row of the last match (search origin for n/N); -1 = none.
+                             // Kept apart from viewTop because a match near the end
+                             // clamps viewTop below its row — searching from viewTop
+                             // would re-find the same match instead of advancing.
+
+    static bool hasUpper(const std::string& s) {
+        for (unsigned char ch : s) if (std::isupper(ch)) return true;
+        return false;
+    }
+
+    // Compile `pat` as the active pattern searched in direction `fwd`. Returns
+    // false (and sets error) if the regex is malformed; the prior pattern is kept.
+    bool compile(const std::string& pat, bool fwd) {
+        if (pat.empty()) return valid;   // empty /  re-uses the last pattern
+        auto flags = std::regex::ECMAScript;
+        if (!hasUpper(pat)) flags |= std::regex::icase;
+        try {
+            re = std::regex(pat, flags);
+        } catch (const std::regex_error& e) {
+            error = std::string("Invalid regex: ") + e.what();
+            return false;
+        }
+        pattern = pat; forward = fwd; valid = true; error.clear();
+        cursor = -1;             // a new pattern searches from the current view
+        return true;
+    }
+
+    // First row in [0,total) matching `re`, scanning from `start` in `dir` (+1/-1),
+    // wrapping around like less. Returns -1 if there is no match anywhere.
+    template <class GetText>
+    long find(long start, int dir, long total, GetText rowText) const {
+        if (!valid || total == 0) return -1;
+        for (long i = 0; i < total; ++i) {
+            long r = start + dir * (i + 1);
+            r = ((r % total) + total) % total;      // wrap into [0,total)
+            if (std::regex_search(rowText((size_t)r), re)) return r;
+        }
+        return -1;
     }
 };
 
@@ -1039,18 +1114,47 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
     }
 
     // --nav-trace is the navigation test surface: replay the GMORE_KEYS script
-    // through Nav alone (no tty, no painting) and print the final view window as
-    // plain text — "top=R bottom=B total=T pct=P% END?" — so motion commands can
-    // be asserted deterministically. Counts are leading digits before a command.
+    // through Nav (no tty, no painting) and print the final view window as plain
+    // text — "top=R bottom=B total=T pct=P% END?" — so motion commands can be
+    // asserted deterministically. Counts are leading digits before a command.
+    // Search is driven here too against `em`'s grid: `/`/`?` read a pattern up to
+    // the next newline, `n`/`N` repeat it; `notfound`/`badre` is appended when a
+    // search fails so those paths are assertable. Mirrors run()'s search handling.
     if (navTrace) {
         Nav t;
         int H2 = H ? H : 24;
         t.pageH = H2 - 1;
         t.total = total;
+        Search search;
+        const char* note = "";
+        auto doSearch = [&](int dir) {
+            if (!search.valid) { note = " notfound"; return; }
+            long from = search.cursor >= 0 ? search.cursor : (long)t.viewTop;
+            long hit = search.find(from, dir, (long)total,
+                                   [&](size_t r) { return em.rowText(r); });
+            if (hit < 0) { note = " notfound"; return; }
+            search.cursor = hit;
+            t.gotoLine((size_t)hit + 1);
+        };
         const char* keys = std::getenv("GMORE_KEYS");
         long count = 0;
         for (const char* p = keys; p && *p; ++p) {
             unsigned char c = (unsigned char)*p;
+            if (c == '/' || c == '?') {                  // read pattern up to newline
+                std::string pat;
+                while (*++p && *p != '\n') pat.push_back(*p);
+                bool fwd = (c == '/');
+                if (search.compile(pat, fwd)) doSearch(fwd ? +1 : -1);
+                else note = " badre";
+                if (!*p) break;                          // newline consumed by ++p above
+                continue;
+            }
+            if (c == 'n' || c == 'N') {
+                int dir = search.forward ? +1 : -1;
+                if (c == 'N') dir = -dir;
+                doSearch(dir);
+                continue;
+            }
             if (c >= '0' && c <= '9') {
                 if (count <= (long)total) count = count * 10 + (c - '0');
                 continue;
@@ -1059,9 +1163,9 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
             count = 0;
             if (a == Nav::QUIT) break;
         }
-        std::printf("top=%zu bottom=%zu total=%zu pct=%d%% %s\n",
+        std::printf("top=%zu bottom=%zu total=%zu pct=%d%% %s%s\n",
                     t.viewTop, std::min(t.viewTop + (size_t)t.pageH, t.total),
-                    t.total, t.percent(), t.atEnd() ? "END" : "more");
+                    t.total, t.percent(), t.atEnd() ? "END" : "more", note);
         return 0;
     }
 
@@ -1128,6 +1232,7 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
     nav.total = total;
     int& pageH = nav.pageH;
     size_t& viewTop = nav.viewTop;
+    Search search;
 
     // Observability: GMORE_DEBUG logs paint operations to stderr (which absolute
     // grid rows we paint onto which screen lines, and where image strips land), so
@@ -1161,6 +1266,34 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
         std::fflush(stdout);
     };
     auto clearPrompt = [&] { std::fputs("\r\033[K", stdout); };
+
+    // Help overlay (the `h` command): RIS-clear and list the key bindings, leaving
+    // a prompt at the bottom. Any key dismisses it (the caller repaints after).
+    auto showHelp = [&] {
+        static const char* lines[] = {
+            "gmore — key commands",
+            "",
+            "  space, f       forward one screen (N: N lines)",
+            "  b              backward one screen",
+            "  Enter, j       forward one line (N: N lines)",
+            "  k, y           backward one line",
+            "  d, ^D          forward half screen (N sets the step)",
+            "  u, ^U          backward half screen",
+            "  g / G          go to first / last line (N: line N)",
+            "  /pattern       search forward (regex, smart-case)",
+            "  ?pattern       search backward",
+            "  n / N          repeat search / in reverse",
+            "  =, ^G          show position (line / total / %)",
+            "  ^L             clear and repaint the screen",
+            "  h              this help",
+            "  q, Q           quit",
+            "",
+        };
+        std::fputs("\033c", stdout);                      // RIS: clear like repaint()
+        for (const char* l : lines) std::fprintf(stdout, "%s\r\n", l);
+        std::fputs("\033[7mPress any key to continue\033[27m", stdout);
+        std::fflush(stdout);
+    };
 
     // Initial paint: fill the first page. paintWindow commits all text rows first, then
     // paints images into them (a tall sixel painted before its rows exist would scroll
@@ -1221,15 +1354,110 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
     // a leading decimal repeat count (more(1)'s "10j", etc.).
     const char* scriptedKeys = std::getenv("GMORE_KEYS");
     size_t keyPos = 0;
+
+    // One keystroke from the scripted stream or the tty; returns false at EOF so
+    // both the main loop and the search input editor share one read path.
+    auto nextKey = [&](unsigned char& c) -> bool {
+        if (scriptedKeys) {
+            if (!scriptedKeys[keyPos]) return false;
+            c = (unsigned char)scriptedKeys[keyPos++];
+            return true;
+        }
+        return read(gTtyFd, &c, 1) == 1;
+    };
+
+    // Read a pattern on the prompt row after the leading `/`, echoing as typed.
+    // Returns true with `out` set on Enter; false if cancelled (ESC) or EOF.
+    // Backspace edits; an empty Enter returns true with out empty (reuse last).
+    auto readLine = [&](char lead, std::string& out) -> bool {
+        out.clear();
+        auto draw = [&] {
+            std::fputs("\r\033[K", stdout);
+            std::fputc(lead, stdout);
+            fwrite(out.data(), 1, out.size(), stdout);
+            std::fflush(stdout);
+        };
+        draw();
+        for (;;) {
+            unsigned char c;
+            if (!nextKey(c)) return false;
+            if (c == '\r' || c == '\n') return true;
+            if (c == 0x1b) return false;                 // ESC cancels
+            if (c == 0x7f || c == 0x08) {                // backspace
+                if (!out.empty()) {
+                    // Drop a whole UTF-8 char (its trailing continuation bytes too).
+                    do { out.pop_back(); } while (!out.empty() && (out.back() & 0xc0) == 0x80);
+                    draw();
+                }
+                continue;
+            }
+            if (c >= 0x20 || c >= 0x80) { out.push_back((char)c); draw(); }
+        }
+    };
+
+    // Run a search: jump so the matching row is at the top of the view. `dir` is
+    // +1 (forward) or -1 (backward). Sets `message` to a not-found / error notice.
+    // Returns true if the view moved (caller repaints). Search starts from the row
+    // just past the current top so a repeat advances off the current hit.
+    auto runSearch = [&](int dir) -> bool {
+        if (!search.valid) { message = "No previous search"; return false; }
+        // Search from the last match row (or the current top if none yet) so a
+        // repeat advances even when the prior match was clamped within the view.
+        long from = search.cursor >= 0 ? search.cursor : (long)viewTop;
+        long hit = search.find(from, dir, (long)total,
+                               [&](size_t r) { return em.rowText(r); });
+        if (hit < 0) { message = "Pattern not found"; return false; }
+        search.cursor = hit;
+        size_t prev = viewTop;
+        nav.gotoLine((size_t)hit + 1);
+        return viewTop != prev;
+    };
+
     long count = 0;
     bool counting = false;   // mid-count: don't reprint the prompt between digits
     for (;;) {
         if (!counting) showPrompt();
         unsigned char c;
-        if (scriptedKeys) {
-            if (!scriptedKeys[keyPos]) break;
-            c = (unsigned char)scriptedKeys[keyPos++];
-        } else if (read(gTtyFd, &c, 1) != 1) break;
+        if (!nextKey(c)) break;
+        // Search and help are handled here, before Nav: they need the grid text
+        // (search) or take over the prompt row (input editor / overlay), which Nav
+        // is deliberately ignorant of.
+        if (c == '/' || c == '?') {
+            std::string pat;
+            bool ok = readLine(c, pat);
+            clearPrompt();
+            message.clear();
+            count = 0; counting = false;
+            if (!ok) continue;                            // cancelled — leave the view
+            bool fwd = (c == '/');
+            if (!search.compile(pat, fwd)) { message = search.error; continue; }
+            size_t prevTop = viewTop;
+            if (runSearch(fwd ? +1 : -1)) {
+                if (viewTop > prevTop) advance(prevTop); else repaint();
+            }
+            continue;
+        }
+        if (c == 'n' || c == 'N') {
+            clearPrompt();
+            message.clear();
+            count = 0; counting = false;
+            // n repeats in the search's direction; N reverses it.
+            int dir = search.forward ? +1 : -1;
+            if (c == 'N') dir = -dir;
+            size_t prevTop = viewTop;
+            if (runSearch(dir)) {
+                if (viewTop > prevTop) advance(prevTop); else repaint();
+            }
+            continue;
+        }
+        if (c == 'h') {
+            clearPrompt();
+            showHelp();
+            unsigned char k; nextKey(k);                  // any key dismisses
+            repaint();
+            count = 0; counting = false; message.clear();
+            continue;
+        }
         if (c >= '0' && c <= '9') {
             // Clamp so a long digit run can't overflow; no motion exceeds `total`.
             if (count <= (long)total) count = count * 10 + (c - '0');

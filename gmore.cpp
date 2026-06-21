@@ -10,8 +10,9 @@
 //
 // Keys: space/f page down, b page up, Enter/j line down, k/y line up, d/u (^D/^U)
 // half-screen down/up, g/G to top/bottom (or line N with a count), =/^G show the
-// current position, q quit. A leading count repeats a motion; a count to d/u sets
-// the half-screen step.
+// current position, /pat (?pat) search forward (backward), n/N repeat the search
+// (in reverse), h help overlay, ^L repaint, q quit. A leading count repeats a
+// motion; a count to d/u sets the half-screen step. Search is regex, smart-case.
 // Up-scroll full-repaints the window (an incremental up-paint clobbers image cells).
 // --dump renders the text grid to stdout (no images, for testing).
 // --dump-images renders text + re-encoded sixel strips (for render testing).
