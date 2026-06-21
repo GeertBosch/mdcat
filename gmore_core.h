@@ -1118,6 +1118,28 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
         paintWindow(viewTop, pageH, vBot);
     };
 
+    // Forward-only incremental paint that PRESERVES SCROLLBACK. When the view moves
+    // strictly down by `delta` rows (a contiguous forward shift), we don't reset the
+    // terminal — we just emit the `delta` newly-revealed rows at the bottom. The prompt
+    // was already erased (clearPrompt) leaving the cursor at column 0 of the old prompt
+    // row, which sits one line below the old window's last text row; emitting rows there
+    // scrolls the terminal up naturally, pushing the rows that leave the top of the view
+    // into the terminal's scrollback (exactly how more(1)/cat behave). Because no RIS
+    // (\033c) is issued, VSCode keeps the scrollback the user wants to keep.
+    //
+    // The cost vs repaint(): an image whose top has scrolled above the new view can't be
+    // re-clipped (paintImages anchors whole sixels), so forward-append is only used while
+    // images aren't being split across the top fold — see the call site, which falls back
+    // to repaint() for any non-contiguous or backward move. A clean text/forward page is
+    // the common case and now leaves history intact.
+    auto advance = [&](size_t prevTop) {
+        size_t delta = viewTop - prevTop;             // caller guarantees viewTop > prevTop
+        size_t firstNew = prevTop + (size_t)pageH;    // first row not previously visible
+        size_t vBot = std::min(total, viewTop + (size_t)pageH);
+        for (size_t i = 0; i < delta; ++i) traceRow(firstNew + i, pageH - (int)delta + (int)i);
+        paintWindow(firstNew, (int)delta, vBot);
+    };
+
     // GMORE_KEYS scripts the keystroke stream (one char = one key) instead of
     // reading the tty, so a session like "jk" can be replayed non-interactively
     // and its exact output (escapes + sixel strips) captured for inspection.
@@ -1143,10 +1165,20 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
         counting = false;
         clearPrompt();
         message.clear();
+        size_t prevTop = viewTop;
         Nav::Action a = nav.dispatch(c, count);
         count = 0;
         if (a == Nav::QUIT) break;
-        if (a == Nav::REPAINT) { trace("dispatch"); repaint(); }
+        if (a == Nav::REPAINT) {
+            trace("dispatch");
+            // A strictly-forward move appends the newly-revealed rows below the current
+            // screen, scrolling old content into the terminal's scrollback (preserving
+            // history). Any backward move, or a no-op, falls back to the RIS full repaint,
+            // which can correctly relocate images but resets the screen.
+            if (viewTop > prevTop) advance(prevTop);
+            else if (viewTop < prevTop) repaint();
+            // viewTop == prevTop: clamped at an edge, nothing moved — leave the screen.
+        }
         if (a == Nav::MESSAGE) {
             char buf[64];
             std::snprintf(buf, sizeof buf, "line %zu/%zu (%d%%)",
