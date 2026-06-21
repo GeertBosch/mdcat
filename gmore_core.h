@@ -1347,6 +1347,22 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
         paintWindow(firstNew, (int)delta, vBot);
     };
 
+    // Paint after the view moved from `prevTop` to the current viewTop, picking the
+    // cheapest correct strategy. advance() (scrollback-preserving incremental append)
+    // is ONLY valid for a CONTIGUOUS forward move — delta <= pageH. At delta < pageH
+    // the new window overlaps the old; at delta == pageH it abuts it (the normal
+    // full-page scroll). Either way advance() appends exactly the newly-revealed rows
+    // below the screen and the terminal scrolls the rest into scrollback, leaving every
+    // on-screen sixel/text cell valid. A backward move, no move, OR a forward JUMP
+    // (delta > pageH: g/G, a big count, search to a distant line) leaves a GAP — the old
+    // screen has no row in common with the new one, so its sixels would linger (the
+    // reported bug). Those must full-repaint via RIS, which wipes the screen.
+    auto paintMove = [&](size_t prevTop) {
+        if (viewTop > prevTop && viewTop - prevTop <= (size_t)pageH) advance(prevTop);
+        else if (viewTop != prevTop) repaint();
+        // viewTop == prevTop: clamped at an edge, nothing moved — leave the screen.
+    };
+
     // GMORE_KEYS scripts the keystroke stream (one char = one key) instead of
     // reading the tty, so a session like "jk" can be replayed non-interactively
     // and its exact output (escapes + sixel strips) captured for inspection.
@@ -1432,9 +1448,7 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
             bool fwd = (c == '/');
             if (!search.compile(pat, fwd)) { message = search.error; continue; }
             size_t prevTop = viewTop;
-            if (runSearch(fwd ? +1 : -1)) {
-                if (viewTop > prevTop) advance(prevTop); else repaint();
-            }
+            if (runSearch(fwd ? +1 : -1)) paintMove(prevTop);
             continue;
         }
         if (c == 'n' || c == 'N') {
@@ -1445,9 +1459,7 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
             int dir = search.forward ? +1 : -1;
             if (c == 'N') dir = -dir;
             size_t prevTop = viewTop;
-            if (runSearch(dir)) {
-                if (viewTop > prevTop) advance(prevTop); else repaint();
-            }
+            if (runSearch(dir)) paintMove(prevTop);
             continue;
         }
         if (c == 'h') {
@@ -1473,13 +1485,12 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
         if (a == Nav::QUIT) break;
         if (a == Nav::REPAINT) {
             trace("dispatch");
-            // A strictly-forward move appends the newly-revealed rows below the current
-            // screen, scrolling old content into the terminal's scrollback (preserving
-            // history). Any backward move, or a no-op, falls back to the RIS full repaint,
-            // which can correctly relocate images but resets the screen.
-            if (viewTop > prevTop) advance(prevTop);
-            else if (viewTop < prevTop) repaint();
-            // viewTop == prevTop: clamped at an edge, nothing moved — leave the screen.
+            // A contiguous forward step appends the newly-revealed rows below the screen,
+            // scrolling old content into scrollback (preserving history). A forward jump
+            // (g/G, a big count), any backward move, or a no-op falls back to RIS full
+            // repaint, which relocates images correctly but resets the screen. See
+            // paintMove for why a non-overlapping forward move can't use advance().
+            paintMove(prevTop);
         }
         if (a == Nav::REDRAW) { trace("redraw"); repaint(); }
         if (a == Nav::MESSAGE) {

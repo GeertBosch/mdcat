@@ -22,6 +22,7 @@ TESTS := \
 	tests/gmore-sixel.sh \
 	tests/gmore-nav.sh \
 	tests/gmore-search.sh \
+	tests/gmore-repaint.sh \
 	tests/gmore-links.sh
 
 check: mdcat gmore
