@@ -1511,11 +1511,18 @@ std::string reflow(const std::string& s, int width) {
             size_t i = 0;
             for (; i < w.size(); ) {
                 size_t len = unitLength(w, i);
-                int cw = displayWidth(w.substr(i, len));  // 0 for escapes, 1 for a code point
+                int cw = displayWidth(w.substr(i, len));  // 0 for escape, 1 normal, 2 wide
                 if (pieceWidth + cw > width) break;
                 piece.append(w, i, len);
                 pieceWidth += cw;
                 i += len;
+            }
+            // A single unit wider than the whole line (a width-2 grapheme when width==1) fits in no
+            // piece. Place it anyway — overflowing one column beats looping forever (w never shrinks).
+            if (i == 0) {
+                size_t len = unitLength(w, 0);
+                piece.append(w, 0, len);
+                i = len;
             }
             out += piece;
             out += '\n';
