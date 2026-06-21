@@ -1638,6 +1638,12 @@ void emitCodeBlock(const std::vector<std::string>& lines, const std::string& lan
     const auto highlighted = highlightCode(lines, lang);
     int maxw = 0;
     for (const auto& l : lines) maxw = std::max(maxw, displayWidth(l));
+    // Clamp the panel width so a row (2-space margins + content) never exceeds the terminal width.
+    // Code lines are emitted verbatim (never reflowed), so a line longer than this still overflows
+    // and wraps — that is unavoidable — but short lines must not be over-padded to the widest line's
+    // width, which would push them past the edge and make the pager wrap them into phantom rows with
+    // a broken background (gmore renders into a fixed-width grid; the terminal soft-wraps under cat).
+    maxw = std::min(maxw, std::max(1, terminalWidth() - 4));
     for (const auto& l : highlighted) {
         out << kCodeOn << "  " << padTo(l, maxw) << "  " << kAttrOff << kCodeOff << '\n';
     }
