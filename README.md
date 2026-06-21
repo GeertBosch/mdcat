@@ -5,11 +5,11 @@ Companion pager `gmore` handles sixel graphics natively.
 
 ## Features
 
-### Headings
+### Headings (with _italics_ and `code`)
 
 Six heading levels with distinct underline styles (heavy → light → dotted →
 dashed) so hierarchy is immediately visible. Inline markup works inside
-headings: ***bold italic*** and `code` render correctly.
+headings: ***italics*** and `code` render correctly.
 
 ### Inline styling
 
@@ -129,7 +129,7 @@ def factorial(n: int) -> int:
 LaTeX math between `$...$` (inline) and `$$ ... $$` (block) is transliterated to
 Unicode on a best-effort basis: Greek letters, common operator and relation
 symbols, super- and subscripts, blackboard-bold (`\mathbb`), and the
-`\mathrm`/`\mathbf` font wrappers. Bare Latin letters render in math italic, as
+`\mathrm` / `\mathbf` font wrappers. Bare Latin letters render in math italic, as
 they do in LaTeX. Anything that can't be mapped is left as the literal source,
 so the output is never worse than the input.
 
@@ -137,6 +137,25 @@ The mass–energy equivalence is $E = mc^2$. For all $x \in \mathbb{R}$ there is
 $y$ with $x \leq y$, and Avogadro's number is $6.022 \times 10^{23}\,\mathrm{mol}^{-1}$.
 
 $$a^2 + b^2 = c^2 \qquad \therefore c = \sqrt{a^2 + b^2}$$
+
+### Unicode 🌍
+
+Text is measured by *display width*, not byte or code-point count, so everything
+stays aligned no matter the script. Wide characters (emoji 🎉 and CJK 漢字 かな
+한글) take two columns; combining marks (café, naïve, Å), variation selectors
+(❤️, ✈️), and ZWJ sequences (👩‍🚀, 👨‍👩‍👧‍👦, 🏳️‍🌈) collapse to a single
+grapheme. Right-to-left scripts (العربية, עברית) and the full range of symbols
+(✓ ✗ ★ ☂ ♞ ∑ ∞ ≈ µ Ω) pass through untouched.
+
+Because alignment uses true width, a table of mixed scripts and emoji keeps its
+columns flush — count the cells, not the bytes:
+
+| Script   | Sample   | Flag |
+| :------- | :------- | :--: |
+| Latin    | mdcat    | 🇺🇸   |
+| Japanese | 日本語   | 🇯🇵   |
+| Korean   | 한국어   | 🇰🇷   |
+| Emoji    | 👩‍🚀🚀🌕 | 🚩   |
 
 
 ## Programs
@@ -173,6 +192,7 @@ gmore [--dump] [--dump-images] [file]
 | `b` | Page up |
 | `Enter` / `j` | Line down |
 | `k` / `y` | Line up |
+| `Ctrl-L` | Clear and repaint the screen |
 | `q` | Quit |
 
 ## Requirements
