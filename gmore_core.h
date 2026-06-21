@@ -916,7 +916,9 @@ struct Nav {
     }
 
     // MESSAGE: don't move; run() shows an informational prompt (e.g. = position).
-    enum Action { NONE, REPAINT, QUIT, MESSAGE };
+    // REDRAW: don't move; clear and repaint the current window (^L), to recover
+    // from a corrupted screen.
+    enum Action { NONE, REPAINT, QUIT, MESSAGE, REDRAW };
 
     // 1-based line number at the bottom of the view (the last visible line),
     // clamped to total — what more(1)'s "=" reports.
@@ -951,6 +953,8 @@ struct Nav {
             case 'u': case 0x15: if (n > 0) scrollSize = (size_t)n; up(scrollStep());   return REPAINT;
             // =/^G: report position (line number + percent) without moving.
             case '=': case 0x07: return MESSAGE;
+            // ^L: clear and repaint the current screen without moving.
+            case 0x0C: return REDRAW;
             default: return NONE;
         }
     }
@@ -1249,6 +1253,7 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
             else if (viewTop < prevTop) repaint();
             // viewTop == prevTop: clamped at an edge, nothing moved — leave the screen.
         }
+        if (a == Nav::REDRAW) { trace("redraw"); repaint(); }
         if (a == Nav::MESSAGE) {
             char buf[64];
             std::snprintf(buf, sizeof buf, "line %zu/%zu (%d%%)",
