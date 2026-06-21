@@ -20,7 +20,8 @@ TESTS := \
 	tests/unicode-width.sh \
 	tests/gmore-emulator.sh \
 	tests/gmore-sixel.sh \
-	tests/gmore-nav.sh
+	tests/gmore-nav.sh \
+	tests/gmore-links.sh
 
 check: mdcat gmore
 	@fail=0; \
