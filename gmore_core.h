@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cctype>
 #include <csignal>
+#include <climits>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -899,10 +900,12 @@ struct Search {
     std::regex re;
     bool valid = false;
     std::string error;       // set when compile fails, for the prompt
-    long cursor = -1;        // row of the last match (search origin for n/N); -1 = none.
-                             // Kept apart from viewTop because a match near the end
-                             // clamps viewTop below its row — searching from viewTop
-                             // would re-find the same match instead of advancing.
+    // Position of the CURRENT match (the one n/N step from and the brighter highlight
+    // tracks), as a (row, start-column) pair; {-1,-1} = none yet. A column, not just a
+    // row, so n/N visit EVERY match — including several on one line. Kept apart from
+    // viewTop because a match near the end clamps viewTop below its row.
+    long curRow = -1;
+    int  curCol = -1;
 
     static bool hasUpper(const std::string& s) {
         for (unsigned char ch : s) if (std::isupper(ch)) return true;
@@ -922,21 +925,35 @@ struct Search {
             return false;
         }
         pattern = pat; forward = fwd; valid = true; error.clear();
-        cursor = -1;             // a new pattern searches from the current view
+        curRow = -1; curCol = -1;   // a new pattern searches from the current view
         return true;
     }
 
-    // First row in [0,total) matching `re`, scanning from `start` in `dir` (+1/-1),
-    // wrapping around like less. Returns -1 if there is no match anywhere.
-    template <class GetText>
-    long find(long start, int dir, long total, GetText rowText) const {
-        if (!valid || total == 0) return -1;
-        for (long i = 0; i < total; ++i) {
-            long r = start + dir * (i + 1);
-            r = ((r % total) + total) % total;      // wrap into [0,total)
-            if (std::regex_search(rowText((size_t)r), re)) return r;
+    // A located match: its row and the cell column it starts at.
+    struct Pos { long row; int col; bool found; };
+
+    // The next match from (fromRow, fromCol) scanning in `dir` (+1/-1), considering
+    // EVERY match on every row (so several hits on one line are distinct stops), and
+    // wrapping around the file like less. `fromCol < 0` (forward) / large (backward)
+    // means "from the very start/end of fromRow" — used when seeding from a view top
+    // with no prior column. `getSpans(row)` returns that row's match spans (sorted by
+    // start column). Returns {found=false} when the pattern matches nowhere.
+    template <class GetSpans>
+    Pos findPos(long fromRow, int fromCol, int dir, long total, GetSpans getSpans) const {
+        if (!valid || total == 0) return {-1, -1, false};
+        for (long i = 0; i <= total; ++i) {     // <= total: revisit fromRow last (other cols)
+            long r = ((fromRow + dir * i) % total + total) % total;
+            auto spans = getSpans((size_t)r);
+            if (spans.empty()) continue;
+            if (dir > 0) {
+                for (auto& s : spans)
+                    if (i != 0 || s.first > fromCol) return {r, s.first, true};
+            } else {
+                for (auto it = spans.rbegin(); it != spans.rend(); ++it)
+                    if (i != 0 || it->first < fromCol) return {r, it->first, true};
+            }
         }
-        return -1;
+        return {-1, -1, false};
     }
 };
 
@@ -1191,12 +1208,13 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
         const char* note = "";
         auto doSearch = [&](int dir) {
             if (!search.valid) { note = " notfound"; return; }
-            long from = search.cursor >= 0 ? search.cursor : (long)t.viewTop;
-            long hit = search.find(from, dir, (long)total,
-                                   [&](size_t r) { return em.rowText(r); });
-            if (hit < 0) { note = " notfound"; return; }
-            search.cursor = hit;
-            t.gotoLine((size_t)hit + 1);
+            long fromRow = search.curRow >= 0 ? search.curRow : (long)t.viewTop;
+            int  fromCol = search.curRow >= 0 ? search.curCol : (dir > 0 ? -1 : INT_MAX);
+            Search::Pos p = search.findPos(fromRow, fromCol, dir, (long)total,
+                                           [&](size_t r) { return em.matchSpans(r, search.re); });
+            if (!p.found) { note = " notfound"; return; }
+            search.curRow = p.row; search.curCol = p.col;
+            t.gotoLine((size_t)p.row + 1);
         };
         const char* keys = std::getenv("GMORE_KEYS");
         long count = 0;
@@ -1254,16 +1272,18 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
     Search search;
 
     // Per-row search-match highlight for `absRow`: the cell-column spans matching the
-    // active pattern, with the match on the current row (search.cursor) flagged as the
-    // "current" one (more saturated blue). Returns an empty Highlight when there is no
-    // active search, so non-search rendering is byte-for-byte unchanged.
+    // active pattern, with the exact current match (search.curRow/curCol) flagged as
+    // the "current" one (more saturated blue). Matching by COLUMN, not just row, so the
+    // brighter highlight lands on the precise match n/N is on — even with several
+    // matches on one line. Returns an empty Highlight when there is no active search,
+    // so non-search rendering is byte-for-byte unchanged.
     auto rowHighlight = [&](size_t absRow) -> Highlight {
         Highlight h;
         if (!search.valid) return h;
         h.spans = em.matchSpans(absRow, search.re);
-        // The match the search jumped to lives on search.cursor's row; mark the first
-        // span there as current (search lands on the first match in a row).
-        if (!h.spans.empty() && (long)absRow == search.cursor) h.current = 0;
+        if ((long)absRow == search.curRow)
+            for (size_t k = 0; k < h.spans.size(); ++k)
+                if (h.spans[k].first == search.curCol) { h.current = (int)k; break; }
         return h;
     };
 
@@ -1494,22 +1514,26 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
         }
     };
 
-    // Run a search: jump so the matching row is at the top of the view. `dir` is
-    // +1 (forward) or -1 (backward). Sets `message` to a not-found / error notice.
-    // Returns true if the view moved (caller repaints). Search starts from the row
-    // just past the current top so a repeat advances off the current hit.
+    // Run a search: advance to the next match in `dir` (+1 forward / -1 backward) and
+    // scroll its row to the top of the view. Sets `message` on not-found / no-prior.
+    // Returns true if a match was found (the caller repaints — the current-match
+    // highlight moves even when the view itself doesn't, e.g. a later match on the
+    // same row). Steps from the current match's exact (row,col); see findPos.
     auto runSearch = [&](int dir) -> bool {
         if (!search.valid) { message = "No previous search"; return false; }
-        // Search from the last match row (or the current top if none yet) so a
-        // repeat advances even when the prior match was clamped within the view.
-        long from = search.cursor >= 0 ? search.cursor : (long)viewTop;
-        long hit = search.find(from, dir, (long)total,
-                               [&](size_t r) { return em.rowText(r); });
-        if (hit < 0) { message = "Pattern not found"; return false; }
-        search.cursor = hit;
-        size_t prev = viewTop;
-        nav.gotoLine((size_t)hit + 1);
-        return viewTop != prev;
+        // Step from the current match's exact (row,col) so n/N visit every match,
+        // including several on one line. With no prior match, seed from viewTop's edge
+        // (col -1 forward = before the first; INT_MAX backward = after the last) so the
+        // first hit is the nearest match from the current view.
+        long fromRow = search.curRow >= 0 ? search.curRow : (long)viewTop;
+        int  fromCol = search.curRow >= 0 ? search.curCol : (dir > 0 ? -1 : INT_MAX);
+        Search::Pos p = search.findPos(fromRow, fromCol, dir, (long)total,
+                                       [&](size_t r) { return em.matchSpans(r, search.re); });
+        if (!p.found) { message = "Pattern not found"; return false; }
+        search.curRow = p.row; search.curCol = p.col;
+        nav.gotoLine((size_t)p.row + 1);
+        return true;   // a match was found; caller repaints (the current highlight moved
+                       // even when the view itself didn't — e.g. next match on the same row)
     };
 
     long count = 0;
