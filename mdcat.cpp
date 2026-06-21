@@ -286,10 +286,71 @@ int utf8SequenceLength(unsigned char c) {
     return 1;
 }
 
+// Decode the UTF-8 code point beginning at s[i] into cp, returning the byte length consumed (>=1).
+// An invalid/truncated sequence yields the single lead byte as cp with length 1 (best-effort).
+int decodeUtf8(const std::string& s, size_t i, uint32_t& cp) {
+    unsigned char c = static_cast<unsigned char>(s[i]);
+    int len = utf8SequenceLength(c);
+    if (len == 1 || i + static_cast<size_t>(len) > s.size()) { cp = c; return 1; }
+    static const unsigned char kLeadMask[5] = {0, 0x7F, 0x1F, 0x0F, 0x07};
+    cp = c & kLeadMask[len];
+    for (int k = 1; k < len; ++k) {
+        unsigned char cc = static_cast<unsigned char>(s[i + k]);
+        if ((cc & 0xC0) != 0x80) { cp = c; return 1; }  // not a continuation byte: invalid
+        cp = (cp << 6) | (cc & 0x3F);
+    }
+    return len;
+}
+
+// True if `cp` is between lo and hi inclusive (used by the width tables below).
+static inline bool inRange(uint32_t cp, uint32_t lo, uint32_t hi) { return cp >= lo && cp <= hi; }
+
+// Terminal column width of a single Unicode code point: 0 for zero-width (combining marks, joiners,
+// variation selectors, the BOM), 2 for East-Asian-Wide / Fullwidth and the emoji that render as a
+// double-width cell, and 1 otherwise. This is a pragmatic subset of UAX #11 / the Unicode emoji data
+// — the ranges that actually occur in the content mdcat renders — not a full property database. See
+// gmore_core.h, which mirrors this exactly so the pager and the renderer agree on alignment.
+int codePointWidth(uint32_t cp) {
+    if (cp == 0) return 0;
+    // Zero-width: combining diacritics, joiners (ZWJ/ZWNJ), variation selectors, BOM/ZWNBSP.
+    if (inRange(cp, 0x0300, 0x036F) ||   // combining diacritical marks
+        inRange(cp, 0x1AB0, 0x1AFF) ||   // combining diacritical marks extended
+        inRange(cp, 0x1DC0, 0x1DFF) ||   // combining diacritical marks supplement
+        inRange(cp, 0x20D0, 0x20FF) ||   // combining marks for symbols
+        inRange(cp, 0xFE20, 0xFE2F) ||   // combining half marks
+        cp == 0x200B || cp == 0x200C || cp == 0x200D ||  // ZWSP, ZWNJ, ZWJ
+        cp == 0xFEFF ||                  // ZWNBSP / BOM
+        inRange(cp, 0xFE00, 0xFE0F) ||   // variation selectors 1-16 (incl. VS16 emoji presentation)
+        inRange(cp, 0xE0100, 0xE01EF))   // variation selectors supplement
+        return 0;
+    // East-Asian Wide / Fullwidth and the wide symbol/emoji blocks that occupy two cells.
+    if (inRange(cp, 0x1100, 0x115F) ||   // Hangul Jamo
+        cp == 0x2329 || cp == 0x232A ||  // angle brackets
+        inRange(cp, 0x2E80, 0x303E) ||   // CJK radicals, Kangxi, CJK symbols/punctuation
+        inRange(cp, 0x3041, 0x33FF) ||   // Hiragana, Katakana, CJK symbols, enclosed CJK
+        inRange(cp, 0x3400, 0x4DBF) ||   // CJK Extension A
+        inRange(cp, 0x4E00, 0x9FFF) ||   // CJK Unified Ideographs
+        inRange(cp, 0xA000, 0xA4CF) ||   // Yi
+        inRange(cp, 0xAC00, 0xD7A3) ||   // Hangul Syllables
+        inRange(cp, 0xF900, 0xFAFF) ||   // CJK compatibility ideographs
+        inRange(cp, 0xFE10, 0xFE19) ||   // vertical forms
+        inRange(cp, 0xFE30, 0xFE6F) ||   // CJK compatibility forms, small form variants
+        inRange(cp, 0xFF00, 0xFF60) ||   // fullwidth forms
+        inRange(cp, 0xFFE0, 0xFFE6) ||   // fullwidth signs
+        inRange(cp, 0x1F300, 0x1F64F) || // Misc symbols & pictographs, emoticons
+        inRange(cp, 0x1F680, 0x1F6FF) || // transport & map symbols
+        inRange(cp, 0x1F900, 0x1F9FF) || // supplemental symbols & pictographs
+        inRange(cp, 0x1FA70, 0x1FAFF) || // symbols & pictographs extended-A
+        inRange(cp, 0x20000, 0x3FFFD))   // CJK Extension B+ and plane 3
+        return 2;
+    return 1;
+}
+
 // Display width of a string in terminal columns, skipping ANSI escape (CSI) sequences and OSC 8
-// hyperlink sequences so that styled text measures by what is actually shown. Each UTF-8 code
-// point counts as one column; this matches the original script's behaviour and is sufficient for
-// the Latin text, box-drawing characters and chess glyphs used here.
+// hyperlink sequences so that styled text measures by what is actually shown. Each code point is
+// measured by codePointWidth, so fullwidth emoji / CJK count as two columns and combining marks,
+// joiners and variation selectors as zero — keeping tables and reflow aligned with what the terminal
+// actually draws.
 int displayWidth(const std::string& s) {
     int width = 0;
     for (size_t i = 0; i < s.size();) {
@@ -311,8 +372,17 @@ int displayWidth(const std::string& s) {
             }
             continue;
         }
-        i += utf8SequenceLength(c);
-        ++width;
+        uint32_t cp;
+        size_t adv = static_cast<size_t>(decodeUtf8(s, i, cp));
+        // A pair of regional-indicator symbols (U+1F1E6..1F1FF) is one flag glyph, two cells wide —
+        // not 2+2. Consume the second indicator here so the pair counts once.
+        if (inRange(cp, 0x1F1E6, 0x1F1FF) && i + adv < s.size()) {
+            uint32_t cp2;
+            size_t adv2 = static_cast<size_t>(decodeUtf8(s, i + adv, cp2));
+            if (inRange(cp2, 0x1F1E6, 0x1F1FF)) { width += 2; i += adv + adv2; continue; }
+        }
+        i += adv;
+        width += codePointWidth(cp);
     }
     return width;
 }
@@ -1328,8 +1398,10 @@ void emitImageParagraph(const std::string& image, int rows, std::ostream& out) {
 // ---------------------------------------------------------------------------
 
 // Length in bytes of the next display "unit" at offset i: a whole ANSI CSI escape, a whole OSC 8
-// hyperlink escape, or a single UTF-8 code point. Escapes are kept intact so they are never split
-// across a line break and so they don't count toward the display width.
+// hyperlink escape, or a single grapheme — a base UTF-8 code point plus any trailing zero-width
+// followers (combining marks, variation selectors) and ZWJ-joined code points (e.g. a flag or a
+// family emoji). Keeping the grapheme intact means reflow never splits a base from its marks or
+// breaks a ZWJ emoji sequence across a line, and the unit's display width stays correct.
 size_t unitLength(const std::string& s, size_t i) {
     char c = s[i];
     if (c == kEsc && i + 1 < s.size() && s[i + 1] == '[') {  // CSI: ESC [ ... final @..~
@@ -1347,7 +1419,28 @@ size_t unitLength(const std::string& s, size_t i) {
         }
         return j - i;
     }
-    return static_cast<size_t>(utf8SequenceLength(static_cast<unsigned char>(c)));
+    // Base code point, then absorb following zero-width code points and ZWJ-joined sequences so the
+    // whole grapheme cluster travels together.
+    uint32_t cp;
+    size_t j = i + static_cast<size_t>(decodeUtf8(s, i, cp));
+    // A regional-indicator pair is one flag grapheme: take both indicators together.
+    if (inRange(cp, 0x1F1E6, 0x1F1FF) && j < s.size()) {
+        uint32_t cp2;
+        size_t adv2 = static_cast<size_t>(decodeUtf8(s, j, cp2));
+        if (inRange(cp2, 0x1F1E6, 0x1F1FF)) { cp = cp2; j += adv2; }
+    }
+    while (j < s.size()) {
+        uint32_t next;
+        size_t adv = static_cast<size_t>(decodeUtf8(s, j, next));
+        bool zwj = (cp == 0x200D);                 // previous unit ended in a zero-width joiner
+        if (codePointWidth(next) == 0 || zwj) {    // a zero-width follower, or the char after a ZWJ
+            j += adv;
+            cp = next;
+            continue;
+        }
+        break;
+    }
+    return j - i;
 }
 
 // Keep ANSI styling from bleeding across the line breaks that reflow (or table layout) introduces.

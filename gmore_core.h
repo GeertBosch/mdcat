@@ -85,9 +85,32 @@ static inline uint32_t internUri(const std::string& uri) {
 struct Cell {
     char32_t cp = U' ';
     uint16_t attr = 0;   // index into gAttrs (0 = default)
-    uint8_t width = 1;   // 1 (or 2 for wide — deferred; YAGNI)
+    uint8_t width = 1;   // display columns: 1 (normal), 2 (wide/fullwidth), 0 (wide continuation)
     uint8_t flags = 0;
+    // Trailing zero-width code points (combining marks, variation selectors, ZWJ-joined parts) that
+    // belong to this cell's grapheme cluster. Empty for the common case; non-empty keeps an emoji
+    // sequence or an accented letter rendering as one unit. A width-0 continuation cell never carries
+    // these — they hang off the wide base cell that precedes it.
+    std::u32string combine;
 };
+
+// Column width of a code point, mirrored from mdcat.cpp's codePointWidth so the pager measures text
+// exactly as the renderer laid it out. 0 = zero-width (combining/joiner/VS), 2 = wide, else 1.
+static inline int cellWidthOf(char32_t cp) {
+    auto in = [&](char32_t lo, char32_t hi) { return cp >= lo && cp <= hi; };
+    if (cp == 0) return 0;
+    if (in(0x0300, 0x036F) || in(0x1AB0, 0x1AFF) || in(0x1DC0, 0x1DFF) || in(0x20D0, 0x20FF) ||
+        in(0xFE20, 0xFE2F) || cp == 0x200B || cp == 0x200C || cp == 0x200D || cp == 0xFEFF ||
+        in(0xFE00, 0xFE0F) || in(0xE0100, 0xE01EF))
+        return 0;
+    if (in(0x1100, 0x115F) || cp == 0x2329 || cp == 0x232A || in(0x2E80, 0x303E) ||
+        in(0x3041, 0x33FF) || in(0x3400, 0x4DBF) || in(0x4E00, 0x9FFF) || in(0xA000, 0xA4CF) ||
+        in(0xAC00, 0xD7A3) || in(0xF900, 0xFAFF) || in(0xFE10, 0xFE19) || in(0xFE30, 0xFE6F) ||
+        in(0xFF00, 0xFF60) || in(0xFFE0, 0xFFE6) || in(0x1F300, 0x1F64F) || in(0x1F680, 0x1F6FF) ||
+        in(0x1F900, 0x1F9FF) || in(0x1FA70, 0x1FAFF) || in(0x20000, 0x3FFFD))
+        return 2;
+    return 1;
+}
 
 static inline void appendUtf8(std::string& out, char32_t cp) {
     if (cp < 0x80) {
@@ -422,12 +445,48 @@ struct Emulator {
     }
 
     void lfWrap() { if (cr + 1 >= H) scrollUp(); else ++cr; }
-    void lf() { cc = 0; lfWrap(); }                       // \n acts as CR+LF (no tty driver here)
+    void lf() { cc = 0; lfWrap(); haveBase = false; }     // \n acts as CR+LF (no tty driver here)
+    // The cell that the most recent base code point landed in, so a following zero-width code point
+    // (combining mark, VS, ZWJ part) can attach to its grapheme cluster instead of taking a column.
+    bool haveBase = false;
+    int baseRow = 0, baseCol = 0;
+    char32_t lastCp = 0;
+    // True only when the cursor still sits immediately after the last base cell we wrote (no motion,
+    // CR, or wrap since) — the precondition for attaching a combiner to that grapheme cluster.
+    bool atBase() const {
+        return haveBase && baseRow == cr &&
+               cc == baseCol + screen2(baseRow, baseCol) &&
+               baseCol < static_cast<int>(rows[top + baseRow].size());
+    }
+    int screen2(int r, int c) const { return rows[top + r][c].width ? rows[top + r][c].width : 1; }
     void put(char32_t cp) {
-        if (cc >= W) { cc = 0; lfWrap(); }
+        int w = cellWidthOf(cp);
+        // Zero-width follower, or any code point right after a ZWJ: glue it onto the current cluster.
+        if ((w == 0 || lastCp == 0x200D) && atBase()) {
+            screen(baseRow)[baseCol].combine.push_back(cp);
+            lastCp = cp;
+            return;
+        }
+        // A regional-indicator following another forms one flag grapheme: attach as a combiner so the
+        // pair occupies the single wide cell already written for the first indicator.
+        if (cp >= 0x1F1E6 && cp <= 0x1F1FF && lastCp >= 0x1F1E6 && lastCp <= 0x1F1FF && atBase()) {
+            screen(baseRow)[baseCol].combine.push_back(cp);
+            lastCp = cp;
+            return;
+        }
+        if (w == 0) w = 1;                                 // a stray combiner with no base: show it
+        if (cc + w > W) { cc = 0; lfWrap(); }              // a wide char won't straddle the edge
         Cell& c = screen(cr)[cc];
-        c.cp = cp; c.attr = internAttr(pen); c.width = 1;
+        c = Cell{};
+        c.cp = cp; c.attr = internAttr(pen); c.width = static_cast<uint8_t>(w);
+        baseRow = cr; baseCol = cc; haveBase = true; lastCp = cp;
         ++cc;
+        if (w == 2 && cc < W) {                            // continuation cell holds the 2nd column
+            Cell& cont = screen(cr)[cc];
+            cont = Cell{};
+            cont.cp = 0; cont.attr = internAttr(pen); cont.width = 0;
+            ++cc;
+        }
     }
     void tab() { cc = std::min(W - 1, ((cc / 8) + 1) * 8); }
     void bs() { if (cc > 0) --cc; }
@@ -682,7 +741,7 @@ struct Emulator {
         const std::vector<Cell>& L = rows[absRow];
         int last = -1;
         for (int i = 0; i < static_cast<int>(L.size()); ++i)
-            if (!(L[i].cp == U' ' && L[i].attr == 0)) last = i;
+            if (!((L[i].cp == U' ' || (L[i].cp == 0 && L[i].width == 0)) && L[i].attr == 0)) last = i;
         uint16_t cur = 0;
         uint32_t curLink = 0;
         auto emitOsc8 = [&](uint32_t linkId) {
@@ -697,11 +756,13 @@ struct Emulator {
             return A.flags == B.flags && A.fg == B.fg && A.bg == B.bg;
         };
         for (int i = 0; i <= last; ++i) {
+            if (L[i].width == 0 && L[i].cp == 0) continue;  // wide-char continuation: occupies no byte
             bool needSgr = withImages ? (L[i].attr != cur) : !visualEq(L[i].attr, cur);
             if (needSgr) { out += sgrFor(L[i].attr); cur = L[i].attr; }
             uint32_t lnk = gAttrs[cur].link;
             if (withImages && lnk != curLink) emitOsc8(lnk);
             appendUtf8(out, L[i].cp);
+            for (char32_t comb : L[i].combine) appendUtf8(out, comb);  // grapheme's combining tail
         }
         if (withImages && curLink != 0) emitOsc8(0);   // close any open hyperlink
         if (cur != 0) out += "\033[0m";
