@@ -238,6 +238,51 @@ make check   # run the test suite
 
 Produces `./mdcat` and `./gmore`.
 
+## Installation
+
+`make install` copies both binaries to `$(PREFIX)/bin` (default `/usr/local/bin`):
+
+```sh
+make install                 # installs to /usr/local/bin (may need sudo)
+sudo make install            # if /usr/local/bin is not writable
+make install PREFIX=~/.local # install somewhere on your PATH without sudo
+```
+
+To remove them again:
+
+```sh
+make uninstall               # honors the same PREFIX you installed with
+```
+
+### Use gmore as git's pager
+
+`gmore` is a drop-in pager (like `less`) that additionally understands sixel
+images and OSC 8 hyperlinks, and it passes git's colored diff/log output through
+unchanged. Point git at it with the provided target (run it after `make install`
+so `gmore` is on your `PATH`):
+
+```sh
+make install-git-pager       # git config --global core.pager gmore
+```
+
+Or configure it by hand:
+
+```sh
+git config --global core.pager gmore
+```
+
+git colorizes its output automatically when paging (its `color.ui` default is
+`auto`), so `git log`, `git show`, and `git diff` keep their colors. To force
+color even outside a pager, also set:
+
+```sh
+git config --global color.ui auto    # already the default; set explicitly if disabled
+```
+
+> **Note:** `gmore` is the pager, not `mdcat`. `mdcat` renders *Markdown*, which
+> git's diff output is not — set `core.pager` to `gmore`, and reach for `mdcat`
+> when you want to read a Markdown file (e.g. `mdcat README.md`).
+
 ## Usage examples
 
 ```sh

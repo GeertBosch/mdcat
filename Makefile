@@ -1,6 +1,10 @@
 CXX ?= c++
 CXXFLAGS ?= -std=c++17 -O2 -Wall
 
+# Where `make install` copies the binaries. Override with `make install PREFIX=~/.local`.
+PREFIX ?= /usr/local
+BINDIR ?= $(PREFIX)/bin
+
 all: mdcat gmore
 
 mdcat: mdcat.cpp highlight.cpp highlight.h gmore_core.h
@@ -39,7 +43,18 @@ check: mdcat gmore
 	done; \
 	exit $$fail
 
-clean:
-	rm -f mdcat gmore
+install: mdcat gmore
+	mkdir -p $(DESTDIR)$(BINDIR)
+	install -m 755 mdcat gmore $(DESTDIR)$(BINDIR)
+	@echo "Installed mdcat and gmore to $(DESTDIR)$(BINDIR)"
 
-.PHONY: all check clean
+uninstall:
+	rm -f $(DESTDIR)$(BINDIR)/mdcat $(DESTDIR)$(BINDIR)/gmore
+
+# Configure gmore as git's pager (global). gmore pages git's colored diff/log output natively,
+# including sixel images and OSC 8 hyperlinks. Run after `make install` so gmore is on $PATH.
+install-git-pager:
+	git config --global core.pager gmore
+	@echo "Set git's global core.pager to gmore."
+
+.PHONY: all check clean install uninstall install-git-pager
