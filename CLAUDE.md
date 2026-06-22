@@ -27,6 +27,14 @@ For stray/untracked files you didn't create (scratch output, temp files), just
 leave them be: don't commit them, don't delete them, and don't add them to
 `.gitignore`.
 
+## Demo every significant user-facing change in the README
+
+For any significant change to user-facing functionality (a new rendered element,
+a new flag, a new program behavior), add a demonstration of it to `README.md`.
+The README doubles as a live sample document — rendering it with `mdcat` should
+show the feature in action — so a new capability isn't done until it has a demo
+there.
+
 ## Canonical definition of MarkDown
 
 Refer to https://github.github.com/gfm for the specification of the MarkDown format.

@@ -138,6 +138,20 @@ $y$ with $x \leq y$, and Avogadro's number is $6.022 \times 10^{23}\,\mathrm{mol
 
 $$a^2 + b^2 = c^2 \qquad \therefore c = \sqrt{a^2 + b^2}$$
 
+### Mermaid diagrams
+
+A fenced code block tagged `mermaid` is rendered as a real diagram when the
+[mermaid CLI](https://github.com/mermaid-js/mermaid-cli) (`mmdc`) is installed
+and the terminal supports sixel graphics. Otherwise — `mmdc` missing, or a
+terminal that can't draw graphics — the block falls back to showing its source
+as an ordinary code panel, so the document is never worse off than plain text.
+
+```mermaid
+graph LR
+    parse[Parse] --> render[Render]
+    render --> output[Output]
+```
+
 ### Unicode 🌍
 
 Text is measured by *display width*, not byte or code-point count, so everything
@@ -212,6 +226,8 @@ others on screen — leaving the text's own colour intact.
 - A C++17 compiler (clang or g++)
 - [timg](https://github.com/hzeller/timg) for image rendering
 - A sixel-capable terminal for inline images (optional — falls back to text)
+- [mermaid-cli](https://github.com/mermaid-js/mermaid-cli) (`mmdc`) for mermaid
+  diagrams (optional — falls back to a code block)
 
 ## Building
 
