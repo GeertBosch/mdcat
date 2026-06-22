@@ -1488,12 +1488,12 @@ bool renderMermaidBlock(const std::vector<std::string>& lines, int availWidth, s
     // page width: a diagram whose layout is narrower than -w renders at its natural size, which on a
     // HiDPI terminal is a tiny sixel. So if the natural width is well under the available width, pick
     // a -s (Puppeteer scale) that enlarges it to roughly fill the column budget and re-render. Scale
-    // is clamped to [1,4] so a small diagram fills the width without producing an absurd sixel.
+    // is capped at 2 so a small diagram is not blown up to fill most of the screen.
     if (!runMmdc(widthOpt)) { cleanup(); return false; }
     int naturalW = pngWidth(pngPath);
     if (availPx > 0 && naturalW > 0) {
         int scale = availPx / naturalW;
-        if (scale > 4) scale = 4;
+        if (scale > 2) scale = 2;
         if (scale >= 2) {
             if (!runMmdc(widthOpt + " -s " + std::to_string(scale))) { cleanup(); return false; }
         }
