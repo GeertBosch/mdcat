@@ -1083,6 +1083,21 @@ bool readImageSize(const std::string& path) {
     return f.good();
 }
 
+// Pixel width of a PNG file, read from its IHDR chunk (a big-endian uint32 at byte offset 16, right
+// after the 8-byte signature, the 4-byte chunk length and the 4-byte "IHDR" type). Returns 0 if the
+// file is not a readable PNG. Used to learn a rendered diagram's natural size for scaling.
+int pngWidth(const std::string& path) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f.good()) return 0;
+    unsigned char h[24];
+    f.read(reinterpret_cast<char*>(h), sizeof h);
+    if (f.gcount() < static_cast<std::streamsize>(sizeof h)) return 0;
+    static const unsigned char sig[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+    for (int i = 0; i < 8; ++i)
+        if (h[i] != sig[i]) return 0;
+    return (h[16] << 24) | (h[17] << 16) | (h[18] << 8) | h[19];
+}
+
 // Whitespace test usable on signed char without the locale surprises of std::isspace.
 inline bool isSpaceCh(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
 
@@ -1417,6 +1432,10 @@ bool renderImageBlock(const std::string& text, int availWidth, std::string& out,
 // existing <img> pipeline (renderImageBlock) as an absolute path — reusing its geometry/footprint
 // and sixel-capture logic exactly. We go through a temp file rather than mmdc's `-o -` stdout mode
 // so that renderImageBlock can read the PNG's intrinsic size and width-bound it to the terminal.
+// mmdc's -w (page width) is set to the available width in device pixels. Since -w is only a maximum
+// (a diagram narrower than the page renders at its natural, often tiny, size on a HiDPI terminal),
+// we render once to measure the natural width, then re-render at a -s (scale) chosen to enlarge a
+// small diagram toward the column budget — this is what actually fixes "too small" on iTerm2.
 bool renderMermaidBlock(const std::vector<std::string>& lines, int availWidth, std::string& out,
                         int& cellWidth, int& cellHeight) {
     if (!mmdcAvailable()) return false;
@@ -1446,17 +1465,39 @@ bool renderMermaidBlock(const std::vector<std::string>& lines, int availWidth, s
 
     auto cleanup = [&] { unlink(srcPath); unlink(pngPath); };
 
-    // Run mmdc: read the source file, emit a PNG. -q suppresses its progress chatter so it never
-    // pollutes the rendered output, and stderr is discarded as a further guard.
     auto shquote = [](const char* p) {
         std::string q = "'";
         for (const char* c = p; *c; ++c) { if (*c == '\'') q += "'\\''"; else q += *c; }
         q += "'";
         return q;
     };
-    std::string cmd = "mmdc -q -i " + shquote(srcPath) + " -e png -o " + shquote(pngPath) +
-                      " >/dev/null 2>&1";
-    if (std::system(cmd.c_str()) != 0) { cleanup(); return false; }
+    auto runMmdc = [&](const std::string& opts) {
+        // -q suppresses mmdc's progress chatter so it never pollutes the rendered output; stderr is
+        // discarded as a further guard.
+        std::string cmd = "mmdc -q" + opts + " -i " + shquote(srcPath) + " -e png -o " +
+                          shquote(pngPath) + " >/dev/null 2>&1";
+        return std::system(cmd.c_str()) == 0;
+    };
+
+    // Available width in device pixels — the column budget times the real cell width. Used both as
+    // mmdc's page width (-w) and as the target the diagram is scaled up toward.
+    int availPx = availWidth > 0 ? availWidth * cellMetrics().realCellW() : 0;
+    std::string widthOpt = availPx > 0 ? " -w " + std::to_string(availPx) : std::string();
+
+    // First render at scale 1 to learn the diagram's natural pixel width. mmdc's -w is only a maximum
+    // page width: a diagram whose layout is narrower than -w renders at its natural size, which on a
+    // HiDPI terminal is a tiny sixel. So if the natural width is well under the available width, pick
+    // a -s (Puppeteer scale) that enlarges it to roughly fill the column budget and re-render. Scale
+    // is clamped to [1,4] so a small diagram fills the width without producing an absurd sixel.
+    if (!runMmdc(widthOpt)) { cleanup(); return false; }
+    int naturalW = pngWidth(pngPath);
+    if (availPx > 0 && naturalW > 0) {
+        int scale = availPx / naturalW;
+        if (scale > 4) scale = 4;
+        if (scale >= 2) {
+            if (!runMmdc(widthOpt + " -s " + std::to_string(scale))) { cleanup(); return false; }
+        }
+    }
 
     // Hand the rendered PNG to the <img> pipeline as an absolute path (so gFileDir resolution is a
     // no-op), reusing all of its geometry and sixel-capture logic.
