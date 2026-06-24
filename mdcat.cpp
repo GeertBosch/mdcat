@@ -1471,10 +1471,27 @@ bool renderMermaidBlock(const std::vector<std::string>& lines, int availWidth, s
         q += "'";
         return q;
     };
+
+    // If PUPPETEER_EXECUTABLE_PATH is not already set, probe standard macOS Chrome locations so
+    // mmdc works even when puppeteer's own chrome-headless-shell binary was not downloaded.
+    std::string chromeEnv;
+    if (!std::getenv("PUPPETEER_EXECUTABLE_PATH")) {
+        static const char* kChromePaths[] = {
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        };
+        for (const char* p : kChromePaths) {
+            if (access(p, X_OK) == 0) {
+                chromeEnv = "PUPPETEER_EXECUTABLE_PATH=" + shquote(p) + " ";
+                break;
+            }
+        }
+    }
+
     auto runMmdc = [&](const std::string& opts) {
         // -q suppresses mmdc's progress chatter so it never pollutes the rendered output; stderr is
         // discarded as a further guard.
-        std::string cmd = "mmdc -q" + opts + " -i " + shquote(srcPath) + " -e png -o " +
+        std::string cmd = chromeEnv + "mmdc -q" + opts + " -i " + shquote(srcPath) + " -e png -o " +
                           shquote(pngPath) + " >/dev/null 2>&1";
         return std::system(cmd.c_str()) == 0;
     };
