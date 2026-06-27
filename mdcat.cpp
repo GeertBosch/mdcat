@@ -169,26 +169,87 @@ int terminalWidth() {
     return std::max(1, fullTerminalWidth() - gIndent);
 }
 
-// Whether the terminal can display inline images (sixel graphics, which timg emits with -ps).
-// Determined once and cached. Many terminals, including Apple's Terminal.app, cannot render sixel;
-// painting a sixel block there leaves garbage on screen, so on those terminals an <img> falls back
-// to its alt text or filename instead (see renderImageBlock).
-//
-// There is no portable capability query that works without round-tripping an escape to the terminal
-// and reading the reply, which is fragile. Instead we use $TERM_PROGRAM, which terminal emulators
-// set to identify themselves, to exclude the ones known not to support sixel; Apple_Terminal is the
-// motivating case. When output is not a terminal at all, there is likewise nothing to draw to.
-bool terminalSupportsGraphics() {
-    static const bool supported = [] {
-        if (gForceGraphics) return true;              // --img: emit sixels even when piped
-        if (!isatty(STDOUT_FILENO)) return false;
-        if (const char* prog = std::getenv("TERM_PROGRAM")) {
-            if (std::string(prog) == "Apple_Terminal") return false;
+// The graphics protocol used to paint inline images. Kitty carries pixel data plus an explicit cell
+// footprint (so the terminal does the scaling and a remote host needn't know the local cell size);
+// Sixel is pixel-absolute and is the local fallback for terminals that lack Kitty. None means draw no
+// images at all (not a terminal, or a known text-only terminal) — an <img> falls back to its alt text.
+enum class GraphicsBackend { None, Sixel, Kitty };
+
+// Best-effort Kitty graphics capability probe: send a 1x1 RGB query graphic (a=q) over /dev/tty and
+// look for the terminal's APC reply (ESC _ G ... ; OK ESC \). Modeled on queryCellSize16t: raw mode
+// with a short timeout, over the controlling tty so it works even when stdout is piped, and — crucially
+// — echo is disabled BEFORE the query is written so a reply that races back is not echoed onto the
+// screen. Returns true only on a positive ";OK" reply. SILENCE IS INCONCLUSIVE (a terminal that does
+// not support the protocol simply ignores the query, indistinguishable from a slow/lost reply), so the
+// caller treats a false here as "unknown", not "unsupported".
+bool probeKittyGraphics() {
+    int fd = open("/dev/tty", O_RDWR | O_NOCTTY);
+    if (fd < 0) return false;
+    struct termios saved {};
+    if (tcgetattr(fd, &saved) != 0) { close(fd); return false; }
+    struct termios raw = saved;
+    raw.c_lflag &= ~static_cast<tcflag_t>(ICANON | ECHO);  // no canon, NO ECHO (set before the query)
+    raw.c_cc[VMIN] = 0;
+    raw.c_cc[VTIME] = 2;  // 0.2s between bytes before giving up
+    tcsetattr(fd, TCSANOW, &raw);
+    // 1x1 RGB pixel, action a=q (validate + reply, do not draw). "AAAA" is one black pixel.
+    static const char query[] = "\033_Gi=1,a=q,f=24,s=1,v=1;AAAA\033\\";
+    bool ok = false;
+    if (write(fd, query, sizeof query - 1) == static_cast<ssize_t>(sizeof query - 1)) {
+        std::string reply;
+        char c;
+        while (reply.size() < 64) {
+            ssize_t n = read(fd, &c, 1);
+            if (n <= 0) break;
+            reply += c;
+            if (reply.size() >= 2 && reply[reply.size() - 2] == '\033' && c == '\\') break;  // ST
         }
-        return true;
-    }();
-    return supported;
+        ok = reply.find(";OK") != std::string::npos;
+    }
+    tcsetattr(fd, TCSANOW, &saved);
+    close(fd);
+    return ok;
 }
+
+// Resolve the graphics backend once, cached for the run. Resolution order (most explicit first):
+//   1. $MDCAT_GRAPHICS=kitty|sixel|none — authoritative; works headless and forwards over SSH.
+//   2. --img (gForceGraphics): force a backend even when piped — Kitty if MDCAT_GRAPHICS didn't choose,
+//      else Sixel; kept for the `mdcat --img doc.md | gmore` pipeline.
+//   3. Not a terminal -> None (nothing to draw to).
+//   4. Env allowlist (no probe): a Kitty-capable terminal we recognize -> Kitty. KITTY_WINDOW_ID set,
+//      or TERM_PROGRAM in {ghostty, iTerm.app, vscode}. Apple_Terminal is known sixel-incapable -> None.
+//   5. Best-effort Kitty probe -> Kitty on a positive reply.
+//   6. Optimistic default: Kitty. A user running mdcat for graphics (esp. over SSH, where env often
+//      doesn't survive — e.g. VSCode Remote-SSH presents as a bare xterm) almost certainly has a
+//      Kitty-capable terminal, and Kitty degrades more gracefully than a wrong sixel guess.
+GraphicsBackend graphicsBackend() {
+    static const GraphicsBackend backend = [] {
+        if (const char* g = std::getenv("MDCAT_GRAPHICS")) {
+            std::string s(g);
+            if (s == "kitty") return GraphicsBackend::Kitty;
+            if (s == "sixel") return GraphicsBackend::Sixel;
+            if (s == "none") return GraphicsBackend::None;
+        }
+        if (gForceGraphics) return GraphicsBackend::Kitty;  // --img: default to Kitty when piped
+        if (!isatty(STDOUT_FILENO)) return GraphicsBackend::None;
+        const char* prog = std::getenv("TERM_PROGRAM");
+        std::string tp = prog ? prog : "";
+        if (tp == "Apple_Terminal") return GraphicsBackend::None;  // no sixel, no Kitty
+        if (std::getenv("KITTY_WINDOW_ID") || tp == "ghostty" || tp == "iTerm.app" || tp == "vscode")
+            return GraphicsBackend::Kitty;
+        if (probeKittyGraphics()) return GraphicsBackend::Kitty;
+        return GraphicsBackend::Kitty;  // optimistic default
+    }();
+    if (std::getenv("MDCAT_DEBUG_CELL"))
+        std::fprintf(stderr, "mdcat: graphics backend: %s\n",
+                     backend == GraphicsBackend::Kitty ? "kitty"
+                     : backend == GraphicsBackend::Sixel ? "sixel" : "none");
+    return backend;
+}
+
+// Whether any inline-image backend is available (Kitty or Sixel). When false an <img> falls back to
+// its alt text or filename. Kept as a thin predicate so existing call sites read clearly.
+bool terminalSupportsGraphics() { return graphicsBackend() != GraphicsBackend::None; }
 
 // Whether the mermaid CLI (mmdc) is on $PATH, so a ```mermaid code block can be rendered as a
 // diagram. Probed once via `command -v` and cached. When absent, mermaid blocks fall back to being
@@ -243,14 +304,16 @@ struct CellMetrics {
     int pxToRowsNominal(int px) const { return std::max(1, (px + kNominalH - 1) / kNominalH); }
 };
 
-// Kept for the CSI 16 t cell-size query reply.
-struct CellSize { int w; int h; };
-
-// Ask the terminal for its cell size with the CSI 16 t report: it replies "ESC [ 6 ; H ; W t".
-// Done over /dev/tty (not stdout) so it works even when our output is piped to a pager, and in raw
-// mode with a short timeout so the reply is not echoed, line-buffered, or able to hang us. Returns
-// {0,0} if there is no controlling terminal or it doesn't answer.
-CellSize queryCellSize16t() {
+// Send a CSI window-op report request ("ESC [ <op> t") over /dev/tty and return the terminal's reply.
+// Used for the cell-size / text-area queries (16 t, 14 t, 18 t), which all reply "ESC [ <p1> ; A ; B t".
+// Done over /dev/tty (not stdout) so it works even when our output is piped to a pager, and in raw mode
+// with echo off and a short timeout so the reply is not echoed, line-buffered, or able to hang us.
+// CRITICALLY these queries reach the LOCAL terminal even over SSH (the bytes traverse the pty), which is
+// what lets mdcat learn the local cell size remotely, where TIOCGWINSZ pixel fields are zero. Returns
+// {0,0} if there is no controlling terminal or it doesn't answer. `op` is e.g. "16" / "14" / "18"; the
+// two parsed numbers (in reply order: height-ish then width-ish) are returned as {a, b}.
+struct TwoInts { int a; int b; };
+TwoInts queryWindowOp(const char* op) {
     int fd = open("/dev/tty", O_RDWR | O_NOCTTY);
     if (fd < 0) return {0, 0};
     struct termios saved {};
@@ -260,9 +323,9 @@ CellSize queryCellSize16t() {
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 2;  // 0.2s between bytes before giving up
     tcsetattr(fd, TCSANOW, &raw);
-    static const char query[] = "\033[16t";
-    CellSize cs{0, 0};
-    if (write(fd, query, sizeof query - 1) == static_cast<ssize_t>(sizeof query - 1)) {
+    std::string query = std::string("\033[") + op + "t";
+    TwoInts out{0, 0};
+    if (write(fd, query.c_str(), query.size()) == static_cast<ssize_t>(query.size())) {
         std::string reply;
         char c;
         // Read until the report's terminating 't' (or the inter-byte timeout). The reply is short.
@@ -272,28 +335,56 @@ CellSize queryCellSize16t() {
             reply += c;
             if (c == 't') break;
         }
-        // Parse "ESC [ 6 ; <height> ; <width> t". sscanf skips the ESC/[ for us via the literal.
-        int h = 0, w = 0;
-        if (std::sscanf(reply.c_str(), "\033[6;%d;%dt", &h, &w) == 2 && w > 0 && h > 0)
-            cs = {w, h};
+        // Parse "ESC [ <p1> ; <a> ; <b> t". sscanf skips the ESC/[ and p1 for us.
+        int p1 = 0, a = 0, b = 0;
+        if (std::sscanf(reply.c_str(), "\033[%d;%d;%dt", &p1, &a, &b) == 3 && a > 0 && b > 0)
+            out = {a, b};
     }
     tcsetattr(fd, TCSANOW, &saved);
     close(fd);
-    return cs;
+    return out;
 }
 
-// Cached cell metrics for the run. Preference order: the kernel's text-area pixels + cell counts
-// (TIOCGWINSZ ws_xpixel/ws_ypixel with ws_col/ws_row) — this gives the precise area ratio used for
-// exact pixel->cell conversion; then the CSI 16 t cell-size query as an integer fallback; then a
-// typical default. Only consulted when an image is actually rendered, so non-image documents never
-// pay for the query.
+// Read a positive integer from an environment variable, or 0 if unset/non-positive.
+int envInt(const char* name) {
+    if (const char* v = std::getenv(name)) {
+        int n = std::atoi(v);
+        if (n > 0) return n;
+    }
+    return 0;
+}
+
+// Cached cell metrics for the run. Preference order:
+//   1. $MDCAT_CELL_W/H and $MDCAT_AREA_W/H overrides — explicit, work headless and forward over SSH.
+//   2. The kernel's text-area pixels + cell counts (TIOCGWINSZ ws_xpixel/ws_ypixel with ws_col/ws_row)
+//      — the precise area ratio for exact pixel<->cell conversion. Zero over SSH (not forwarded).
+//   3. The CSI terminal queries, which reach the LOCAL terminal even over SSH: CSI 18 t (area in cells)
+//      + CSI 14 t (area in pixels) together give the same precise area ratio remotely; CSI 16 t gives
+//      the integer cell size. We take whatever subset answers.
+//   4. Typical defaults.
+// Only consulted when an image is actually rendered, so non-image documents never pay for the queries.
 CellMetrics cellMetrics() {
     static const CellMetrics m = [] {
+        CellMetrics c;
+        // 1. Explicit env overrides (any subset).
+        c.cellW = envInt("MDCAT_CELL_W") ? envInt("MDCAT_CELL_W") : c.cellW;
+        c.cellH = envInt("MDCAT_CELL_H") ? envInt("MDCAT_CELL_H") : c.cellH;
+        if (envInt("MDCAT_AREA_W") && envInt("MDCAT_AREA_H")) {
+            c.areaW = envInt("MDCAT_AREA_W");
+            c.areaH = envInt("MDCAT_AREA_H");
+        }
+        if (c.areaW > 0 || envInt("MDCAT_CELL_W")) {
+            // An override was given; trust it and skip the queries.
+            if (std::getenv("MDCAT_DEBUG_CELL"))
+                std::fprintf(stderr, "mdcat: cell metrics (env): area=%dx%d cell=%dx%d\n",
+                             c.areaW, c.areaH, c.cellW, c.cellH);
+            return c;
+        }
+        // 2. Kernel window size with pixel fields (best when local).
         for (int fd : {STDOUT_FILENO, STDERR_FILENO, STDIN_FILENO}) {
             struct winsize ws;
             if (ioctl(fd, TIOCGWINSZ, &ws) == 0 && ws.ws_xpixel > 0 && ws.ws_ypixel > 0 &&
                 ws.ws_col > 0 && ws.ws_row > 0) {
-                CellMetrics c;
                 c.areaW = ws.ws_xpixel;
                 c.areaH = ws.ws_ypixel;
                 c.cols = ws.ws_col;
@@ -303,9 +394,19 @@ CellMetrics cellMetrics() {
                 return c;
             }
         }
-        CellSize q = queryCellSize16t();
-        CellMetrics c;
-        if (q.w > 0 && q.h > 0) { c.cellW = q.w; c.cellH = q.h; }  // area ratio stays unknown
+        // 3. Terminal queries (reach the local terminal over SSH). CSI 14 t (area px) + CSI 18 t (area
+        //    cells) give the precise area ratio; CSI 16 t gives the integer cell size as a backstop.
+        TwoInts area = queryWindowOp("14");   // ESC [ 4 ; H ; W t
+        TwoInts cells = queryWindowOp("18");  // ESC [ 8 ; rows ; cols t
+        if (area.a > 0 && area.b > 0 && cells.a > 0 && cells.b > 0) {
+            c.areaH = area.a; c.areaW = area.b;
+            c.rows = cells.a; c.cols = cells.b;
+            c.cellW = std::max(1, c.areaW / c.cols);
+            c.cellH = std::max(1, c.areaH / c.rows);
+            return c;
+        }
+        TwoInts cell = queryWindowOp("16");   // ESC [ 6 ; H ; W t
+        if (cell.a > 0 && cell.b > 0) { c.cellH = cell.a; c.cellW = cell.b; }  // area ratio stays unknown
         return c;  // else the {8,16} struct defaults
     }();
     if (std::getenv("MDCAT_DEBUG_CELL"))
