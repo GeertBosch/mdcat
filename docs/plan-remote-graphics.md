@@ -7,16 +7,22 @@ state.
 
 ## Guiding constraints (all probe-verified — do not relitigate)
 
-- **PNG bypasses timg** on the Kitty path: read the `.png`, wrap in a Kitty APC.
-  timg (`-pk`) is used **only** for JPEG/GIF/SVG → Kitty PNG. Sixel path unchanged.
+- **Keep timg for all formats including PNG.** mdcat runs `timg -pk -g<cols>x<rows>`,
+  which downscales with proper interpolation and emits a well-formed, chunked Kitty
+  APC (`a=T,q=2,f=100` + `q=2,m=` continuations). mdcat only **rewrites the `i=` on
+  the first chunk** to a unique id; no PNG reading/chunking/base64 in mdcat. (Passing
+  a native-size PNG and letting the terminal scale via `c=`/`r=` was rejected: VSCode
+  scales without anti-aliasing → aliased output. If we ever drop timg we must do our
+  own interpolated downscale first.) Sixel path unchanged (`timg -ps`).
 - **Unique image id per image** (timg reuses `i=`; a colliding `a=T` re-lays the
   prior placement). Use transmit-once `a=t` + placement `a=p` in gmore.
 - **`q=2` on every** command — transmit, placement, **and every chunked
-  continuation** (`m=` chunks also reply `;OK` without it; the last chunk leaks).
-- **Aspect ratio:** cells are not square (~7×16 px), so derive `c`/`r` from
-  `imageW/cellW` and `imageH/cellH` (the `cellMetrics` area ratio) and scale
-  uniformly to the column budget — never hardcode a `c:r`. A wrong ratio stretches
-  the image (square→rectangle). The sixel path already does this; mirror it.
+  continuation** (`m=` chunks also reply `;OK` without it). timg already does this
+  for its own output; gmore's hand-built `a=p` placements must set it explicitly.
+- **Aspect ratio:** timg's `-g<cols>x<rows>` preserves aspect when it downscales, so
+  the mdcat path inherits correct AR for free. gmore's crop placements still compute
+  `c`/`r` from the (already-downscaled) PNG's `imageW/cellW`, `imageH/cellH` via the
+  `cellMetrics` area ratio — cells are not square (~7×16 px), so never hardcode `c:r`.
 - **`c=`/`r=` is mandatory** to size the image (the terminal scales; we never rely
   on timg `-g`, which it ignores for Kitty).
 - **Byte-exact** Kitty/PNG stream handling — never line-oriented edits.
@@ -45,31 +51,31 @@ state.
 3. Commit. No output change yet; verify via `MDCAT_DEBUG_CELL` and a debug print of
    the chosen backend.
 
-## Phase 1 — Kitty encoder for mdcat `<img>` + mermaid
+## Phase 1 — Kitty output for mdcat `<img>` + mermaid
 
-1. `std::string kittyImage(const std::string& pngBytes, int cols, int rows, uint32_t id)`:
-   base64-encode, chunk at 4096, emit `a=T,f=100,q=2,i=<id>,c=<cols>,r=<rows>` with
-   `m=1`…`m=0`. Allocate `id` from a per-run counter (unique).
-2. In `renderImageBlock`, branch on backend:
-   - **Kitty + source is PNG:** read the file bytes directly (no timg), compute
-     `cols`/`rows` from intrinsic size (PNG IHDR via existing `pngWidth`, add
-     `pngHeight`) and `cellMetrics`, honoring `width`/`height`/`forceWidthBound` as
-     today. Emit via `kittyImage`.
-   - **Kitty + non-PNG (jpg/gif/svg):** `timg -pk` → it yields a Kitty PNG APC;
-     rewrite its `i=` to our unique id and inject `c=`/`r=` (byte-exact), or decode
-     its base64 and re-wrap via `kittyImage`. (Prefer re-wrap for one code path.)
-   - **Sixel:** unchanged (`timg -ps`).
-3. mermaid: `renderMermaid` already produces a temp `.png`; on the Kitty backend,
-   wrap it with `kittyImage` instead of routing through the sixel `renderImageBlock`.
-4. Footprint: on the Kitty path we *set* `c`/`r`, so the reserved cell box is known
-   directly (no sixel read-back).
+1. `runTimgKitty(path, geom)`: like the existing `runTimg` but `-pk` instead of
+   `-ps`. Returns timg's chunked Kitty APC bytes.
+2. `kittyRewriteId(bytes, id)`: byte-exact rewrite of the `i=` value on the first
+   `ESC_G` controls segment to a unique per-run id (`s/i=\d+/i=<id>/` on first match
+   only). No other edits — timg already sets `q=2`, `f=100`, chunking.
+3. In `renderImageBlock`, branch on backend:
+   - **Kitty:** compute the `-g<cols>x<rows>` box exactly as the sixel path does
+     today (intrinsic size via `pngWidth`/add `pngHeight`, `cellMetrics`,
+     `width`/`height`/`forceWidthBound`); `runTimgKitty` → `kittyRewriteId` → emit.
+     The footprint (reserved cells) is the `cols`/`rows` we requested. Works for
+     PNG/JPEG/GIF/SVG uniformly (timg decodes + interpolated-downscales all).
+   - **Sixel:** unchanged (`runTimg -ps`).
+4. mermaid: `renderMermaid` already produces a temp `.png`; route it through the same
+   `renderImageBlock` Kitty branch (it's just another image file).
 5. README demo + commit.
 
 ## Phase 2 — gmore Kitty ingest + scroll-clip
 
 1. Parse Kitty APCs from the mdcat stream into the image layer: record
    `{id, row, col, Pw, Pv (from PNG IHDR), footCols, footRows, pngBytes}`. No raster
-   decode.
+   decode. (Pw,Pv is timg's already-downscaled size, e.g. 225×221 — exactly the right
+   source dimensions for the crop, since placements crop *that* transmitted PNG.)
+   Reassemble chunked APCs (`m=1`…`m=0`) before parsing the IHDR.
 2. On first paint of an image: transmit once (`a=t,f=100,q=2,i=<id>` + chunked PNG).
 3. Paint visible band with a placement (`a=p,q=2,i=<id>` + source crop `x,y,w,h` +
    `c,r`), per the clip math:

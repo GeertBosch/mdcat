@@ -86,19 +86,34 @@ episode shows that **not probing when we already know the terminal is the safest
 path**, hence the allowlist short-circuit. The probe timeout stays short — latency
 is not the failure mode.
 
-### 4. Keep `timg`; pass its PNG through verbatim — gmore needs no PNG decoder
+### 4. Keep `timg` for ALL formats (incl. PNG); let timg scale — gmore needs no PNG decoder
 
-To limit scope we keep using `timg`, invoked as `timg -pk` (Kitty output).
+We keep `timg` as the decoder/scaler for **every** format, invoked as
+`timg -pk -g<cols>x<rows>` (Kitty output, into an aspect-preserving cell box).
 
-**Verified facts** (probed 2026-06-27): `timg -pk` emits a Kitty APC
-`ESC _ G a=T,…,f=100,m=0 ; <base64> ESC \` whose payload is a **PNG (`f=100`)**,
-not raw RGB — and the PNG's IDAT is **DEFLATE-compressed** (BTYPE=2). `--compress`
-controls only the outer transport zlib, not the inner PNG. `-g` is ignored for
-Kitty when stdout is not a tty (timg emits native pixels; the terminal does the
-cell fit). So the earlier assumption that timg emits *uncompressed* PNG is false.
+**Why timg does the scaling (not the terminal).** An earlier draft had mdcat pass a
+*native-size* PNG and let the terminal scale it via `c=`/`r=`. Rejected after probing:
+**VSCode's terminal scales without anti-aliasing**, producing visibly aliased output
+(ghostty and iTerm2 looked fine, but VSCode did not). `timg` downscales with proper
+interpolation, so we let it. If we ever drop timg we must implement our own
+interpolated downscale first.
 
-Rather than inflate DEFLATE, mdcat/gmore **pass timg's PNG through verbatim** and
-let the terminal decode it. The Kitty protocol's
+**Verified facts** (probed 2026-06-27): `timg -pk -g WxH` emits a Kitty APC
+`ESC _ G a=T,…,q=2,f=100,m=… ; <base64> ESC \` whose payload is a **PNG (`f=100`)**.
+With `-g` it **downscales** the image (e.g. 850×836 → 225×221 for `-g25x25`) with
+interpolation, even headless/piped, and **chunks** the output (`m=1`…`m=0`, `q=2` on
+every chunk). `timg -pk` **requires** `-g` when headless. (An earlier note that timg
+"ignores `-g`" was wrong — it was observed on a 64×64 image that already fit the box,
+so no downscale occurred.) The inner PNG's IDAT is DEFLATE-compressed; `--compress`
+affects only the outer transport zlib.
+
+**The mdcat Kitty path is therefore tiny:** run `timg -pk -g<cols>x<rows>`, capture
+the bytes, and **rewrite only the `i=` on the first chunk** to a unique per-run id
+(byte-exact). timg already sets `q=2`, `f=100`, and correct chunking. No PNG reading,
+base64, or chunking logic in mdcat. One path for PNG/JPEG/GIF/SVG/mermaid.
+
+gmore in turn **passes timg's (already-downscaled) PNG through verbatim** — it never
+inflates DEFLATE or decodes a raster. The Kitty protocol's
 display-a-transmitted-image-cropped primitive makes this sufficient even for a
 partially-scrolled image in gmore:
 
