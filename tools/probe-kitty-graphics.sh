@@ -6,52 +6,49 @@
 # (TIOCGWINSZ ws_xpixel/ypixel is 0). The Kitty protocol lets us send pixel data
 # plus an explicit cell footprint (c=cols, r=rows), so the LOCAL terminal scales
 # the image to fit and we never need the remote px size. This probe proves (or
-# disproves) three things mdcat's remote-graphics plan depends on:
+# disproves) the assumptions mdcat's remote-graphics plan (ADR 0002) depends on.
 #
-#   1. CAPABILITY QUERY: send a Kitty "query" graphic (a=q). A supporting
-#      terminal replies with an APC string  ESC _ G i=<id>;OK ESC \  (or ;E...).
-#      Silence = no support OR slow link (can't tell which — see the plan).
-#   2. BASIC TRANSMIT+DISPLAY: transmit a tiny RGB image inline (f=24, direct
-#      base64 RGB, one chunk) and display it (a=T). You should SEE a colored
-#      square. This is the minimal "can it draw at all" check.
-#   3. CELL-BASED SIZING: display the SAME image forced into a known cell box
-#      (c=COLS, r=ROWS). You should see it scaled to exactly that many cells,
-#      independent of the image's pixel size. THIS is the property that makes
-#      remote layout possible.
+# METHOD: we drive everything off `timg -pk`, which already emits a working Kitty
+# APC ( ESC _ G a=T,...,f=100,m=...; <base64 PNG> ESC \ ). That is the EXACT path
+# mdcat will use, so the probe tests reality, not a hand-rolled payload. For the
+# cell-sizing test we take timg's APC and INJECT c=/r= into its control keys —
+# proving mdcat can size a passed-through PNG purely in cells.
 #
-# How to read it: the script prints the raw query reply (ESC shown literally),
-# then draws two squares. Take a screenshot. Report: (a) did the query reply
-# contain ";OK"? (b) did square #2 appear? (c) did square #3 occupy ~COLSxROWS
-# cells regardless of its pixels? Also note your terminal + whether over SSH.
+# Checks:
+#   1. CAPABILITY QUERY (a=q): a supporting terminal replies ESC _ G i=..;OK ESC \.
+#      Silence = no support OR slow link (can't tell which — see ADR 0002).
+#   2. BASIC DISPLAY: timg -pk as-is. You should SEE the source image.
+#   3. CELL-BASED SIZING: same timg PNG, but with c=COLS,r=ROWS injected. You
+#      should see it scaled to ~COLSxROWS CELLS regardless of its pixels. THIS is
+#      the property that makes remote layout possible (ADR 0002 validation gate).
+#
+# How to read it: screenshot it. Report (a) query reply contained ";OK"? (b) did
+# image #2 appear? (c) did image #3 occupy ~COLSxROWS cells? + terminal + SSH?.
 
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$dir/probe-common.sh"
 [ -t 1 ] || { echo "stdout is not a TTY; run this directly in a terminal" >&2; exit 1; }
+command -v timg >/dev/null 2>&1 || { echo "timg not found in PATH" >&2; exit 1; }
+[ -f "$PROBE_PNG" ] || { echo "PROBE_PNG not found: $PROBE_PNG" >&2; exit 1; }
 
 APC_START="${ESC}_G"
 APC_END="${ESC}\\"
 
-# Build a base64 payload of a solid WxH RGB image (f=24 = 24-bit RGB, no alpha).
-# Colors chosen bright so the square is obvious. Pure shell + printf + base64.
-solid_rgb_b64() {  # $1=w $2=h $3=R $4=G $5=B
-    _w=$1; _h=$2; _r=$3; _g=$4; _b=$5
-    _n=$(( _w * _h ))
-    # Emit _n RGB triplets as raw bytes, then base64 (no line wrapping).
-    {
-        _i=0
-        while [ "$_i" -lt "$_n" ]; do
-            printf '\\%03o\\%03o\\%03o' "$_r" "$_g" "$_b"
-            _i=$(( _i + 1 ))
-        done
-    } | while IFS= read -r line; do printf "$line"; done | base64 | tr -d '\n'
-}
+# timg -pk needs an explicit -g geometry unless it can read the terminal size; we
+# always pass one (as mdcat will) so the probe is robust on any stdout. The
+# terminal still does the final cell fit, and for test #3 we override with c=/r=.
+TIMG_PK="timg -pk -g24x24"
 
 banner "1. Kitty capability query (a=q)"
-echo "Sending a 1x1 query graphic; a Kitty-capable terminal replies with an APC string."
-# Transmit a 1x1 RGB pixel as a query (a=q): terminal should respond OK/E without drawing.
-q_b64=$(solid_rgb_b64 1 1 255 0 0)
-printf '%s' "${APC_START}i=31,a=q,f=24,s=1,v=1,t=d;${q_b64}${APC_END}" > /dev/tty
-# Read the reply from /dev/tty (APC ... ST). Show ESC literally.
+echo "Sending a transmit+query; a Kitty-capable terminal replies with an APC string."
+# Use timg to make a real PNG payload, then turn its 'a=T' into 'a=q' (query only:
+# the terminal validates + replies ;OK/;E without drawing). This reuses a payload
+# the terminal is known to accept rather than hand-building one.
+qtmp=$(mktemp 2>/dev/null || echo /tmp/probe-kq.$$)
+$TIMG_PK "$PROBE_PNG" > "$qtmp" 2>/dev/null
+# Rewrite the first control segment: a=T -> a=q. (Controls are between ESC_G and ';'.)
+LC_ALL=C sed 's/a=T/a=q/' "$qtmp" > /dev/tty
+rm -f "$qtmp"
 reply=""
 to=2
 while IFS= read -r -s -t "$to" -n 1 c < /dev/tty 2>/dev/null; do
@@ -59,8 +56,7 @@ while IFS= read -r -s -t "$to" -n 1 c < /dev/tty 2>/dev/null; do
     case "$c" in
         "$ESC") reply="${reply}ESC" ;;
         "") ;;
-        '\') reply="${reply}\\"; case "$reply" in *ESC'\') break;; esac ;;
-        *) reply="${reply}${c}" ;;
+        *) reply="${reply}${c}"; case "$reply" in *ESC'\') break;; esac ;;
     esac
 done
 printf '\nRAW QUERY REPLY: [%s]\n' "$reply"
@@ -71,20 +67,31 @@ case "$reply" in
     *)       echo "=> Unexpected reply; inspect the raw bytes above." ;;
 esac
 
-banner "2. Basic transmit + display (a=T, native pixels)"
-echo "You should see a 32x32 GREEN square below:"
-g_b64=$(solid_rgb_b64 32 32 0 200 0)
-printf '%s' "${APC_START}i=32,a=T,f=24,s=32,v=32,t=d;${g_b64}${APC_END}"
+banner "2. Basic display (timg -pk, as mdcat would emit it)"
+echo "You should see the source image ($PROBE_PNG) below:"
+$TIMG_PK "$PROBE_PNG" 2>/dev/null
 printf '\n'
+
+# Inject one or more control keys into a timg -pk APC: insert "<keys>," right
+# after the "ESC_G" so they precede timg's own a=T,... controls (timg does NOT
+# emit c=/r= itself, so there's no conflict). Kitty reads the whole comma list up
+# to ';'. Done with awk on the raw bytes (binary-safe: the base64 body has no
+# ESC/NUL). This is exactly how mdcat will add a cell footprint to timg's PNG.
+inject_keys() {  # $1=png  $2=keys e.g. "c=10,r=4"
+    $TIMG_PK "$1" 2>/dev/null | LC_ALL=C awk -v k="$2" '
+        { n=index($0,"\033_G");
+          if (n>0) { printf "%s\033_G%s,%s", substr($0,1,n-1), k, substr($0,n+3) }
+          else printf "%s", $0 }'
+}
 
 banner "3. Cell-based sizing (c=COLS,r=ROWS) — the remote-layout property"
 COLS=10; ROWS=4
-echo "You should see a 16x16 BLUE source image scaled to ~${COLS}x${ROWS} CELLS"
-echo "(NOT 16x16 px). If it fills ${COLS}x${ROWS} cells, remote sizing works:"
-b_b64=$(solid_rgb_b64 16 16 0 80 255)
-printf '%s' "${APC_START}i=33,a=T,f=24,s=16,v=16,c=${COLS},r=${ROWS},t=d;${b_b64}${APC_END}"
+echo "Same timg PNG, but with c=${COLS},r=${ROWS} injected. You should see it"
+echo "scaled to ~${COLS}x${ROWS} CELLS (NOT its native pixel size). If so, remote"
+echo "sizing works and ADR 0002's core premise holds:"
+inject_keys "$PROBE_PNG" "c=${COLS},r=${ROWS}"
 printf '\n'
 
 banner "DONE"
-echo "Report: query reply (;OK?), square #2 visible?, square #3 size in cells?,"
+echo "Report: query reply (;OK?), image #2 visible?, image #3 size in cells?,"
 echo "your terminal name, and whether this ran over SSH (\$SSH_CONNECTION=${SSH_CONNECTION:-unset})."
