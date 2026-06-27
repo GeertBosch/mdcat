@@ -83,6 +83,43 @@ check "search near"      "/4${nl}q"  1   # "4" first matches line 4, within page
 # Quit at the first screen: nothing moves, no RIS.
 check "no move"          'q'         0
 
+# --- Kitty image re-transmit on repaint ---------------------------------------
+# RIS (ESC c) makes the terminal FORGET every transmitted Kitty image, so each
+# full repaint must RE-TRANSMIT the image data (a=t chunk) before re-placing it
+# (a=p crop). Before the fix, gmore tracked transmissions in a set that survived
+# RIS, so a repaint emitted only an a=p referencing an id the terminal no longer
+# had — the image vanished on every backward/jump/search move while plain forward
+# scrolling (no RIS) kept it. A re-transmit happens on each RIS repaint in which
+# the image is actually VISIBLE (an off-screen image needs neither transmit nor
+# placement), so the telling case is returning to a view that shows the image.
+b64="iVBORw0KGgoAAAANSUhEUgAAABAAAAAgCAIAAACU62+bAAAAHUlEQVR4nGP4z8BAEiJN9aiGUQ2jGkY1jGoYohoAP8T+EE3PqSIAAAAASUVORK5CYII="
+printf '\033_Gi=7,a=T,f=100,m=0;%s\033\\\n' "$b64" > "$tmp/kin"
+seq 1 50 >> "$tmp/kin"
+count_tx() { grep -aoE 'a=t,' | wc -l | tr -d ' '; }
+
+# kcheck LABEL KEYS EXPECTED_TRANSMITS — render with a Kitty image, assert the
+# number of a=t (re)transmissions.
+kcheck() {
+    label=$1; keys=$2; want=$3
+    got=$(GMORE_KEYS="$keys" LINES=6 COLUMNS=20 GMORE_CELLW=8 GMORE_CELLH=16 \
+          "$gmore" "$tmp/kin" 2>"$tmp/err" | count_tx)
+    if [ "$got" = "$want" ]; then
+        n=$((n + 1))
+    else
+        echo "gmore-repaint: FAIL [$label] keys='$keys'" >&2
+        echo "  expected a=t transmits: $want" >&2
+        echo "  actual a=t transmits:   $got" >&2
+        [ -s "$tmp/err" ] && { echo "  stderr:" >&2; sed 's/^/    /' "$tmp/err" >&2; }
+        fails=$((fails + 1))
+    fi
+}
+
+kcheck "kitty no move"      'q'    1   # initial transmit only, no RIS
+kcheck "kitty fwd advance"  'jq'   1   # forward append: no RIS, no re-transmit
+kcheck "kitty jump off G"   'Gq'   1   # RIS, but image is off-screen: nothing to send
+kcheck "kitty back to top"  'Ggq'  2   # g returns to the image's view: re-transmit
+kcheck "kitty page back"    'fbq'  2   # backward RIS repaint with image visible
+
 if [ "$fails" -eq 0 ]; then
     echo "gmore-repaint: OK ($n cases)"
     exit 0

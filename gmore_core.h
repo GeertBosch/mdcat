@@ -544,6 +544,12 @@ struct Emulator {
     // ONCE (its data chunks), then displayed by id with cheap crop placements on every (re)paint
     // and scroll. Mutable because painting is logically const but must remember what it has sent.
     mutable std::set<uint32_t> kittyTransmitted;
+    // RIS (ESC c, the full repaint wipe) makes the terminal forget every transmitted
+    // Kitty image, so the next paint must re-transmit the data before placing it again.
+    // Callers that issue RIS must call this so paintImageBand re-sends instead of
+    // emitting an a=p crop that references an id the terminal no longer has (which
+    // renders nothing — the repaint-loses-images bug).
+    void forgetKittyTransmissions() const { kittyTransmitted.clear(); }
     size_t top = 0;          // absolute index of screen row 0
     int cr = 0, cc = 0;      // cursor, screen-relative
     Attr pen;                // current pen
@@ -1356,7 +1362,9 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
             const Image& I = em.images[k];
             int cols = (I.Ph + cellW - 1) / cellW, rws = (I.Pv + cellH - 1) / cellH;
             std::printf("image %zu @%zu,%d %dx%dpx %dx%dcells\n", k + 1, I.row, I.col, I.Ph, I.Pv, cols, rws);
-            if (I.Ph <= 40 && I.Pv <= 40) {       // small enough to show as ASCII
+            // ASCII raster only for sixels: Kitty images keep no decoded px raster
+            // (they're transmitted verbatim), so I.px is empty — indexing it would crash.
+            if (!I.isKitty() && I.Ph <= 40 && I.Pv <= 40) {  // small enough to show as ASCII
                 for (int y = 0; y < I.Pv; ++y) {
                     std::string line;
                     for (int x = 0; x < I.Ph; ++x) line += I.px[(size_t)y * I.Ph + x] ? '#' : '.';
@@ -1616,6 +1624,7 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
     auto repaint = [&] {
         size_t vBot = std::min(total, viewTop + (size_t)pageH);
         std::fputs("\033c", stdout);
+        em.forgetKittyTransmissions();   // RIS dropped the terminal's Kitty images; re-send them
         for (int i = 0; i < pageH; ++i) traceRow(viewTop + (size_t)i, i);
         paintWindow(viewTop, pageH, vBot);
     };
