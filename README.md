@@ -65,10 +65,18 @@ Image paths are resolved relative to the markdown file's directory.
 
 Over SSH, mdcat detects the local terminal's capabilities through the pty, and
 defaults to the Kitty protocol when it cannot tell (e.g. VSCode Remote-SSH, where
-the terminal identity isn't forwarded). Override the choice with
-`MDCAT_GRAPHICS=kitty|sixel|none`. If a remote session can't query the local cell
-size, supply it with `MDCAT_CELL_W` / `MDCAT_CELL_H` (and optionally
-`MDCAT_AREA_W` / `MDCAT_AREA_H`) — e.g. forward them with `ssh -o SendEnv=MDCAT_*`.
+the terminal identity isn't forwarded).
+
+**Forcing a protocol.** Two equivalent escape hatches pin the graphics backend
+to `kitty`, `sixel`, or `none` (text-only): the `--img` flag with a protocol
+argument (`mdcat --img sixel doc.md`) or the `MDCAT_GRAPHICS` environment
+variable (`MDCAT_GRAPHICS=sixel mdcat doc.md`). The flag is handy ad hoc; the
+env var forwards over SSH with `ssh -o SendEnv=MDCAT_*`. Either overrides
+auto-detection.
+
+If a remote session can't query the local cell size, supply it with
+`MDCAT_CELL_W` / `MDCAT_CELL_H` (and optionally `MDCAT_AREA_W` / `MDCAT_AREA_H`)
+— e.g. forward them with `ssh -o SendEnv=MDCAT_*`.
 
 ### Block quotes
 
@@ -195,13 +203,14 @@ Renders Markdown to the terminal with ANSI styling, inline images (Kitty or
 sixel graphics), and OSC 8 hyperlinks.
 
 ```
-mdcat [--width N] [--img] [--] [file ...]
+mdcat [--width N] [--img[=kitty|sixel|none]] [--] [file ...]
 ```
 
 | Flag | Description |
 | ---- | ----------- |
 | `--width N` / `-w N` | Force render width in columns (overrides `$COLUMNS` and terminal size) |
 | `--img` | Emit image output even when stdout is not a TTY (for piping into gmore) |
+| `--img <kitty\|sixel\|none>` | As `--img`, but also force the graphics protocol (`none` = text only). Same effect as `MDCAT_GRAPHICS`. Accepts `--img sixel` or `--img=sixel` |
 | `--` | End option parsing (allows filenames starting with `-`) |
 
 | Environment | Description |
@@ -221,8 +230,23 @@ band on every scroll with a cheap crop placement — no per-scroll re-encode —
 scrolling stays smooth and images render correctly over SSH.
 
 ```
-gmore [--dump] [--dump-images] [file]
+gmore [--dump | --dump-images | --imginfo] [file]
 ```
+
+Reads stdin when given no file (or `-`). gmore does not choose a graphics
+protocol itself: it replays whatever image bytes are in the stream (sixel or
+Kitty, detected per image), so the protocol is whatever `mdcat` emitted — pick it
+on the `mdcat` side with `--img <proto>` or `MDCAT_GRAPHICS`.
+
+| Flag | Description |
+| ---- | ----------- |
+| `--dump` | Render the text grid to stdout with no images (deterministic, for testing) |
+| `--dump-images` | Render text plus re-encoded sixel image strips (render testing) |
+| `--imginfo` | Print decoded image metadata (anchor, pixel size, cell footprint) and ASCII rasters |
+
+| Environment | Description |
+| ----------- | ----------- |
+| `GMORE_CELLW` / `GMORE_CELLH` | Terminal cell size in pixels, for sizing images when the kernel can't report it |
 
 | Key | Action |
 | --- | ------ |
@@ -313,5 +337,15 @@ git config --global color.ui auto    # already the default; set explicitly if di
 ./mdcat README.md                        # render a file
 ./mdcat --width 80 README.md             # force width
 ./mdcat --img README.md | ./gmore        # explicit pager
+./mdcat --img sixel README.md            # force the sixel protocol
+./mdcat --img none README.md             # text only, no graphics
 curl -s https://example.com/doc.md | ./mdcat   # render stdin
+```
+
+Over SSH the images render in your **local** terminal via the Kitty protocol — no
+local-terminal setup on the remote host:
+
+```sh
+ssh host mdcat doc.md                     # Kitty graphics over the pty
+ssh -o SendEnv=MDCAT_* host mdcat doc.md  # forward MDCAT_GRAPHICS / MDCAT_CELL_* overrides
 ```
