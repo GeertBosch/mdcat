@@ -51,13 +51,23 @@ state.
 3. Commit. No output change yet; verify via `MDCAT_DEBUG_CELL` and a debug print of
    the chosen backend.
 
-## Phase 1 — Kitty output for mdcat `<img>` + mermaid ✅ DONE
+## Phase 1 — Kitty output for mdcat `<img>` + mermaid ✅ DONE (verified on iTerm2)
 
-(Implementation note: also generalized the image-placement gate from
-`isSixelImage` to `isImageBlock` so Kitty images flow through the paragraph,
-table-cell, and mermaid emit paths; `replaySixel`/`emitImageParagraph` already
-work for both protocols since neither moves the cursor predictably. gmore-side
-Kitty ingest + scroll-clip remains Phase 2.)
+Implementation notes:
+- Generalized the image-placement gate from `isSixelImage` to `isImageBlock` so
+  Kitty images flow through the paragraph, table-cell, and mermaid emit paths;
+  `replaySixel`/`emitImageParagraph` already work for both protocols since neither
+  moves the cursor predictably.
+- Strip timg's own cursor management (`ESC[?25l`/`ESC[?25h` + trailing newline)
+  from the captured Kitty output so mdcat positions the image itself.
+- **Atomic output write (the load-bearing fix):** render into a buffer and write
+  the whole document to stdout with a single retrying `write()` loop. `std::cout`'s
+  ~8KB buffer was flushing mid-image, splitting a Kitty chunk across two writes; a
+  live consumer then dumped the partial base64 as text. Symptom only appeared with
+  multi-chunk images streamed live (`mdcat … | cat`), never when the bytes were
+  captured to a file — the bytes were always correct.
+
+gmore-side Kitty ingest + scroll-clip remains Phase 2.
 
 1. `runTimgKitty(path, geom)`: like the existing `runTimg` but `-pk` instead of
    `-ps`. Returns timg's chunked Kitty APC bytes.
