@@ -53,40 +53,41 @@ echo "-- some terminals/links don't answer; sections 2-3 are the real capability
 # action a=q (validate + reply, don't draw). The base64 'AAAA' is 3 zero bytes =
 # one black pixel; using a fixed constant avoids fragile shell binary generation.
 #
-# READING THE REPLY PORTABLY: byte-at-a-time `read -n1 -t` is a bash/zsh extension.
-# A POSIX /bin/sh (e.g. dash, as on Debian/Ubuntu over SSH) IGNORES -n/-t, so it
-# blocks for a whole LINE — but a Kitty reply has no newline, so the reply is never
-# captured and later LEAKS onto the screen (observed on ghostty/Orbstack over SSH).
-# `head -c` is no good either (also blocks). So we use `dd` with a tiny count and a
-# read on a tty in raw mode. Simplest robust path: prefer bash's read -n if this
-# shell supports it, else fall back to a `dd` slurp with stty raw + a timeout via a
-# background killer. mdcat itself (C++) uses read()+VTIME and is unaffected.
-read_reply() {
-    # Capability test: feed ONE byte to `read -n1`. bash/zsh consume it and return
-    # 0; dash does not understand -n and returns an error (rc>0) with no byte read.
-    if printf X | { IFS= read -r -n1 _x 2>/dev/null; }; then   # supports -n/-t
-        _r=""; _to=2
-        while IFS= read -r -s -t "$_to" -n 1 _c < /dev/tty 2>/dev/null; do
-            _to=1
+# SEND THE QUERY AND READ THE REPLY WITHOUT LEAKING IT.
+# Two hazards, both observed on ghostty/Orbstack over SSH:
+#   1. The tty ECHOES the reply if it arrives while the tty is in cooked+echo mode.
+#      So we MUST put the tty in raw/no-echo BEFORE sending the query, not after —
+#      otherwise the reply prints onscreen as `^[_Gi=1;OK^[\` (a leak) and is then
+#      also read, i.e. read twice.
+#   2. Byte-at-a-time `read -n1 -t` is a bash/zsh extension; the remote /bin/sh
+#      (dash) ignores -n/-t and blocks for a whole LINE, but the Kitty reply has no
+#      newline. So on a POSIX sh we read with `dd` + stty VMIN/VTIME timeout.
+# The whole send+read is bracketed by one raw-mode setup/teardown. mdcat itself
+# (C++) uses read()+VTIME like queryCellSize16t() and is unaffected by any of this.
+query_kitty() {
+    _q="${APC_START}i=1,a=q,f=24,s=1,v=1;AAAA${APC_END}"
+    _saved=$(stty -g < /dev/tty 2>/dev/null)
+    # Raw, no echo, with an inter-byte read timeout, BEFORE sending the query.
+    stty -echo -icanon min 0 time 4 < /dev/tty 2>/dev/null   # 0.4s inter-byte
+    printf '%s' "$_q" > /dev/tty
+    if printf X | { IFS= read -r -n1 _x 2>/dev/null; }; then  # this sh has read -n/-t
+        _r=""; _to=1
+        while IFS= read -r -t "$_to" -n 1 _c < /dev/tty 2>/dev/null; do
             case "$_c" in
                 "$ESC") _r="${_r}ESC" ;;
                 "") ;;
                 *) _r="${_r}${_c}"; case "$_r" in *ESC'\') break;; esac ;;
             esac
         done
-        printf '%s' "$_r"
+        _out=$_r
     else
-        # POSIX sh (dash): put the tty in raw mode, slurp up to 64 bytes with a 1s
-        # VMIN/VTIME-style timeout via stty, show ESC as literal "ESC".
-        _saved=$(stty -g < /dev/tty)
-        stty -echo -icanon min 0 time 10 < /dev/tty   # 1.0s inter-byte timeout
-        _raw=$(dd bs=64 count=1 < /dev/tty 2>/dev/null)
-        stty "$_saved" < /dev/tty
-        printf '%s' "$_raw" | LC_ALL=C sed 's/'"$ESC"'/ESC/g'
+        # POSIX sh (dash): slurp the raw reply; render ESC as literal "ESC".
+        _out=$(dd bs=64 count=1 < /dev/tty 2>/dev/null | LC_ALL=C sed 's/'"$ESC"'/ESC/g')
     fi
+    stty "$_saved" < /dev/tty 2>/dev/null
+    printf '%s' "$_out"
 }
-printf '%si=1,a=q,f=24,s=1,v=1;AAAA%s' "$APC_START" "$APC_END" > /dev/tty
-reply=$(read_reply)
+reply=$(query_kitty)
 printf '\nRAW QUERY REPLY: [%s]\n' "$reply"
 case "$reply" in
     *';OK'*) echo "=> Contains ;OK  -> Kitty graphics SUPPORTED." ;;
