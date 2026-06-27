@@ -31,8 +31,10 @@
 // graphics terminal are available; otherwise it falls back to ordinary code. See renderMermaidBlock.
 //
 // Build:  c++ -std=c++17 -O2 -o mdcat mdcat.cpp
-// Usage:  mdcat [--width N] [--] [file ...]   (reads standard input when given no file arguments)
+// Usage:  mdcat [--width N] [--img[=kitty|sixel|none]] [--] [file ...]   (reads standard input when
+//         given no file arguments)
 //         --width N forces the render width, overriding $COLUMNS and the terminal size.
+//         --img forces image output even when piped; an optional protocol pins the graphics backend.
 
 #include <algorithm>
 #include <cctype>
@@ -75,11 +77,17 @@ const std::string kQuoteBar = "\033[38;5;244m▎\033[0m ";  // the left rule dra
 // before any rendering, and so before terminalWidth() is first called and caches its result.
 int gWidthOverride = 0;
 
-// Force inline image (sixel) output even when stdout is not a terminal (--img). Lets mdcat be used
-// as a sixel source when piped, e.g. `mdcat --img doc.md | gmore` for visual pager testing. Set by
+// Force inline image output even when stdout is not a terminal (--img). Lets mdcat be used as an
+// image source when piped, e.g. `mdcat --img doc.md | gmore` for visual pager testing. Set by
 // main() before rendering, so before terminalSupportsGraphics() caches its result. Cell-size detection
 // still works over /dev/tty, and the terminal width is read from $COLUMNS / stderr's TIOCGWINSZ.
 bool gForceGraphics = false;
+
+// Backend explicitly chosen on the command line via `--img <kitty|sixel|none>`. When set, this is
+// authoritative (same force as MDCAT_GRAPHICS), so `mdcat --img sixel doc.md | gmore` pins the
+// protocol regardless of terminal or env. Unset (-1) means a bare `--img` with no protocol argument:
+// the historical "force output, default to Kitty when piped" behaviour. Set by main().
+int gForcedBackend = -1;  // -1 = unset; else a GraphicsBackend value
 
 // Directory of the file currently being rendered, used to resolve relative image paths.
 // Empty string means the current working directory. Set by main() before each render() call.
@@ -213,25 +221,27 @@ bool probeKittyGraphics() {
 }
 
 // Resolve the graphics backend once, cached for the run. Resolution order (most explicit first):
-//   1. $MDCAT_GRAPHICS=kitty|sixel|none — authoritative; works headless and forwards over SSH.
-//   2. --img (gForceGraphics): force a backend even when piped — Kitty if MDCAT_GRAPHICS didn't choose,
-//      else Sixel; kept for the `mdcat --img doc.md | gmore` pipeline.
-//   3. Not a terminal -> None (nothing to draw to).
-//   4. Env allowlist (no probe): a Kitty-capable terminal we recognize -> Kitty. KITTY_WINDOW_ID set,
+//   1. `--img <kitty|sixel|none>` (gForcedBackend): authoritative, set on the command line.
+//   2. $MDCAT_GRAPHICS=kitty|sixel|none — authoritative; works headless and forwards over SSH.
+//   3. bare --img (gForceGraphics): force image output even when piped, defaulting to Kitty; kept
+//      for the `mdcat --img doc.md | gmore` pipeline.
+//   4. Not a terminal -> None (nothing to draw to).
+//   5. Env allowlist (no probe): a Kitty-capable terminal we recognize -> Kitty. KITTY_WINDOW_ID set,
 //      or TERM_PROGRAM in {ghostty, iTerm.app, vscode}. Apple_Terminal is known sixel-incapable -> None.
-//   5. Best-effort Kitty probe -> Kitty on a positive reply.
-//   6. Optimistic default: Kitty. A user running mdcat for graphics (esp. over SSH, where env often
+//   6. Best-effort Kitty probe -> Kitty on a positive reply.
+//   7. Optimistic default: Kitty. A user running mdcat for graphics (esp. over SSH, where env often
 //      doesn't survive — e.g. VSCode Remote-SSH presents as a bare xterm) almost certainly has a
 //      Kitty-capable terminal, and Kitty degrades more gracefully than a wrong sixel guess.
 GraphicsBackend graphicsBackend() {
     static const GraphicsBackend backend = [] {
+        if (gForcedBackend >= 0) return static_cast<GraphicsBackend>(gForcedBackend);  // --img <protocol>
         if (const char* g = std::getenv("MDCAT_GRAPHICS")) {
             std::string s(g);
             if (s == "kitty") return GraphicsBackend::Kitty;
             if (s == "sixel") return GraphicsBackend::Sixel;
             if (s == "none") return GraphicsBackend::None;
         }
-        if (gForceGraphics) return GraphicsBackend::Kitty;  // --img: default to Kitty when piped
+        if (gForceGraphics) return GraphicsBackend::Kitty;  // bare --img: default to Kitty when piped
         if (!isatty(STDOUT_FILENO)) return GraphicsBackend::None;
         const char* prog = std::getenv("TERM_PROGRAM");
         std::string tp = prog ? prog : "";
@@ -2810,7 +2820,16 @@ int main(int argc, char** argv) {
     // force the render width (overriding $COLUMNS and the terminal size), and -- to end options so a
     // filename may begin with a dash. Option parsing stops at the first non-option operand.
     std::vector<std::string> files;
-    auto usage = [&] { std::cerr << "usage: mdcat [--width N] [--img] [--] [file ...]\n"; };
+    auto usage = [&] {
+        std::cerr << "usage: mdcat [--width N] [--img[=kitty|sixel|none]] [--] [file ...]\n";
+    };
+    // Map a --img protocol argument to a backend, or return -2 for an unrecognized value.
+    auto parseBackend = [](const std::string& s) -> int {
+        if (s == "kitty") return static_cast<int>(GraphicsBackend::Kitty);
+        if (s == "sixel") return static_cast<int>(GraphicsBackend::Sixel);
+        if (s == "none")  return static_cast<int>(GraphicsBackend::None);
+        return -2;
+    };
 
     int a = 1;
     for (; a < argc; ++a) {
@@ -2818,8 +2837,21 @@ int main(int argc, char** argv) {
         if (arg == "--") { ++a; break; }
         if (arg.size() < 2 || arg[0] != '-') break;  // first operand: stop option parsing
 
-        if (arg == "--img") {                         // force sixel output even when piped
+        if (arg == "--img") {                         // force image output even when piped
             gForceGraphics = true;
+            // Optional protocol argument: only consume the next token if it names a backend,
+            // so `--img file.md` still treats file.md as the operand.
+            if (a + 1 < argc) {
+                int b = parseBackend(argv[a + 1]);
+                if (b >= 0) { gForcedBackend = b; ++a; }
+            }
+            continue;
+        }
+        if (arg.rfind("--img=", 0) == 0) {            // inline protocol: --img=kitty|sixel|none
+            int b = parseBackend(arg.substr(6));
+            if (b < 0) { std::cerr << "mdcat: invalid --img protocol: " << arg.substr(6) << "\n"; usage(); return 2; }
+            gForceGraphics = true;
+            gForcedBackend = b;
             continue;
         }
 

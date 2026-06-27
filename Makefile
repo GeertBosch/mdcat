@@ -22,6 +22,7 @@ TESTS := \
 	tests/property-hard-breaks.sh \
 	tests/property-math.sh \
 	tests/unicode-width.sh \
+	tests/mdcat-kitty.sh \
 	tests/gmore-emulator.sh \
 	tests/gmore-sixel.sh \
 	tests/gmore-nav.sh \
