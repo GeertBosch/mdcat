@@ -52,22 +52,49 @@ echo "-- some terminals/links don't answer; sections 2-3 are the real capability
 # Canonical Kitty query from the spec: a 1x1 RGB pixel (f=24,s=1,v=1) as base64,
 # action a=q (validate + reply, don't draw). The base64 'AAAA' is 3 zero bytes =
 # one black pixel; using a fixed constant avoids fragile shell binary generation.
+#
+# READING THE REPLY PORTABLY: byte-at-a-time `read -n1 -t` is a bash/zsh extension.
+# A POSIX /bin/sh (e.g. dash, as on Debian/Ubuntu over SSH) IGNORES -n/-t, so it
+# blocks for a whole LINE — but a Kitty reply has no newline, so the reply is never
+# captured and later LEAKS onto the screen (observed on ghostty/Orbstack over SSH).
+# `head -c` is no good either (also blocks). So we use `dd` with a tiny count and a
+# read on a tty in raw mode. Simplest robust path: prefer bash's read -n if this
+# shell supports it, else fall back to a `dd` slurp with stty raw + a timeout via a
+# background killer. mdcat itself (C++) uses read()+VTIME and is unaffected.
+read_reply() {
+    # Capability test: feed ONE byte to `read -n1`. bash/zsh consume it and return
+    # 0; dash does not understand -n and returns an error (rc>0) with no byte read.
+    if printf X | { IFS= read -r -n1 _x 2>/dev/null; }; then   # supports -n/-t
+        _r=""; _to=2
+        while IFS= read -r -s -t "$_to" -n 1 _c < /dev/tty 2>/dev/null; do
+            _to=1
+            case "$_c" in
+                "$ESC") _r="${_r}ESC" ;;
+                "") ;;
+                *) _r="${_r}${_c}"; case "$_r" in *ESC'\') break;; esac ;;
+            esac
+        done
+        printf '%s' "$_r"
+    else
+        # POSIX sh (dash): put the tty in raw mode, slurp up to 64 bytes with a 1s
+        # VMIN/VTIME-style timeout via stty, show ESC as literal "ESC".
+        _saved=$(stty -g < /dev/tty)
+        stty -echo -icanon min 0 time 10 < /dev/tty   # 1.0s inter-byte timeout
+        _raw=$(dd bs=64 count=1 < /dev/tty 2>/dev/null)
+        stty "$_saved" < /dev/tty
+        printf '%s' "$_raw" | LC_ALL=C sed 's/'"$ESC"'/ESC/g'
+    fi
+}
 printf '%si=1,a=q,f=24,s=1,v=1;AAAA%s' "$APC_START" "$APC_END" > /dev/tty
-reply=""
-to=2
-while IFS= read -r -s -t "$to" -n 1 c < /dev/tty 2>/dev/null; do
-    to=1
-    case "$c" in
-        "$ESC") reply="${reply}ESC" ;;
-        "") ;;
-        *) reply="${reply}${c}"; case "$reply" in *ESC'\') break;; esac ;;
-    esac
-done
+reply=$(read_reply)
 printf '\nRAW QUERY REPLY: [%s]\n' "$reply"
 case "$reply" in
     *';OK'*) echo "=> Contains ;OK  -> Kitty graphics SUPPORTED." ;;
     *ESC_G*) echo "=> Got an APC reply (see above) -> terminal answered the query." ;;
-    "")      echo "=> NO REPLY. Either unsupported, or the link/terminal was too slow." ;;
+    "")      echo "=> NO REPLY. Could be unsupported, a too-short timeout, or this"
+             echo "   POSIX /bin/sh (dash) can't read the no-newline reply. Sections"
+             echo "   2-3 are the real test; for mdcat we'd skip the probe here anyway"
+             echo "   since the terminal is a known Kitty terminal (see TERM_PROGRAM)." ;;
     *)       echo "=> Unexpected reply; inspect the raw bytes above." ;;
 esac
 

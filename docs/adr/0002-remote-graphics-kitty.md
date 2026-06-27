@@ -46,22 +46,39 @@ encoders** of it. gmore already decodes sixel→raster, so this unifies the two
 programs rather than forking them. (But see decision 4: for the Kitty path we do
 not actually need a decoded raster in the common case.)
 
-### 3. Capability resolution: env override → best-effort probe → Kitty default → text
+### 3. Capability resolution: env override → env allowlist (no probe) → best-effort probe → Kitty default → text
 
 - `MDCAT_GRAPHICS=kitty|sixel|none` (optionally with `MDCAT_CELL_W/H`,
   `MDCAT_AREA_W/H`) is **authoritative** — zero round-trips, works headless and
   forwards over SSH via `SendEnv`/`SetEnv`.
-- Otherwise a **best-effort runtime probe** (Kitty `a=q` query, then DA1 for
-  sixel). The probe round-trip *does* reach the local terminal over SSH because the
-  bytes traverse the pty — but it is latency-fragile, so **silence is not "no
-  support."**
+- **Env allowlist short-circuits the probe.** When the environment already
+  identifies a Kitty-capable terminal — `KITTY_WINDOW_ID` set, or `TERM_PROGRAM` in
+  {`ghostty`, `iTerm.app`, `vscode`} (extensible) — use Kitty **without probing at
+  all**. This avoids the round-trip and, crucially, the **reply-leak** failure mode
+  (see below). All three of these were confirmed Kitty-capable by probe.
+- Only for an **unrecognized** environment do we fall to a **best-effort runtime
+  probe** (Kitty `a=q` query, then DA1 for sixel) with a **short** timeout. The
+  round-trip reaches the local terminal over SSH (bytes traverse the pty), but
+  **silence is not "no support."**
 - On silence, **default to Kitty** (optimistic): a user running mdcat/gmore for
   graphics over SSH almost certainly has a Kitty-capable terminal, and Kitty's
   cell-based placement degrades more gracefully than a wrong sixel guess.
 - Fall back to text/alt only when graphics are positively known absent.
 
-This replaces the current `TERM_PROGRAM` denylist in `terminalSupportsGraphics()`,
-which is wrong over SSH (`TERM_PROGRAM` is not forwarded).
+This replaces the current `TERM_PROGRAM` denylist in `terminalSupportsGraphics()`.
+Note `TERM_PROGRAM` is **not** forwarded over SSH by default, so the allowlist helps
+only when it survives (e.g. same-host Orbstack, or `SendEnv`); when it doesn't, the
+probe/optimistic-default path covers the case.
+
+**Why the allowlist matters — the reply-leak.** Probing on `ghostty`/Orbstack over
+SSH produced a `[]` (no reply) result *and leaked the reply bytes onto the screen*.
+Root cause was **not** latency (it was localhost `::1`, sub-millisecond) — it was a
+probe-script shell-portability bug (`read -n1 -t` is a bash extension; the remote
+`/bin/sh` is `dash`, which blocks for a whole line on a newline-less reply). mdcat
+in C++ uses `read()`+`VTIME` (like `queryCellSize16t`) and is immune. But the
+episode shows that **not probing when we already know the terminal is the safest
+path**, hence the allowlist short-circuit. The probe timeout stays short — latency
+is not the failure mode.
 
 ### 4. Keep `timg`; pass its PNG through verbatim — gmore needs no PNG decoder
 
