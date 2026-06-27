@@ -39,16 +39,20 @@ APC_END="${ESC}\\"
 # terminal still does the final cell fit, and for test #3 we override with c=/r=.
 TIMG_PK="timg -pk -g24x24"
 
+banner "0. Context (include this in your screenshot)"
+printf 'TERM=[%s] TERM_PROGRAM=[%s] KITTY_WINDOW_ID=[%s]\n' \
+       "${TERM:-}" "${TERM_PROGRAM:-}" "${KITTY_WINDOW_ID:-}"
+printf 'SSH_CONNECTION=[%s] SSH_TTY=[%s] MDCAT_GRAPHICS=[%s]\n' \
+       "${SSH_CONNECTION:-}" "${SSH_TTY:-}" "${MDCAT_GRAPHICS:-}"
+
 banner "1. Kitty capability query (a=q)"
-echo "Sending a transmit+query; a Kitty-capable terminal replies with an APC string."
-# Use timg to make a real PNG payload, then turn its 'a=T' into 'a=q' (query only:
-# the terminal validates + replies ;OK/;E without drawing). This reuses a payload
-# the terminal is known to accept rather than hand-building one.
-qtmp=$(mktemp 2>/dev/null || echo /tmp/probe-kq.$$)
-$TIMG_PK "$PROBE_PNG" > "$qtmp" 2>/dev/null
-# Rewrite the first control segment: a=T -> a=q. (Controls are between ESC_G and ';'.)
-LC_ALL=C sed 's/a=T/a=q/' "$qtmp" > /dev/tty
-rm -f "$qtmp"
+echo "Sending the canonical minimal query (1x1 RGB, a=q); a Kitty-capable terminal"
+echo "replies ESC_G i=1;OK ESC\\. NOTE: silence does NOT mean unsupported (ADR 0002)"
+echo "-- some terminals/links don't answer; sections 2-3 are the real capability test."
+# Canonical Kitty query from the spec: a 1x1 RGB pixel (f=24,s=1,v=1) as base64,
+# action a=q (validate + reply, don't draw). The base64 'AAAA' is 3 zero bytes =
+# one black pixel; using a fixed constant avoids fragile shell binary generation.
+printf '%si=1,a=q,f=24,s=1,v=1;AAAA%s' "$APC_START" "$APC_END" > /dev/tty
 reply=""
 to=2
 while IFS= read -r -s -t "$to" -n 1 c < /dev/tty 2>/dev/null; do
@@ -67,31 +71,34 @@ case "$reply" in
     *)       echo "=> Unexpected reply; inspect the raw bytes above." ;;
 esac
 
-banner "2. Basic display (timg -pk, as mdcat would emit it)"
-echo "You should see the source image ($PROBE_PNG) below:"
-$TIMG_PK "$PROBE_PNG" 2>/dev/null
-printf '\n'
-
 # Inject one or more control keys into a timg -pk APC: insert "<keys>," right
 # after the "ESC_G" so they precede timg's own a=T,... controls (timg does NOT
 # emit c=/r= itself, so there's no conflict). Kitty reads the whole comma list up
 # to ';'. Done with awk on the raw bytes (binary-safe: the base64 body has no
-# ESC/NUL). This is exactly how mdcat will add a cell footprint to timg's PNG.
+# ESC/NUL). The trailing newline is preserved with ORS. This is exactly how mdcat
+# will add a cell footprint to timg's PNG.
 inject_keys() {  # $1=png  $2=keys e.g. "c=10,r=4"
-    $TIMG_PK "$1" 2>/dev/null | LC_ALL=C awk -v k="$2" '
+    $TIMG_PK "$1" 2>/dev/null | LC_ALL=C awk -v k="$2" 'BEGIN{ORS=""}
         { n=index($0,"\033_G");
           if (n>0) { printf "%s\033_G%s,%s", substr($0,1,n-1), k, substr($0,n+3) }
           else printf "%s", $0 }'
 }
 
-banner "3. Cell-based sizing (c=COLS,r=ROWS) — the remote-layout property"
+banner "2. Display WITH a cell footprint (c=COLS,r=ROWS) — what mdcat will emit"
 COLS=10; ROWS=4
-echo "Same timg PNG, but with c=${COLS},r=${ROWS} injected. You should see it"
-echo "scaled to ~${COLS}x${ROWS} CELLS (NOT its native pixel size). If so, remote"
-echo "sizing works and ADR 0002's core premise holds:"
+echo "timg's PNG WITH c=${COLS},r=${ROWS} injected (the real mdcat path). You should"
+echo "see the source image ($PROBE_PNG) rendered correctly at ~${COLS}x${ROWS} CELLS:"
 inject_keys "$PROBE_PNG" "c=${COLS},r=${ROWS}"
 printf '\n'
 
+banner "3. Display WITHOUT a footprint — EXPECTED to look wrong (control case)"
+echo "The SAME timg PNG with NO c=/r= (bare 'timg -pk'). Some terminals (e.g."
+echo "VSCode) mis-render a footprint-less PNG as a distorted/grey block. If THIS"
+echo "looks wrong but #2 looks right, that's the expected result: it shows mdcat"
+echo "MUST always inject c=/r= (timg ignores -g and never sets them itself):"
+$TIMG_PK "$PROBE_PNG" 2>/dev/null
+printf '\n'
+
 banner "DONE"
-echo "Report: query reply (;OK?), image #2 visible?, image #3 size in cells?,"
-echo "your terminal name, and whether this ran over SSH (\$SSH_CONNECTION=${SSH_CONNECTION:-unset})."
+echo "Report: query reply (;OK?), #2 correct at ${COLS}x${ROWS} cells?, #3 distorted?,"
+echo "terminal name. (Env context is printed in section 0 above.)"

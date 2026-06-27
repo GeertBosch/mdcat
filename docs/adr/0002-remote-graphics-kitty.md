@@ -1,6 +1,6 @@
 # ADR 0002 — Remote graphics over SSH: Kitty protocol, raster-first, PNG passthrough
 
-- Status: Proposed (pending terminal probes — see "Validation gate")
+- Status: Accepted (VSCode probe confirmed the core premise; see "Validation gate")
 - Date: 2026-06-27
 - Component: `mdcat` (image rendering) and `gmore` (the graphics-aware pager)
 
@@ -92,6 +92,16 @@ gmore needs only the image's pixel dimensions (Pw,Pv) for the crop math, and get
 them by parsing the **PNG IHDR** — a 16-byte plaintext field right after the
 signature, *before* the compressed IDAT. **No inflate, no full PNG decode.**
 
+**`c=`/`r=` is mandatory, not optional.** Probing showed `timg -pk` ignores `-g`
+for the PNG: it always emits the image at *native resolution* and sets *no* `c=`/`r=`
+— it delegates all sizing to those keys, which it never fills in. A bare timg Kitty
+APC with no footprint renders as distorted garbage (observed in VSCode: a 64×64
+opaque PNG became grey mush without `c=`/`r=`, and the correct image with them). So
+unlike the sixel path — where the sixel header carries exact pixels and timg sizes
+the image — mdcat's Kitty backend **must always compute and inject `c=`/`r=`** from
+its own `cellMetrics` footprint math (intrinsic pixels from the PNG IHDR). There is
+no "let timg/the terminal choose" fallback in Kitty mode.
+
 ## Consequences
 
 - **mdcat:** add a Kitty backend that wraps/forwards `timg -pk` output, supplying
@@ -119,4 +129,10 @@ VSCode/iTerm2/Orbstack both locally and over SSH, must confirm:
    how loud the optimistic default may be).
 
 If (1) fails the core premise collapses and this ADR must be revised before
-coding. Status moves to Accepted once the probes confirm (1)–(2).
+coding.
+
+**Result (VSCode, 2026-06-27):** (1) CONFIRMED — a timg PNG with `c=10,r=4`
+injected scaled to ~10×4 cells. (3) a footprint-LESS timg Kitty APC rendered
+distorted; with `c=`/`r=` it was correct — promoting `c=`/`r=` to mandatory (see
+decision 4). Status promoted to Accepted. SSH-side runs (2) still pending and do
+not block the local architecture decision.
