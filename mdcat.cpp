@@ -36,6 +36,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <fcntl.h>
@@ -2844,9 +2845,15 @@ int main(int argc, char** argv) {
     }
     for (; a < argc; ++a) files.emplace_back(argv[a]);
 
-    // When stdout is a tty, capture render output and page it through gmore.
+    // Always render into an in-memory buffer, then either page it through gmore (tty) or write it to
+    // stdout in one pass (non-tty). Buffering the whole document matters for Kitty graphics: a large
+    // image transmits as many APC chunks, and std::cout's own ~8KB buffer would otherwise flush in the
+    // middle of a chunk, splitting it across two writes. A consumer (e.g. a terminal reached through a
+    // live pipe) that sees a chunk arrive in pieces with a gap can give up waiting for the chunk's ST
+    // and dump the partial base64 as text. Writing the finished buffer with a single write() loop keeps
+    // every chunk contiguous on the wire.
     bool usePager = isatty(STDOUT_FILENO);
-    std::ostream* out = usePager ? static_cast<std::ostream*>(new std::ostringstream) : &std::cout;
+    std::ostringstream buf;
 
     if (!files.empty()) {
         // Render each file independently and concatenate the results, rather than merging the files'
@@ -2858,22 +2865,26 @@ int main(int argc, char** argv) {
             std::ifstream f(path);
             if (!f) {
                 std::cerr << "mdcat: " << path << ": cannot open file\n";
-                if (usePager) delete out;
                 return 1;
             }
             size_t slash = path.rfind('/');
             gFileDir = (slash != std::string::npos) ? path.substr(0, slash) : std::string();
-            render(splitLines(f), *out);
+            render(splitLines(f), buf);
         }
         gFileDir.clear();
     } else {
-        render(splitLines(std::cin), *out);
+        render(splitLines(std::cin), buf);
     }
 
-    if (usePager) {
-        std::string data = static_cast<std::ostringstream*>(out)->str();
-        delete out;
-        return gmore::run(std::move(data));
+    std::string data = buf.str();
+    if (usePager) return gmore::run(std::move(data));
+    // Non-tty: write the whole rendered buffer to stdout in one pass, retrying short writes, so a Kitty
+    // APC chunk is never split by a buffer-boundary flush.
+    size_t off = 0;
+    while (off < data.size()) {
+        ssize_t n = write(STDOUT_FILENO, data.data() + off, data.size() - off);
+        if (n <= 0) { if (errno == EINTR) continue; break; }
+        off += static_cast<size_t>(n);
     }
     return 0;
 }
