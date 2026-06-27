@@ -1421,6 +1421,21 @@ std::string runTimgKitty(const std::string& path, const std::string& geomIn) {
     while ((got = fread(buf, 1, sizeof buf, p)) > 0) out.append(buf, got);
     int rc = pclose(p);
     if (rc != 0) return std::string();
+    // timg wraps its Kitty output with its own cursor management — a leading "ESC[?25l" (hide cursor)
+    // and a trailing newline + "ESC[?25h" (show cursor). We strip these so the captured bytes are the
+    // bare Kitty APC sequence: mdcat positions and reserves space for the image itself (emitImageParagraph
+    // with DECSC/DECRC), and leaving timg's stray newline in would advance the cursor mid-band and
+    // corrupt the placement of tall, multi-chunk images.
+    auto strip = [&](const std::string& lead) {
+        if (out.compare(0, lead.size(), lead) == 0) out.erase(0, lead.size());
+    };
+    strip("\033[?25l");
+    auto stripTail = [&](const std::string& tail) {
+        if (out.size() >= tail.size() && out.compare(out.size() - tail.size(), tail.size(), tail) == 0)
+            out.erase(out.size() - tail.size());
+    };
+    stripTail("\033[?25h");
+    stripTail("\n");
     return out;
 }
 
