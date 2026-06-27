@@ -71,33 +71,33 @@ case "$reply" in
     *)       echo "=> Unexpected reply; inspect the raw bytes above." ;;
 esac
 
-# Inject control keys into a timg -pk APC: insert "<keys>," right after the
-# "ESC_G" so they precede timg's own a=T,... controls (timg does NOT emit c=/r=
-# itself, so there is no conflict). Kitty reads the whole comma list up to ';'.
-#
-# MUST be byte-exact: the payload is binary (Kitty APC + base64 PNG) and timg
-# emits a newline between the APC terminator (ESC \) and a trailing ESC[?25h.
-# Line-oriented tools (awk/sed) split on that newline and drop/move it, which
-# leaves the image mis-placed (observed: a grey block instead of the picture).
-# `perl -0777` slurps the whole stream as one record, so the substitution is
-# byte-exact and the newline is preserved. This is how mdcat will add a footprint.
-inject_keys() {  # $1=png  $2=keys e.g. "c=10,r=4"
-    $TIMG_PK "$1" 2>/dev/null | perl -0777 -pe "s/\\x1b_G/\\x1b_G$2,/"
+# Emit a timg -pk APC for $1, forcing a UNIQUE image id ($2) and optionally
+# prepending control keys ($3, e.g. "c=10,r=4,"). Two things make this correct:
+#   * UNIQUE i= per call. timg assigns the SAME i= to every render of a given file,
+#     so two displays in one run collide: a later a=T with the same id REPLACES the
+#     image and re-lays earlier placements, corrupting the first display (observed:
+#     section 2 turned into a grey block once section 3 re-sent the same id). We
+#     rewrite i= so each section is an independent image.
+#   * BYTE-EXACT edit. The payload is binary (APC + base64 PNG) with a newline
+#     between the APC terminator (ESC \) and a trailing ESC[?25h; line tools
+#     (awk/sed) mangle it. `perl -0777` slurps the whole stream as one record.
+emit_kitty() {  # $1=png  $2=unique-id  $3=prepend-keys (may be empty)
+    $TIMG_PK "$1" 2>/dev/null | perl -0777 -pe "s/i=\\d+/i=$2/; s/\\x1b_G/\\x1b_G$3/"
 }
 
 banner "2. Display WITH a cell footprint (c=COLS,r=ROWS) — what mdcat will emit"
 COLS=10; ROWS=4
 echo "timg's PNG WITH c=${COLS},r=${ROWS} injected (the real mdcat path), via a"
-echo "byte-exact perl splice. You should see the source image ($PROBE_PNG)"
-echo "rendered correctly, scaled to ~${COLS}x${ROWS} CELLS:"
-inject_keys "$PROBE_PNG" "c=${COLS},r=${ROWS}"
+echo "byte-exact perl splice, as a unique image id. You should see the source image"
+echo "($PROBE_PNG) rendered correctly, scaled to ~${COLS}x${ROWS} CELLS:"
+emit_kitty "$PROBE_PNG" 9001 "c=${COLS},r=${ROWS},"
 printf '\n'
 
-banner "3. Display at native size (bare timg -pk, no footprint) — reference"
-echo "The same image with NO c=/r= injected (bare 'timg -pk'). Renders at timg's"
-echo "native pixel size. Shown as a reference so you can compare #2's cell scaling"
-echo "against it; both should be a recognizable image, just different sizes:"
-$TIMG_PK "$PROBE_PNG" 2>/dev/null
+banner "3. Display at native size (no footprint) — reference, distinct image id"
+echo "The same image with NO c=/r= injected, as a DIFFERENT image id (so it does"
+echo "not disturb #2). Renders at timg's native pixel size; compare #2's cell"
+echo "scaling against it. Both should be a recognizable image, different sizes:"
+emit_kitty "$PROBE_PNG" 9002 ""
 printf '\n'
 
 banner "DONE"
