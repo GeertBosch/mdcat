@@ -56,22 +56,36 @@ sixel_pixels() {  # $1 = file containing sixel
 # $1 = the bytes to send after CSI (e.g. "6n" -> sends ESC[6n)
 # $2 = the reply's terminating byte (e.g. "R" or "t"); reading stops once seen,
 #      so a slow reply is never misattributed to a later query.
+#
+# PORTABILITY: byte-at-a-time `read -n1 -t` is a bash/zsh extension. A POSIX
+# /bin/sh (dash, e.g. on Debian/Ubuntu reached over SSH) ignores -n/-t and blocks
+# for a whole LINE — but CSI/APC replies have no newline, so the reply is never
+# read and instead LEAKS onto the screen. We therefore (1) put the tty in raw,
+# no-echo mode BEFORE writing the query (so a reply that races back is not
+# echoed), and (2) read with `read -n1` where available, else a `dd` slurp with
+# an stty VMIN/VTIME timeout. ESC is rendered as the literal text "ESC".
 term_query() {
-    _q="$1"; _term="$2"; _r=""
+    _q="$1"; _term="$2"; _out=""
+    _saved=$(stty -g < /dev/tty 2>/dev/null)
+    stty -echo -icanon min 0 time 4 < /dev/tty 2>/dev/null   # raw, 0.4s inter-byte
     printf '%s%s' "$CSI" "$_q" > /dev/tty
-    # First byte waits up to 2s for a slow reply; later bytes use a short
-    # timeout so we never hang if the terminator never arrives.
-    _to=2
-    while IFS= read -r -s -t "$_to" -n 1 _c < /dev/tty 2>/dev/null; do
-        _to=1
-        case "$_c" in
-            "$ESC") _r="${_r}ESC" ;;
-            "") ;;
-            *) _r="${_r}${_c}"
-               [ -n "$_term" ] && [ "$_c" = "$_term" ] && break ;;
-        esac
-    done
-    printf '%s' "$_r"
+    if printf X | { IFS= read -r -n1 _x 2>/dev/null; }; then   # this sh has read -n/-t
+        _r=""; _to=1
+        while IFS= read -r -t "$_to" -n 1 _c < /dev/tty 2>/dev/null; do
+            case "$_c" in
+                "$ESC") _r="${_r}ESC" ;;
+                "") ;;
+                *) _r="${_r}${_c}"
+                   [ -n "$_term" ] && [ "$_c" = "$_term" ] && break ;;
+            esac
+        done
+        _out=$_r
+    else
+        # POSIX sh (dash): slurp the raw reply (up to 64 bytes); show ESC literally.
+        _out=$(dd bs=64 count=1 < /dev/tty 2>/dev/null | LC_ALL=C sed 's/'"$ESC"'/ESC/g')
+    fi
+    stty "$_saved" < /dev/tty 2>/dev/null
+    printf '%s' "$_out"
 }
 
 # Print a banner separating probe sections.
