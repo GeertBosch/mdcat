@@ -1,7 +1,8 @@
 # mdcat
 
 A terminal Markdown renderer with inline images, tables, and hyperlinks.
-Companion pager `gmore` handles sixel graphics natively.
+Companion pager `gmore` handles sixel and Kitty graphics natively, so images
+keep working over SSH.
 
 ## Features
 
@@ -213,8 +214,11 @@ Reads stdin when no files are given. Multiple files are concatenated.
 
 ### gmore
 
-A graphics-aware pager that understands sixel images and OSC 8 hyperlinks.
-`mdcat` pipes into it automatically when stdout is a TTY.
+A graphics-aware pager that understands sixel **and Kitty** images plus OSC 8
+hyperlinks. `mdcat` pipes into it automatically when stdout is a TTY. For Kitty
+images it transmits each image to the terminal once, then paints the visible
+band on every scroll with a cheap crop placement — no per-scroll re-encode — so
+scrolling stays smooth and images render correctly over SSH.
 
 ```
 gmore [--dump] [--dump-images] [file]

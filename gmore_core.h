@@ -15,6 +15,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <regex>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -188,6 +189,16 @@ struct Image {
     // with shifting indices, which some terminals, e.g. iTerm2, render wrong). The
     // decoded `px` raster is kept for layout, --imginfo, and clipped re-encoding.
     std::string sixel;
+
+    // Kitty graphics: the producer's full chunked APC transmission (ESC _ G ... ESC \,
+    // possibly many chunks), captured verbatim. When non-empty this is a Kitty image,
+    // not a sixel: `kid` is its Kitty image id and Pw/Pv (= Ph here is unused) the PNG's
+    // pixel size read from its IHDR. We transmit the bytes ONCE (rewriting a=T->a=t so it
+    // does not draw at the wrong spot) and thereafter paint visible bands with cheap a=p
+    // crop placements — no per-scroll re-encode. See transmitKitty / placeKitty.
+    std::string kitty;
+    uint32_t kid = 0;     // Kitty image id (parsed from the APC's i=)
+    bool isKitty() const { return !kitty.empty(); }
 };
 
 // Decode a sixel DCS payload (everything after `ESC P`, up to but not including ST)
@@ -433,6 +444,94 @@ static std::string replaySixel(const Image& img, int skipPx, int keepPx) {
 }
 
 // ---------------------------------------------------------------------------
+// Kitty graphics helpers. gmore ingests a Kitty image as the producer's exact
+// chunked APC bytes (it never decodes the PNG); it only needs the image's pixel
+// size for crop math, which it reads from the PNG IHDR carried in the first chunk.
+// ---------------------------------------------------------------------------
+
+// Decode a Kitty base64 payload prefix into raw bytes (enough for the PNG IHDR).
+// Standard base64 alphabet; stops once `want` bytes are produced.
+static std::string kittyB64DecodePrefix(const std::string& b64, size_t want) {
+    static const std::string tbl =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    int val = 0, bits = -8;
+    for (char c : b64) {
+        if (c == '=') break;
+        size_t pos = tbl.find(c);
+        if (pos == std::string::npos) continue;
+        val = (val << 6) | static_cast<int>(pos);
+        bits += 6;
+        if (bits >= 0) { out.push_back(static_cast<char>((val >> bits) & 0xFF)); bits -= 8; }
+        if (out.size() >= want) break;
+    }
+    return out;
+}
+
+// Read a PNG's pixel width/height from its IHDR (big-endian u32 at byte 16 and 20,
+// after the 8-byte signature + 4-byte length + "IHDR"). Returns false if not a PNG.
+static bool kittyPngSize(const std::string& png, int& w, int& h) {
+    if (png.size() < 24) return false;
+    static const unsigned char sig[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+    for (int i = 0; i < 8; ++i)
+        if (static_cast<unsigned char>(png[i]) != sig[i]) return false;
+    auto u32 = [&](size_t o) {
+        return (static_cast<unsigned char>(png[o]) << 24) |
+               (static_cast<unsigned char>(png[o + 1]) << 16) |
+               (static_cast<unsigned char>(png[o + 2]) << 8) | static_cast<unsigned char>(png[o + 3]);
+    };
+    w = u32(16); h = u32(20);
+    return w > 0 && h > 0;
+}
+
+// Parse a Kitty APC transmission `apc` (ESC _ G <controls>;<b64> ESC \ ... chunks) for
+// its image id (i=) and pixel size (from the first chunk's PNG IHDR). Returns false if
+// it is not a recoverable Kitty image transmission.
+static bool kittyParse(const std::string& apc, uint32_t& id, int& pw, int& ph) {
+    size_t g = apc.find("\033_G");
+    if (g == std::string::npos) return false;
+    size_t semi = apc.find(';', g);
+    if (semi == std::string::npos) return false;
+    std::string controls = apc.substr(g + 3, semi - (g + 3));
+    size_t ip = controls.find("i=");
+    id = (ip != std::string::npos) ? static_cast<uint32_t>(std::atoi(controls.c_str() + ip + 2)) : 0;
+    size_t end = apc.find("\033\\", semi);
+    if (end == std::string::npos) return false;
+    std::string png = kittyB64DecodePrefix(apc.substr(semi + 1, end - semi - 1), 24);
+    return kittyPngSize(png, pw, ph);
+}
+
+// Build the transmit-ONLY form of a captured Kitty APC: rewrite the first chunk's
+// `a=T` (transmit+display) to `a=t` (transmit only) so sending it defines the image
+// by id WITHOUT drawing it at the current cursor. Byte-exact; other chunks untouched.
+static std::string kittyTransmitOnly(const std::string& apc) {
+    std::string out = apc;
+    size_t a = out.find("a=T");
+    if (a != std::string::npos) out[a + 2] = 't';
+    return out;
+}
+
+// Build a placement command for an already-transmitted Kitty image `id`: display a
+// SOURCE-PIXEL crop rectangle (x,0..)+(w=pw,h=keepPx, starting at y=skipPx) scaled into
+// a `cols`x`rows` cell box. q=2 suppresses the terminal's OK reply. No payload, so it is
+// cheap to re-emit on every scroll — this is how a partially-scrolled image is clipped
+// without re-encoding pixels (validated by tools/probe-kitty-clip.sh).
+static std::string kittyPlace(uint32_t id, int pw, int skipPx, int keepPx, int cols, int rows) {
+    if (keepPx < 1) keepPx = 1;
+    if (cols < 1) cols = 1;
+    if (rows < 1) rows = 1;
+    std::string out = "\033_Ga=p,i=";
+    out += std::to_string(id);
+    out += ",q=2,x=0,y="; out += std::to_string(skipPx);
+    out += ",w=";         out += std::to_string(pw);
+    out += ",h=";         out += std::to_string(keepPx);
+    out += ",c=";         out += std::to_string(cols);
+    out += ",r=";         out += std::to_string(rows);
+    out += "\033\\";
+    return out;
+}
+
+// ---------------------------------------------------------------------------
 // The emulator: a cell grid (rows grow downward = scrollback) with a screen
 // viewport [top, top+H) in which the cursor lives, fed bytes by a state machine.
 // ---------------------------------------------------------------------------
@@ -441,6 +540,10 @@ struct Emulator {
     int cellW, cellH;        // pixels per cell (for sizing sixel images)
     std::vector<std::vector<Cell>> rows;
     std::vector<Image> images;
+    // Kitty image ids already transmitted to the terminal this session. A Kitty image is sent
+    // ONCE (its data chunks), then displayed by id with cheap crop placements on every (re)paint
+    // and scroll. Mutable because painting is logically const but must remember what it has sent.
+    mutable std::set<uint32_t> kittyTransmitted;
     size_t top = 0;          // absolute index of screen row 0
     int cr = 0, cc = 0;      // cursor, screen-relative
     Attr pen;                // current pen
@@ -449,12 +552,13 @@ struct Emulator {
     Attr spen;
 
     // parser state
-    enum St { GROUND, ESC, CSI, OSC, DCS } st = GROUND;
+    enum St { GROUND, ESC, CSI, OSC, DCS, APC } st = GROUND;
     std::string seq;         // accumulated escape payload
-    bool escPend = false;    // saw ESC inside OSC/DCS (looking for ST '\')
+    bool escPend = false;    // saw ESC inside OSC/DCS/APC (looking for ST '\')
     char32_t uacc = 0;       // UTF-8 accumulator
     int uneed = 0;
     bool absorbLf = false;   // swallow one LF right after a sixel (cursor is already below it)
+    std::string kittyAcc;    // accumulates a Kitty image's chunks (ESC_G..ESC\ × N) until m=0
 
     // Overstrike (typewriter convention used by `man`/groff via nroff): bold is
     // `X \b X`, underline is `_ \b X` (or `X \b _`). When a backspace lands the
@@ -581,6 +685,7 @@ struct Emulator {
                 case CSI: csi(b); break;
                 case OSC: osc(b); break;
                 case DCS: dcs(b); break;
+                case APC: apc(b); break;
             }
         }
     }
@@ -619,6 +724,7 @@ struct Emulator {
             case '[': st = CSI; seq.clear(); break;
             case ']': st = OSC; seq.clear(); escPend = false; break;
             case 'P': st = DCS; seq.clear(); escPend = false; break;
+            case '_': st = APC; seq.clear(); escPend = false; break;   // APC (Kitty graphics)
             case '7': decsc(); st = GROUND; break;
             case '8': decrc(); st = GROUND; break;
             case 'M': up(1); st = GROUND; break;           // RI (no scroll-down for now)
@@ -661,6 +767,47 @@ struct Emulator {
         img.sixel = seq;   // keep the producer's exact bytes for verbatim replay
         images.push_back(std::move(img));
         int rowsCells = (images.back().Pv + cellH - 1) / cellH;
+        cc = 0;
+        for (int k = 0; k < rowsCells; ++k) { if (cr + 1 >= H) scrollUp(); else ++cr; }
+        absorbLf = true;   // a single trailing LF from the producer is now redundant
+    }
+
+    // APC (Kitty graphics): accumulate one chunk's payload until ST, then assemble it
+    // back into a full ESC_G..ESC\ chunk in kittyAcc. A large image arrives as several
+    // chunks (m=1 ... m=0); only the chunk whose `m=` is 0 or absent completes the image.
+    void apc(unsigned char b) {
+        if (escPend) { if (b == '\\') { finishKittyChunk(); st = GROUND; return; } escPend = false; }
+        if (b == 0x1B) { escPend = true; return; }
+        seq.push_back(static_cast<char>(b));
+    }
+    // One Kitty APC chunk (seq holds everything between ESC_ and ESC\, i.e. "G<controls>;<b64>").
+    // Re-wrap it as a full chunk and append to the image accumulator. If it is the last chunk
+    // (m=0 or no m= key in the controls), finalize the image; otherwise keep accumulating.
+    void finishKittyChunk() {
+        kittyAcc += "\033_";
+        kittyAcc += seq;
+        kittyAcc += "\033\\";
+        // Inspect this chunk's controls (up to the first ';') for the m= flag.
+        size_t semi = seq.find(';');
+        std::string controls = (semi == std::string::npos) ? seq : seq.substr(0, semi);
+        size_t mp = controls.find("m=");
+        bool more = (mp != std::string::npos) && controls[mp + 2] == '1';
+        if (!more) finishKitty();
+    }
+    // The image's chunks are complete in kittyAcc. Parse its id + pixel size and anchor it
+    // at the cursor, advancing the cursor below it exactly as for a sixel. gmore never decodes
+    // the PNG; it keeps the verbatim chunks and paints visible bands via crop placements.
+    void finishKitty() {
+        uint32_t id = 0; int pw = 0, ph = 0;
+        if (!kittyParse(kittyAcc, id, pw, ph)) { kittyAcc.clear(); return; }
+        Image img;
+        img.row = top + cr; img.col = cc;
+        img.Ph = pw; img.Pv = ph;
+        img.kitty = kittyAcc;
+        img.kid = id;
+        images.push_back(std::move(img));
+        kittyAcc.clear();
+        int rowsCells = (ph + cellH - 1) / cellH;
         cc = 0;
         for (int k = 0; k < rowsCells; ++k) { if (cr + 1 >= H) scrollUp(); else ++cr; }
         absorbLf = true;   // a single trailing LF from the producer is now redundant
@@ -813,6 +960,20 @@ struct Emulator {
     // bottom is clipped to `viewBot` (absolute row just past the window; 0 = no clip,
     // used by --dump). replaySixel does the top/bottom band clipping on the original
     // bytes — both directions only drop rows, never colours.
+    // Emit the visible band of an image (its [skipPx, skipPx+keepPx) pixel rows), at the cursor's
+    // current position. Sixel: replay the original bytes clipped to that pixel band. Kitty: transmit
+    // the image once (rewriting a=T->a=t so the transmit itself draws nothing), then display the
+    // matching SOURCE crop scaled into the cells it spans — a cheap, payload-free a=p placement that
+    // re-clips correctly on every scroll without re-encoding pixels.
+    void paintImageBand(const Image& img, int skipPx, int keepPx, std::string& out) const {
+        if (!img.isKitty()) { out += replaySixel(img, skipPx, keepPx); return; }
+        if (kittyTransmitted.insert(img.kid).second)
+            out += kittyTransmitOnly(img.kitty);                 // first paint: send the data once
+        int cols = std::max(1, (img.Ph + cellW - 1) / cellW);    // full image width in cells
+        int rows = std::max(1, (keepPx + cellH - 1) / cellH);    // visible band height in cells
+        out += kittyPlace(img.kid, img.Ph, skipPx, keepPx, cols, rows);
+    }
+
     // `withImages` inline-paints sixels (the --dump-images path); the interactive pager
     // paints images separately via paintImages() and passes false here. `withLinks`
     // re-emits OSC 8 hyperlinks; it is independent of images — only the plain-text grid
@@ -832,7 +993,7 @@ struct Emulator {
                     keepPx = std::min(keepPx, (int)(viewBot - firstVisible) * cellH);
                 out += "\0337";                              // DECSC: save cursor
                 if (img.col > 0) { out += "\033["; out += std::to_string(img.col + 1); out += 'G'; }
-                out += replaySixel(img, skipPx, keepPx);
+                paintImageBand(img, skipPx, keepPx, out);
                 out += "\0338";                              // DECRC: restore cursor
             }
         }
@@ -910,7 +1071,7 @@ struct Emulator {
             out += "\033["; out += std::to_string(up); out += 'A';  // up to the image's top line
             out += "\033[";  out += std::to_string(img.col + 1); out += 'G';  // to its column
             out += "\0337";                                       // DECSC: save the band-top position
-            out += replaySixel(img, skipPx, keepPx);              // paint (cursor left terminal-dependent)
+            paintImageBand(img, skipPx, keepPx, out);             // paint (cursor left terminal-dependent)
             out += "\0338";                                       // DECRC: back to the band-top position
             out += "\033["; out += std::to_string(up); out += 'B'; out += '\r';  // down to below the window
         }
