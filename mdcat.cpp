@@ -1395,6 +1395,105 @@ std::string runTimg(const std::string& path, const std::string& geomIn) {
     return out;
 }
 
+// Run timg to render `path` into the given -g cell box with the KITTY graphics protocol (-pk),
+// returning its stdout: a Kitty APC (ESC _ G a=T,...,q=2,f=100,m=...; <base64 PNG> ESC \), chunked for
+// large images. Unlike the sixel path, timg here DOWNSCALES the image to the -g box with proper
+// interpolation (so the terminal does no quality-losing scaling — VSCode's terminal in particular has
+// no anti-aliasing), and emits a well-formed APC: q=2 on every chunk, correct m= chunking. timg
+// requires a -g box when headless (piped), so completeGeom fills any missing dimension. Returns empty
+// on failure. The caller rewrites the image id to a unique value (see kittyRewriteId).
+std::string runTimgKitty(const std::string& path, const std::string& geomIn) {
+    std::string geom = completeGeom(geomIn);
+    if (geom.empty()) geom = "100x100";  // timg -pk needs a box headless; a loose default
+    std::string quoted = "'";
+    for (char c : path) {
+        if (c == '\'') quoted += "'\\''";
+        else quoted += c;
+    }
+    quoted += "'";
+    std::ostringstream cmd;
+    cmd << "timg -pk -g" << geom << " " << quoted << " 2>/dev/null";
+    FILE* p = popen(cmd.str().c_str(), "r");
+    if (!p) return std::string();
+    std::string out;
+    char buf[4096];
+    size_t got;
+    while ((got = fread(buf, 1, sizeof buf, p)) > 0) out.append(buf, got);
+    int rc = pclose(p);
+    if (rc != 0) return std::string();
+    return out;
+}
+
+// A per-run monotonic Kitty image id. timg assigns the SAME id to every render of a given file, so
+// two images in one document would collide — a later transmit replaces the earlier image and re-lays
+// its placement. Handing out a fresh id per image keeps them independent.
+uint32_t nextKittyId() {
+    static uint32_t id = 1000;
+    return ++id;
+}
+
+// Rewrite the i= value on the FIRST Kitty controls segment of `apc` to `id` (byte-exact, leaving the
+// base64 payload and all chunk continuations untouched). timg's output is otherwise already correct
+// (q=2 on every chunk, f=100, proper m= chunking), so this is the only edit mdcat needs to make.
+std::string kittyRewriteId(const std::string& apc, uint32_t id) {
+    size_t g = apc.find("\033_G");
+    if (g == std::string::npos) return apc;
+    size_t keyStart = g + 3;
+    size_t semi = apc.find(';', keyStart);          // controls run up to the first ';'
+    if (semi == std::string::npos) return apc;
+    size_t ip = apc.find("i=", keyStart);
+    if (ip == std::string::npos || ip > semi) return apc;
+    size_t numStart = ip + 2;
+    size_t numEnd = numStart;
+    while (numEnd < semi && std::isdigit((unsigned char)apc[numEnd])) ++numEnd;
+    return apc.substr(0, numStart) + std::to_string(id) + apc.substr(numEnd);
+}
+
+// Read a PNG's pixel width/height from the IHDR (big-endian uint32s at byte offsets 16 and 20, right
+// after the 8-byte signature + 4-byte length + "IHDR"). `png` is the raw PNG bytes. Returns false if
+// the buffer is too short or not a PNG.
+bool pngSize(const std::string& png, int& w, int& h) {
+    if (png.size() < 24) return false;
+    static const unsigned char sig[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+    for (int i = 0; i < 8; ++i)
+        if (static_cast<unsigned char>(png[i]) != sig[i]) return false;
+    auto u32 = [&](size_t o) {
+        return (static_cast<unsigned char>(png[o]) << 24) | (static_cast<unsigned char>(png[o + 1]) << 16) |
+               (static_cast<unsigned char>(png[o + 2]) << 8) | static_cast<unsigned char>(png[o + 3]);
+    };
+    w = u32(16);
+    h = u32(20);
+    return w > 0 && h > 0;
+}
+
+// Decode the base64 PNG payload out of a Kitty APC (concatenating all chunks) and read its pixel size,
+// so the caller can compute the exact cell footprint timg's downscaled image will occupy. Returns
+// false if no PNG could be recovered. Only a small prefix is needed (the IHDR), but timg's first chunk
+// already contains it, so we decode just the first chunk's payload.
+bool kittyImageSize(const std::string& apc, int& pw, int& ph) {
+    size_t g = apc.find("\033_G");
+    if (g == std::string::npos) return false;
+    size_t semi = apc.find(';', g);
+    if (semi == std::string::npos) return false;
+    size_t end = apc.find("\033\\", semi);
+    if (end == std::string::npos) return false;
+    std::string b64 = apc.substr(semi + 1, end - semi - 1);
+    // Minimal base64 decode (standard alphabet, no whitespace in Kitty payloads).
+    static const std::string tbl = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    int val = 0, bits = -8;
+    for (char c : b64) {
+        if (c == '=') break;
+        size_t pos = tbl.find(c);
+        if (pos == std::string::npos) continue;
+        val = (val << 6) | static_cast<int>(pos);
+        bits += 6;
+        if (bits >= 0) { out.push_back(static_cast<char>((val >> bits) & 0xFF)); bits -= 8; }
+        if (out.size() >= 24) break;  // enough for the IHDR
+    }
+    return pngSize(out, pw, ph);
+}
+
 // Read the painted pixel size out of a sixel data stream's raster attributes. A sixel begins
 // ESC P <params> q "Pan;Pad;Ph;Pv ... where Ph/Pv are the graphic's pixel width/height. We scan for
 // the '"' that introduces them and parse the last two of the four numbers. Returns false if absent
@@ -1502,19 +1601,34 @@ bool renderImageBlock(const std::string& text, int availWidth, std::string& out,
         geom = std::to_string(wCells) + "x" + std::to_string(hCells);  // explicit box
     // else: geom stays empty — no -g, timg picks its own size
 
-    std::string img = runTimg(src, geom);
-    if (img.empty()) return fallback("timg failed");
-
-    // Exact footprint from the painted pixel size (aspect-fit may differ from the requested box),
-    // converted with the precise area ratio so the reserved cells match what the terminal uses.
-    // Fall back to the requested cells if the sixel lacks raster attributes.
-    int paintedW = 0, paintedH = 0;
-    if (sixelPixelSize(img, paintedW, paintedH)) {
-        cellWidth = cell.pxToCols(paintedW);
-        cellHeight = cell.pxToRows(paintedH);
+    std::string img;
+    if (graphicsBackend() == GraphicsBackend::Kitty) {
+        // Kitty path: timg downscales into the -g box and emits a chunked Kitty APC; we only rewrite
+        // its image id to a unique value. The footprint is the painted pixel size (read from the
+        // embedded PNG's IHDR) converted with the precise area ratio, falling back to requested cells.
+        img = runTimgKitty(src, geom);
+        if (img.empty()) return fallback("timg failed");
+        img = kittyRewriteId(img, nextKittyId());
+        int paintedW = 0, paintedH = 0;
+        if (kittyImageSize(img, paintedW, paintedH)) {
+            cellWidth = cell.pxToCols(paintedW);
+            cellHeight = cell.pxToRows(paintedH);
+        } else {
+            cellWidth = wCells;
+            cellHeight = hCells;
+        }
     } else {
-        cellWidth = wCells;
-        cellHeight = hCells;
+        // Sixel path (unchanged): timg paints sixel; the footprint comes from the sixel raster header.
+        img = runTimg(src, geom);
+        if (img.empty()) return fallback("timg failed");
+        int paintedW = 0, paintedH = 0;
+        if (sixelPixelSize(img, paintedW, paintedH)) {
+            cellWidth = cell.pxToCols(paintedW);
+            cellHeight = cell.pxToRows(paintedH);
+        } else {
+            cellWidth = wCells;
+            cellHeight = hCells;
+        }
     }
     auto hrefIt = attrs.find("href");
     if (hrefIt != attrs.end() && !hrefIt->second.empty())
@@ -1629,11 +1743,18 @@ bool renderMermaidBlock(const std::vector<std::string>& lines, int availWidth, s
 // (ESC P), which rendered inline text never does (it uses only ESC[ for SGR and ESC] for OSC 8).
 bool isSixelImage(const std::string& s) { return s.find("\033P") != std::string::npos; }
 
-// Replay a captured sixel at the cursor's current position, then leave the cursor exactly where it
-// started. We bracket the bytes with DECSC/DECRC (ESC 7 / ESC 8): save the position, paint, restore.
-// This is terminal-independent — where a sixel leaves the cursor differs between terminals (VSCode
-// advances to the row below the image; iTerm does not), but the saved position is restored either
-// way — so callers can move deterministically afterward without depending on that behaviour.
+// Whether `s` is Kitty graphics image data: a Kitty APC begins ESC _ G.
+bool isKittyImage(const std::string& s) { return s.find("\033_G") != std::string::npos; }
+
+// Whether `s` is an inline image (either protocol) rather than a one-line text fallback.
+bool isImageBlock(const std::string& s) { return isSixelImage(s) || isKittyImage(s); }
+
+// Replay a captured image (sixel or Kitty APC) at the cursor's current position, then leave the cursor
+// exactly where it started. We bracket the bytes with DECSC/DECRC (ESC 7 / ESC 8): save the position,
+// paint, restore. This is terminal-independent — where an image leaves the cursor differs between
+// terminals (VSCode advances to the row below; iTerm does not), but the saved position is restored
+// either way — so callers can move deterministically afterward without depending on that behaviour.
+// Works for both protocols: neither moves the cursor predictably, so save/restore is the right tool.
 void replaySixel(const std::string& image, std::ostream& out) {
     out << "\0337" << image << "\0338";
 }
@@ -1818,7 +1939,7 @@ void emitParagraph(const std::vector<std::string>& lines, std::ostream& out) {
     int iw = 0, ih = 0;
     if (renderImageBlock(trim(joined), terminalWidth(), image, iw, ih)) {
         if (image.empty()) return;
-        if (isSixelImage(image)) emitImageParagraph(image, ih, out);
+        if (isImageBlock(image)) emitImageParagraph(image, ih, out);
         else                     out << image << '\n';   // one-line text fallback
         return;
     }
@@ -1978,7 +2099,7 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
             // Render at the full content budget so an explicit height is honoured at the image's
             // natural width; a column too narrow to hold it is handled by a re-render after layout.
             std::string cellText = trim(rows[i][j]);
-            if (renderImageBlock(cellText, budget, block, iw, ih) && isSixelImage(block)) {
+            if (renderImageBlock(cellText, budget, block, iw, ih) && isImageBlock(block)) {
                 rows[i][j] = block;
                 isImage[i][j] = true;
                 imgRows[i][j] = std::max(1, ih);
@@ -2061,7 +2182,7 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
             std::string block;
             int iw = 0, ih = 0;
             if (renderImageBlock(imgText[i][j], allocWidth[j], block, iw, ih, /*forceWidthBound=*/true) &&
-                isSixelImage(block)) {
+                isImageBlock(block)) {
                 rows[i][j] = block;
                 imgRows[i][j] = std::max(1, ih);
                 imgCellW[i][j] = iw;
@@ -2496,7 +2617,7 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
             std::string mimg;
             int miw = 0, mih = 0;
             if (mlang == "mermaid" &&
-                renderMermaidBlock(body, terminalWidth(), mimg, miw, mih) && isSixelImage(mimg)) {
+                renderMermaidBlock(body, terminalWidth(), mimg, miw, mih) && isImageBlock(mimg)) {
                 emitImageParagraph(mimg, mih, out);
             } else {
                 emitCodeBlock(body, lang, out);
