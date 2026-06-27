@@ -25,14 +25,30 @@ printf 'TERM=[%s] TERM_PROGRAM=[%s] SSH_CONNECTION=[%s]\n' \
 # Emit a Kitty image straight from a source PNG file, no timg. Reads w/h from the
 # IHDR, base64s the bytes, chunks at 4096, sets c=/r= to the requested cell box.
 # This mirrors exactly what mdcat's C++ Kitty encoder will do.
-wrap_png() {  # $1=png-path  $2=id  $3=cols  $4=rows
-    python3 - "$1" "$2" "$3" "$4" <<'PY'
+# Aspect-preserving cell box. Cells are NOT square (we measured ~7x16 / ~10x21 px),
+# so c/r must come from imageW/cellW and imageH/cellH, then scaled uniformly to the
+# column budget — NOT hardcoded. Hardcoding a wrong c:r ratio stretches the image
+# (a square renders as a rectangle). $3 = max columns; cell px read from CSI 16t,
+# default 7x16. This mirrors mdcat's cellMetrics footprint math.
+CELL=$(term_query '16t' t)         # ESC[6;H;W t  (or "ESCq6;H;Wt" on dash dd-path)
+CELLH=$(printf '%s' "$CELL" | sed -n 's/.*6;\([0-9]*\);\([0-9]*\)t.*/\1/p')
+CELLW=$(printf '%s' "$CELL" | sed -n 's/.*6;\([0-9]*\);\([0-9]*\)t.*/\2/p')
+[ -n "$CELLW" ] || CELLW=7
+[ -n "$CELLH" ] || CELLH=16
+
+wrap_png() {  # $1=png-path  $2=id  $3=maxCols
+    python3 - "$1" "$2" "$3" "$CELLW" "$CELLH" <<'PY'
 import sys, base64, struct
-path, iid, cols, rows = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+path, iid, maxcols, cw, ch = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5])
 d = open(path, 'rb').read()
 if d[:8] != b'\x89PNG\r\n\x1a\n':
     sys.stderr.write(f"{path}: not a PNG\n"); sys.exit(0)
 w, h = struct.unpack('>II', d[16:24])
+# natural footprint at 1:1 px; scale uniformly to fit maxcols, preserving aspect
+natCols, natRows = w/cw, h/ch
+if natCols > maxcols:
+    s = maxcols/natCols; natCols *= s; natRows *= s
+cols, rows = max(1, round(natCols)), max(1, round(natRows))
 b64 = base64.b64encode(d).decode()
 ESC = '\x1b'
 # Chunk the base64 at 4096 bytes. First chunk carries all the controls; subsequent
@@ -44,10 +60,12 @@ for n, ch in enumerate(chunks):
     first = (n == 0)
     last  = (n == len(chunks)-1)
     m = 0 if last else 1
+    # q=2 on EVERY chunk, not just the first: a chunked continuation (m=) also
+    # replies ;OK unless suppressed, so the final m=0 chunk leaks an OK otherwise.
     if first:
         ctrl = f"a=T,f=100,q=2,i={iid},c={cols},r={rows},m={m}"
     else:
-        ctrl = f"m={m}"
+        ctrl = f"q=2,m={m}"
     out.append(f"{ESC}_G{ctrl};{ch}{ESC}\\")
 sys.stdout.write("".join(out))
 sys.stdout.flush()
@@ -60,15 +78,18 @@ GRAY=tests/chess-piece.png                  # colortype 0 (grayscale), small, 1 
 RGBA=$(ls tests/img/example.png 2>/dev/null) # colortype 6 (RGBA), medium
 RGB=README.md-1.png                          # colortype 2 (RGB), large -> multi-chunk
 
+echo "(measured cell ${CELLW}x${CELLH} px; c/r computed to PRESERVE ASPECT RATIO)"
+
 banner "1. Grayscale PNG (colortype 0, 1 chunk): $GRAY"
-[ -f "$GRAY" ] && { wrap_png "$GRAY" 8001 10 5; printf '\n'; } || echo "missing"
+[ -f "$GRAY" ] && { wrap_png "$GRAY" 8001 12; printf '\n'; } || echo "missing"
 
 banner "2. RGBA PNG (colortype 6): ${RGBA:-<none>}"
-[ -n "$RGBA" ] && [ -f "$RGBA" ] && { wrap_png "$RGBA" 8002 16 8; printf '\n'; } || echo "missing — skip"
+[ -n "$RGBA" ] && [ -f "$RGBA" ] && { wrap_png "$RGBA" 8002 16; printf '\n'; } || echo "missing — skip"
 
 banner "3. Large RGB PNG (colortype 2, MULTI-CHUNK): $RGB"
-[ -f "$RGB" ] && { wrap_png "$RGB" 8003 24 12; printf '\n'; } || echo "missing — skip"
+[ -f "$RGB" ] && { wrap_png "$RGB" 8003 24; printf '\n'; } || echo "missing — skip"
 
 banner "DONE"
-echo "Report: did each PNG render at its cell box? (stderr above lists size/chunks.)"
-echo "If yes, the PNG path needs no timg; terminal handles color types + chunking."
+echo "Report: did each PNG render UNDISTORTED (circle round, square square) at its"
+echo "cell box? (stderr lists size/chunks.) If yes, the PNG path needs no timg, the"
+echo "terminal handles color types + chunking, and aspect ratio is preserved."

@@ -11,7 +11,12 @@ state.
   timg (`-pk`) is used **only** for JPEG/GIF/SVG → Kitty PNG. Sixel path unchanged.
 - **Unique image id per image** (timg reuses `i=`; a colliding `a=T` re-lays the
   prior placement). Use transmit-once `a=t` + placement `a=p` in gmore.
-- **`q=2` on every** transmit and placement command (else the `;OK` reply leaks).
+- **`q=2` on every** command — transmit, placement, **and every chunked
+  continuation** (`m=` chunks also reply `;OK` without it; the last chunk leaks).
+- **Aspect ratio:** cells are not square (~7×16 px), so derive `c`/`r` from
+  `imageW/cellW` and `imageH/cellH` (the `cellMetrics` area ratio) and scale
+  uniformly to the column budget — never hardcode a `c:r`. A wrong ratio stretches
+  the image (square→rectangle). The sixel path already does this; mirror it.
 - **`c=`/`r=` is mandatory** to size the image (the terminal scales; we never rely
   on timg `-g`, which it ignores for Kitty).
 - **Byte-exact** Kitty/PNG stream handling — never line-oriented edits.
