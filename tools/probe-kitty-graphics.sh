@@ -71,34 +71,35 @@ case "$reply" in
     *)       echo "=> Unexpected reply; inspect the raw bytes above." ;;
 esac
 
-# Inject one or more control keys into a timg -pk APC: insert "<keys>," right
-# after the "ESC_G" so they precede timg's own a=T,... controls (timg does NOT
-# emit c=/r= itself, so there's no conflict). Kitty reads the whole comma list up
-# to ';'. Done with awk on the raw bytes (binary-safe: the base64 body has no
-# ESC/NUL). The trailing newline is preserved with ORS. This is exactly how mdcat
-# will add a cell footprint to timg's PNG.
+# Inject control keys into a timg -pk APC: insert "<keys>," right after the
+# "ESC_G" so they precede timg's own a=T,... controls (timg does NOT emit c=/r=
+# itself, so there is no conflict). Kitty reads the whole comma list up to ';'.
+#
+# MUST be byte-exact: the payload is binary (Kitty APC + base64 PNG) and timg
+# emits a newline between the APC terminator (ESC \) and a trailing ESC[?25h.
+# Line-oriented tools (awk/sed) split on that newline and drop/move it, which
+# leaves the image mis-placed (observed: a grey block instead of the picture).
+# `perl -0777` slurps the whole stream as one record, so the substitution is
+# byte-exact and the newline is preserved. This is how mdcat will add a footprint.
 inject_keys() {  # $1=png  $2=keys e.g. "c=10,r=4"
-    $TIMG_PK "$1" 2>/dev/null | LC_ALL=C awk -v k="$2" 'BEGIN{ORS=""}
-        { n=index($0,"\033_G");
-          if (n>0) { printf "%s\033_G%s,%s", substr($0,1,n-1), k, substr($0,n+3) }
-          else printf "%s", $0 }'
+    $TIMG_PK "$1" 2>/dev/null | perl -0777 -pe "s/\\x1b_G/\\x1b_G$2,/"
 }
 
 banner "2. Display WITH a cell footprint (c=COLS,r=ROWS) — what mdcat will emit"
 COLS=10; ROWS=4
-echo "timg's PNG WITH c=${COLS},r=${ROWS} injected (the real mdcat path). You should"
-echo "see the source image ($PROBE_PNG) rendered correctly at ~${COLS}x${ROWS} CELLS:"
+echo "timg's PNG WITH c=${COLS},r=${ROWS} injected (the real mdcat path), via a"
+echo "byte-exact perl splice. You should see the source image ($PROBE_PNG)"
+echo "rendered correctly, scaled to ~${COLS}x${ROWS} CELLS:"
 inject_keys "$PROBE_PNG" "c=${COLS},r=${ROWS}"
 printf '\n'
 
-banner "3. Display WITHOUT a footprint — EXPECTED to look wrong (control case)"
-echo "The SAME timg PNG with NO c=/r= (bare 'timg -pk'). Some terminals (e.g."
-echo "VSCode) mis-render a footprint-less PNG as a distorted/grey block. If THIS"
-echo "looks wrong but #2 looks right, that's the expected result: it shows mdcat"
-echo "MUST always inject c=/r= (timg ignores -g and never sets them itself):"
+banner "3. Display at native size (bare timg -pk, no footprint) — reference"
+echo "The same image with NO c=/r= injected (bare 'timg -pk'). Renders at timg's"
+echo "native pixel size. Shown as a reference so you can compare #2's cell scaling"
+echo "against it; both should be a recognizable image, just different sizes:"
 $TIMG_PK "$PROBE_PNG" 2>/dev/null
 printf '\n'
 
 banner "DONE"
-echo "Report: query reply (;OK?), #2 correct at ${COLS}x${ROWS} cells?, #3 distorted?,"
-echo "terminal name. (Env context is printed in section 0 above.)"
+echo "Report: query reply (;OK?), is #2 a correct image at ~${COLS}x${ROWS} cells?,"
+echo "is #3 a correct image at native size?, terminal name. (Env in section 0.)"

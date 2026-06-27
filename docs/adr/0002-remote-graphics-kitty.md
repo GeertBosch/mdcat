@@ -92,15 +92,22 @@ gmore needs only the image's pixel dimensions (Pw,Pv) for the crop math, and get
 them by parsing the **PNG IHDR** — a 16-byte plaintext field right after the
 signature, *before* the compressed IDAT. **No inflate, no full PNG decode.**
 
-**`c=`/`r=` is mandatory, not optional.** Probing showed `timg -pk` ignores `-g`
-for the PNG: it always emits the image at *native resolution* and sets *no* `c=`/`r=`
-— it delegates all sizing to those keys, which it never fills in. A bare timg Kitty
-APC with no footprint renders as distorted garbage (observed in VSCode: a 64×64
-opaque PNG became grey mush without `c=`/`r=`, and the correct image with them). So
-unlike the sixel path — where the sixel header carries exact pixels and timg sizes
-the image — mdcat's Kitty backend **must always compute and inject `c=`/`r=`** from
-its own `cellMetrics` footprint math (intrinsic pixels from the PNG IHDR). There is
-no "let timg/the terminal choose" fallback in Kitty mode.
+**mdcat must inject `c=`/`r=` to control display size.** Probing showed `timg -pk`
+ignores `-g` for the PNG: it always emits the image at *native resolution* and sets
+*no* `c=`/`r=`. A bare timg Kitty APC therefore displays at native pixel size; to lay
+the image out in a known cell box (the whole point of the remote story) mdcat must
+compute and inject `c=`/`r=` from its own `cellMetrics` footprint math (intrinsic
+pixels from the PNG IHDR). (A bare native-size image still renders *correctly* — see
+the retraction below; the footprint governs SIZE, not correctness.)
+
+**Retraction.** An earlier draft claimed a footprint-less PNG renders as distorted
+"grey mush" while one with `c=`/`r=` is correct. That was a **probe artifact, not
+terminal behavior**: the probe spliced `c=`/`r=` into timg's binary APC with `awk`,
+which is line-oriented and dropped the newline timg emits between the APC terminator
+and a trailing `ESC[?25h`, mis-placing the image. With a byte-exact splice
+(`perl -0777`) both the footprinted and the bare-native images render correctly.
+**Lesson for the implementation: never edit the Kitty/PNG byte stream with
+line-oriented tools — operate on raw bytes.**
 
 ## Consequences
 
@@ -132,7 +139,8 @@ If (1) fails the core premise collapses and this ADR must be revised before
 coding.
 
 **Result (VSCode, 2026-06-27):** (1) CONFIRMED — a timg PNG with `c=10,r=4`
-injected scaled to ~10×4 cells. (3) a footprint-LESS timg Kitty APC rendered
-distorted; with `c=`/`r=` it was correct — promoting `c=`/`r=` to mandatory (see
-decision 4). Status promoted to Accepted. SSH-side runs (2) still pending and do
-not block the local architecture decision.
+spliced in (byte-exact) scaled to ~10×4 cells; a bare native-size timg PNG also
+rendered correctly. (An intermediate run showed a distorted block, traced to an
+`awk` splice corrupting the byte stream — see the retraction in decision 4, not a
+terminal limitation.) Status promoted to Accepted. SSH-side runs (2) still pending
+and do not block the local architecture decision.
