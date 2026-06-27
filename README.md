@@ -41,19 +41,33 @@ line.
 
 ### Images
 
-Inline `<img>` tags and `![alt text](your-image.png)` links render as actual images on
-sixel-capable terminals (iTerm2, VSCode, WezTerm, xterm with sixel enabled).
-Images are scaled to fit the available column width while preserving aspect
-ratio. Supported formats: **PNG**, **JPEG**, **GIF**, **SVG** (via
-[timg](https://github.com/hzeller/timg)).
+Inline `<img>` tags and `![alt text](your-image.png)` links render as actual
+images on graphics-capable terminals. Images are scaled to fit the available
+column width while preserving aspect ratio. Supported formats: **PNG**, **JPEG**,
+**GIF**, **SVG** (via [timg](https://github.com/hzeller/timg)).
 
-Image paths are resolved relative to the markdown file's directory. On
-terminals without sixel support (Apple Terminal, plain xterm, piped output)
-the image falls back to its alt text, or the filename if no alt is given.
+mdcat chooses a graphics protocol automatically: the **Kitty graphics protocol**
+on terminals that support it (VSCode, iTerm2, Ghostty/Orbstack, Kitty, WezTerm),
+falling back to **sixel** elsewhere. Kitty is preferred because it sizes images
+in character cells, so they lay out correctly **over SSH** — the remote host
+needn't know the local terminal's pixel geometry. On terminals without any
+graphics support (Apple Terminal, plain xterm, piped output) the image falls
+back to its alt text, or the filename if no alt is given.
+
+Image paths are resolved relative to the markdown file's directory.
 
 | PNG | JPEG | GIF | SVG |
 | --- | ---- | --- | --- |
 | ![example.png (PNG)](tests/img/example.png) | <img src="tests/img/joan-mitchell.jpg" alt="Joan Mitchell (JPEG)"> | <img src="tests/img/sunflower.gif" alt="Sunflower (GIF)"> | <img src="tests/img/chessboard.svg" alt="Chessboard (SVG)"> |
+
+#### Remote sessions and overrides
+
+Over SSH, mdcat detects the local terminal's capabilities through the pty, and
+defaults to the Kitty protocol when it cannot tell (e.g. VSCode Remote-SSH, where
+the terminal identity isn't forwarded). Override the choice with
+`MDCAT_GRAPHICS=kitty|sixel|none`. If a remote session can't query the local cell
+size, supply it with `MDCAT_CELL_W` / `MDCAT_CELL_H` (and optionally
+`MDCAT_AREA_W` / `MDCAT_AREA_H`) — e.g. forward them with `ssh -o SendEnv=MDCAT_*`.
 
 ### Block quotes
 
@@ -176,8 +190,8 @@ columns flush — count the cells, not the bytes:
 
 ### mdcat
 
-Renders Markdown to the terminal with ANSI styling, sixel images, and OSC 8
-hyperlinks.
+Renders Markdown to the terminal with ANSI styling, inline images (Kitty or
+sixel graphics), and OSC 8 hyperlinks.
 
 ```
 mdcat [--width N] [--img] [--] [file ...]
@@ -186,8 +200,14 @@ mdcat [--width N] [--img] [--] [file ...]
 | Flag | Description |
 | ---- | ----------- |
 | `--width N` / `-w N` | Force render width in columns (overrides `$COLUMNS` and terminal size) |
-| `--img` | Emit sixel output even when stdout is not a TTY (for piping into gmore) |
+| `--img` | Emit image output even when stdout is not a TTY (for piping into gmore) |
 | `--` | End option parsing (allows filenames starting with `-`) |
+
+| Environment | Description |
+| ----------- | ----------- |
+| `MDCAT_GRAPHICS` | Force the image protocol: `kitty`, `sixel`, or `none` |
+| `MDCAT_CELL_W` / `MDCAT_CELL_H` | Local terminal cell size in pixels (for remote sessions that can't query it) |
+| `MDCAT_AREA_W` / `MDCAT_AREA_H` | Local terminal text-area size in pixels (for an exact pixel↔cell ratio) |
 
 Reads stdin when no files are given. Multiple files are concatenated.
 

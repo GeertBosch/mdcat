@@ -33,7 +33,7 @@ state.
   best-effort probe → **optimistic Kitty default** → text. Env is unreliable over
   SSH (blank under VSCode Remote-SSH), so the default carries the no-env case.
 
-## Phase 0 — Backend selection + cell metrics (no visible change)
+## Phase 0 — Backend selection + cell metrics (no visible change) ✅ DONE
 
 1. `enum GraphicsBackend { None, Sixel, Kitty }` and `graphicsBackend()`:
    - `MDCAT_GRAPHICS=kitty|sixel|none` wins.
@@ -51,7 +51,13 @@ state.
 3. Commit. No output change yet; verify via `MDCAT_DEBUG_CELL` and a debug print of
    the chosen backend.
 
-## Phase 1 — Kitty output for mdcat `<img>` + mermaid
+## Phase 1 — Kitty output for mdcat `<img>` + mermaid ✅ DONE
+
+(Implementation note: also generalized the image-placement gate from
+`isSixelImage` to `isImageBlock` so Kitty images flow through the paragraph,
+table-cell, and mermaid emit paths; `replaySixel`/`emitImageParagraph` already
+work for both protocols since neither moves the cursor predictably. gmore-side
+Kitty ingest + scroll-clip remains Phase 2.)
 
 1. `runTimgKitty(path, geom)`: like the existing `runTimg` but `-pk` instead of
    `-ps`. Returns timg's chunked Kitty APC bytes.
