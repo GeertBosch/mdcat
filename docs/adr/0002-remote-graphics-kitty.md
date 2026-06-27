@@ -139,8 +139,14 @@ If (1) fails the core premise collapses and this ADR must be revised before
 coding.
 
 **Result (VSCode, 2026-06-27):** (1) CONFIRMED — a timg PNG with `c=10,r=4`
-spliced in (byte-exact) scaled to ~10×4 cells; a bare native-size timg PNG also
-rendered correctly. (An intermediate run showed a distorted block, traced to an
-`awk` splice corrupting the byte stream — see the retraction in decision 4, not a
-terminal limitation.) Status promoted to Accepted. SSH-side runs (2) still pending
-and do not block the local architecture decision.
+(byte-exact splice, **unique image id**) rendered the image correctly scaled to a
+~10×4 cell box; a bare native-size timg PNG also rendered correctly. Getting here
+took ruling out three causes of an earlier grey-block: a false "terminals
+mis-render footprint-less PNGs" theory, a real-but-separate `awk` splice that
+dropped a boundary newline (fixed with `perl -0777`), and the **actual** cause —
+**timg reuses the same `i=` across renders of a file, so a second `a=T` re-lays the
+first placement and corrupts it.** Implication for the implementation:
+mdcat/gmore must give each image a **unique id** (or transmit-once `a=t` +
+placements `a=p`), and must edit the Kitty byte stream byte-exactly (never with
+line-oriented tools). Status promoted to Accepted. SSH-side runs (2) and other
+terminals (iTerm2/Orbstack) still pending and do not block the local decision.
