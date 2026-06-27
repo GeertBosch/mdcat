@@ -44,8 +44,11 @@ printf '\n'
 
 # Emit a placement: display a crop of the transmitted image. Controls only, no
 # payload. x,y,w,h = source-pixel rectangle; c,r = cell box it scales into.
+# q=2 SUPPRESSES the terminal's OK/error reply — without it, Kitty answers each
+# graphics command with `ESC_G...;OK ESC\`, which echoes onscreen as stray escapes.
+# (timg's own transmit already sets q=2, which is why the transmit step is clean.)
 place() {  # $1=x $2=y $3=w $4=h $5=c $6=r
-    printf '%s_Ga=p,i=%s,x=%s,y=%s,w=%s,h=%s,c=%s,r=%s%s' \
+    printf '%s_Ga=p,i=%s,q=2,x=%s,y=%s,w=%s,h=%s,c=%s,r=%s%s' \
            "$ESC" "$ID" "$1" "$2" "$3" "$4" "$5" "$6" "$APC_END"
 }
 

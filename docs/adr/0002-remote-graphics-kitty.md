@@ -105,6 +105,12 @@ partially-scrolled image in gmore:
   - **top-cut** → crop the bottom slice (`y=Pv·hidRows/totRows`) into `r=visRows`.
 - Delete/repaint via `a=d,d=i,i=<id>` — no per-band re-encode.
 
+This was **validated end-to-end** by `tools/probe-kitty-clip.sh` (2026-06-27):
+transmitting once and placing top-half / bottom-half source crops rendered exactly
+the head-only and base-only bands. **Set `q=2` on every graphics command** (both
+transmit and placement) — Kitty otherwise replies `ESC_G…;OK ESC\` to each, which
+echoes as stray escapes; timg's transmit already sets `q=2`.
+
 gmore needs only the image's pixel dimensions (Pw,Pv) for the crop math, and gets
 them by parsing the **PNG IHDR** — a 16-byte plaintext field right after the
 signature, *before* the compressed IDAT. **No inflate, no full PNG decode.**
