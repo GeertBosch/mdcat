@@ -85,7 +85,24 @@ gmore-side Kitty ingest + scroll-clip remains Phase 2.
    `renderImageBlock` Kitty branch (it's just another image file).
 5. README demo + commit.
 
-## Phase 2 — gmore Kitty ingest + scroll-clip
+## Phase 2 — gmore Kitty ingest + scroll-clip ✅ DONE
+
+Implementation notes (gmore_core.h):
+- `Image` gained `kitty` (verbatim chunked APC), `kid`, `isKitty()`. The APC parser
+  (`apc`/`finishKittyChunk`/`finishKitty`) reassembles `m=1`…`m=0` chunks into
+  `kittyAcc`, then `kittyParse` reads the id (`i=`) + PNG pixel size from the IHDR
+  carried in the first chunk's base64 (`kittyB64DecodePrefix` + `kittyPngSize`) — no
+  raster decode. The image anchors at the cursor and advances it below, exactly like
+  a sixel.
+- `paintImageBand` branches: sixel → `replaySixel`; Kitty → transmit once via
+  `kittyTransmitOnly` (rewrites the first chunk's `a=T`→`a=t` so the data send draws
+  nothing), tracked in `kittyTransmitted`, then a payload-free `kittyPlace`
+  (`a=p,q=2,x=0,y=skipPx,w=Pw,h=keepPx,c,r`) for the visible crop. Both `paintImages`
+  (interactive) and the inline `renderRow` path call `paintImageBand`, so the existing
+  `skipPx`/`keepPx` clip math feeds Kitty unchanged.
+- Verified (`MDCAT_CELL_W/H` + `GMORE_KEYS` scroll trace): top-clip (`y>0`) and
+  bottom-clip (`h<Pv,r<full`) placements emitted as the image scrolls; one `a=t` per
+  image, zero `a=T`, `q=2` everywhere. All 14 `make check` tests pass.
 
 1. Parse Kitty APCs from the mdcat stream into the image layer: record
    `{id, row, col, Pw, Pv (from PNG IHDR), footCols, footRows, pngBytes}`. No raster
