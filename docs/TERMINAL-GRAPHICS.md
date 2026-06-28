@@ -122,6 +122,15 @@ terminal doesn't answer (headless/piped) `-b` is omitted and timg keeps its defa
 harmless, since nothing is displayed there. Kitty needs none of this: it sends the PNG
 verbatim with no banding or pad. (`MDCAT_BG` overrides the query for tests.)
 
+**That same OSC 11 background also drives the code-block theme.** The query is
+memoised, so it reaches the terminal **exactly once** per run (warmed on the main
+thread before the image pool starts); `darkBackground()` classifies its Rec. 601 luma
+(`< 128` ⇒ dark) and `initTheme()` picks the palette. Light: light-gray panel, dark
+text, saturated highlight hues. Dark: dark-gray panel, light-gray text, the *same*
+hues lightened. The highlighter holds two fixed `Palette` structs and flips one pointer
+(`setHighlightTheme`); the reset-to-fg in each must match the panel fg (236 light / 252
+dark). No answer ⇒ light (historical default); `$MDCAT_THEME=dark|light` forces it.
+
 **Placement is made terminal-independent with DECSC/DECRC** (`ESC 7` … `ESC 8`).
 After a sixel, terminals disagree on where the cursor ends up: **VSCode advances to
 the row below the image; iTerm2 does not.** A bare replay that assumed one of these
