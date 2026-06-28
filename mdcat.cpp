@@ -37,6 +37,7 @@
 //         --img forces image output even when piped; an optional protocol pins the graphics backend.
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cerrno>
 #include <cstdio>
@@ -1475,9 +1476,10 @@ std::string runTimgKitty(const std::string& path, const std::string& geomIn) {
 
 // A per-run monotonic Kitty image id. timg assigns the SAME id to every render of a given file, so
 // two images in one document would collide — a later transmit replaces the earlier image and re-lays
-// its placement. Handing out a fresh id per image keeps them independent.
+// its placement. Handing out a fresh id per image keeps them independent. Atomic so parallel image
+// workers (ADR 0003) can mint ids concurrently without colliding or racing on the counter.
 uint32_t nextKittyId() {
-    static uint32_t id = 1000;
+    static std::atomic<uint32_t> id{1000};
     return ++id;
 }
 
@@ -1607,8 +1609,9 @@ bool sixelPixelSize(const std::string& sixel, int& pw, int& ph) {
 // row just below the image, so a sixel painted at the top of a reserved block lands within it. The
 // footprint is computed from the painted pixel size read back out of the sixel (which reflects
 // timg's aspect-preserving fit), divided by the real cell size — not from the requested -g box.
-bool renderImageBlock(const std::string& text, int availWidth, std::string& out, int& cellWidth,
-                      int& cellHeight, bool forceWidthBound = false) {
+bool renderImageBlock(const std::string& text, int availWidth, const std::string& fileDir,
+                      std::string& out, int& cellWidth, int& cellHeight,
+                      bool forceWidthBound = false) {
     std::map<std::string, std::string> attrs;
     if (!parseImgTag(text, attrs) && !parseMdImage(text, attrs)) return false;
 
@@ -1638,9 +1641,10 @@ bool renderImageBlock(const std::string& text, int availWidth, std::string& out,
     if (!terminalSupportsGraphics()) return fallback("no graphics support");
 
     if (srcIt == attrs.end() || srcIt->second.empty()) return fallback("no src");
-    // Resolve relative paths against the directory of the file being rendered.
+    // Resolve relative paths against the directory of the file being rendered. fileDir is passed in
+    // (a snapshot of gFileDir) rather than read from the global, so image workers stay global-free.
     std::string src = srcIt->second;
-    if (!gFileDir.empty() && src[0] != '/') src = gFileDir + "/" + src;
+    if (!fileDir.empty() && src[0] != '/') src = fileDir + "/" + src;
 
     if (!readImageSize(src)) return fallback("not a supported image");
 
@@ -1832,7 +1836,8 @@ bool renderMermaidBlock(const std::vector<std::string>& lines, int availWidth, s
     // Hand the rendered PNG to the <img> pipeline as an absolute path (so gFileDir resolution is a
     // no-op), reusing all of its geometry and sixel-capture logic.
     std::string tag = "<img src=\"" + std::string(pngPath) + "\">";
-    bool ok = renderImageBlock(tag, availWidth, out, cellWidth, cellHeight);
+    // pngPath is absolute, so fileDir resolution is a no-op; pass empty.
+    bool ok = renderImageBlock(tag, availWidth, /*fileDir=*/std::string(), out, cellWidth, cellHeight);
     cleanup();
     return ok && !out.empty() && cellHeight > 0;
 }
@@ -2035,7 +2040,7 @@ void emitParagraph(const std::vector<std::string>& lines, std::ostream& out) {
     // placed via the reserve-and-paint helper; the text fallback is emitted as a normal line.
     std::string image;
     int iw = 0, ih = 0;
-    if (renderImageBlock(trim(joined), terminalWidth(), image, iw, ih)) {
+    if (renderImageBlock(trim(joined), terminalWidth(), gFileDir, image, iw, ih)) {
         if (image.empty()) return;
         if (isImageBlock(image)) emitImageParagraph(image, ih, out);
         else                     out << image << '\n';   // one-line text fallback
@@ -2197,7 +2202,7 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
             // Render at the full content budget so an explicit height is honoured at the image's
             // natural width; a column too narrow to hold it is handled by a re-render after layout.
             std::string cellText = trim(rows[i][j]);
-            if (renderImageBlock(cellText, budget, block, iw, ih) && isImageBlock(block)) {
+            if (renderImageBlock(cellText, budget, gFileDir, block, iw, ih) && isImageBlock(block)) {
                 rows[i][j] = block;
                 isImage[i][j] = true;
                 imgRows[i][j] = std::max(1, ih);
@@ -2279,7 +2284,8 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
             if (!isImage[i][j] || allocWidth[j] >= imgCellW[i][j]) continue;
             std::string block;
             int iw = 0, ih = 0;
-            if (renderImageBlock(imgText[i][j], allocWidth[j], block, iw, ih, /*forceWidthBound=*/true) &&
+            if (renderImageBlock(imgText[i][j], allocWidth[j], gFileDir, block, iw, ih,
+                                 /*forceWidthBound=*/true) &&
                 isImageBlock(block)) {
                 rows[i][j] = block;
                 imgRows[i][j] = std::max(1, ih);
