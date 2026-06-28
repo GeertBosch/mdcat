@@ -373,5 +373,6 @@ ssh -o SendEnv=MDCAT_* host mdcat doc.md  # forward MDCAT_GRAPHICS / MDCAT_CELL_
   the nerd-focused companion: what we measured across terminals, the dead ends, and
   the facts we now rely on for image placement, paging, tables, and SSH.
 - [Architecture decision records](docs/adr/) — the data model
-  ([ADR 0001](docs/adr/0001-gmore-data-model.md)) and remote-graphics architecture
-  ([ADR 0002](docs/adr/0002-remote-graphics-kitty.md)).
+  ([ADR 0001](docs/adr/0001-gmore-data-model.md)), remote-graphics architecture
+  ([ADR 0002](docs/adr/0002-remote-graphics-kitty.md)), and parallel image rendering.
+  ([ADR 0003](docs/adr/0003-parallel-image-jobs.md)).
