@@ -85,6 +85,17 @@ tty.
   lands wherever we moved the cursor. Column/row placement becomes pure cursor
   math — no CPR round-trips needed at paint time.
 
+**Detach `timg`'s stdin (`</dev/null`).** `popen("r")` only captures stdout; stdin
+stays on the controlling tty, and `timg` then puts the terminal into raw mode
+(no ECHO/ICANON) to query it, restoring on exit. That is harmless serially, but once
+several `timg` processes run **concurrently** (ADR 0003 image pool) their
+save/restore races — each saves whatever state it happened to read, and the last to
+exit restores a stale "echo off", leaving the user's shell with no echo after e.g.
+`mdcat --img README.md | cat`. Redirecting stdin from `/dev/null` stops `timg`
+touching terminal modes entirely; we already pass an explicit `-g` box and protocol,
+so there is nothing for it to auto-detect. (`mmdc` gets the same `</dev/null` for
+the same reason.)
+
 **Placement is made terminal-independent with DECSC/DECRC** (`ESC 7` … `ESC 8`).
 After a sixel, terminals disagree on where the cursor ends up: **VSCode advances to
 the row below the image; iTerm2 does not.** A bare replay that assumed one of these
@@ -305,6 +316,9 @@ dash workaround above).
   vs line spans.
 - [ADR 0002 — remote graphics over SSH](adr/0002-remote-graphics-kitty.md): the
   raster-first, Kitty-passthrough architecture.
+- [ADR 0003 — parallel image conversion jobs](adr/0003-parallel-image-jobs.md): the
+  thread pool, deferred slots, and writer thread that convert images in parallel —
+  the concurrency that forces the `</dev/null` stdin detach in §3.
 - [gmore rendering notes](gmore-rendering-notes.md): the sixel encode/decode and
   paint-path invariants in `gmore.cpp`.
 

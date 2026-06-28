@@ -1425,8 +1425,14 @@ std::string runTimg(const std::string& path, const std::string& geomIn) {
         else quoted += c;
     }
     quoted += "'";
-    if (!geom.empty()) cmd << "timg -ps -g" << geom << " " << quoted << " 2>/dev/null";
-    else               cmd << "timg -ps " << quoted << " 2>/dev/null";
+    // stdin from /dev/null: timg only writes its sixel/Kitty bytes to stdout (the pipe). With stdin left
+    // on the controlling tty, timg puts the terminal into raw mode (no ECHO/ICANON) to query it, then
+    // restores it on exit — but when several timg processes run concurrently (ADR 0003), their
+    // save/restore races and the last one restores a stale "echo off" state, leaving the user's terminal
+    // dead. Detaching stdin stops timg touching terminal modes at all; we already pass an explicit -g
+    // box and protocol, so it has nothing to auto-detect.
+    if (!geom.empty()) cmd << "timg -ps -g" << geom << " " << quoted << " </dev/null 2>/dev/null";
+    else               cmd << "timg -ps " << quoted << " </dev/null 2>/dev/null";
     FILE* p = popen(cmd.str().c_str(), "r");
     if (!p) return std::string();
     std::string out;
@@ -1455,7 +1461,9 @@ std::string runTimgKitty(const std::string& path, const std::string& geomIn) {
     }
     quoted += "'";
     std::ostringstream cmd;
-    cmd << "timg -pk -g" << geom << " " << quoted << " 2>/dev/null";
+    // stdin from /dev/null so concurrent timg processes never race on terminal raw-mode save/restore
+    // and leave the tty with echo disabled — see runTimg's note.
+    cmd << "timg -pk -g" << geom << " " << quoted << " </dev/null 2>/dev/null";
     FILE* p = popen(cmd.str().c_str(), "r");
     if (!p) return std::string();
     std::string out;
@@ -1924,7 +1932,7 @@ bool renderMermaidBlock(const std::vector<std::string>& lines, int availWidth, s
         // -q suppresses mmdc's progress chatter so it never pollutes the rendered output; stderr is
         // discarded as a further guard.
         std::string cmd = chromeEnv + "mmdc -q" + opts + " -i " + shquote(srcPath) + " -e png -o " +
-                          shquote(pngPath) + " >/dev/null 2>&1";
+                          shquote(pngPath) + " </dev/null >/dev/null 2>&1";
         return std::system(cmd.c_str()) == 0;
     };
 
