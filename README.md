@@ -123,10 +123,14 @@ Task lists (the GitHub extension) render their checkboxes as ☐ and ☑:
 
 ### Code blocks
 
-Fenced code blocks render on a light-gray background panel. When the opening
-fence carries a language tag, syntax highlighting is applied: keywords in blue
-bold, strings in dark red, comments in dark green italic, numbers in magenta,
-and preprocessor directives in orange.
+Fenced code blocks render on a background panel whose colours follow the
+terminal theme, detected from its background (queried once via OSC 11). On a
+**light** terminal the panel is light-gray with dark text and saturated
+highlight hues; on a **dark** terminal it is dark-gray with light-gray text and
+the same hues lightened to stay readable. When the opening fence carries a
+language tag, syntax highlighting is applied: keywords in blue bold, strings in
+red, comments in green italic, numbers in magenta, and preprocessor directives
+in orange. Set `MDCAT_THEME=dark` or `=light` to override the auto-detection.
 
 ```cpp
 #include <cstdint>
