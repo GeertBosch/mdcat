@@ -4,6 +4,10 @@ A terminal Markdown renderer with inline images, tables, and hyperlinks.
 Companion pager `gmore` handles sixel and Kitty graphics natively, so images
 keep working over SSH.
 
+> Curious how images survive a terminal, a table, a pager, and an SSH hop? The
+> [terminal-graphics field guide](docs/TERMINAL-GRAPHICS.md) is the nerd-focused
+> tour of what we measured, broke, and now hold as ground truth.
+
 ## Features
 
 ### Headings (with _italics_ and `code`)
@@ -57,6 +61,11 @@ back to its alt text, or the filename if no alt is given.
 
 Image paths are resolved relative to the markdown file's directory.
 
+> Why two protocols, and why a fractional cell breaks naive scaling? See
+> [cells, pixels, and the 6-vs-14 problem](docs/TERMINAL-GRAPHICS.md#2-cells-pixels-and-the-6-vs-14-problem)
+> in the field guide. Keeping images aligned inside a **table** has its own war
+> story: [pin the footprint to the laid-out width](docs/TERMINAL-GRAPHICS.md#5-images-in-tables-pin-the-footprint-to-the-laid-out-width).
+
 | PNG | JPEG | GIF | SVG |
 | --- | ---- | --- | --- |
 | ![example.png (PNG)](tests/img/example.png) | <img src="tests/img/joan-mitchell.jpg" alt="Joan Mitchell (JPEG)"> | <img src="tests/img/sunflower.gif" alt="Sunflower (GIF)"> | <img src="tests/img/chessboard.svg" alt="Chessboard (SVG)"> |
@@ -66,6 +75,10 @@ Image paths are resolved relative to the markdown file's directory.
 Over SSH, mdcat detects the local terminal's capabilities through the pty, and
 defaults to the Kitty protocol when it cannot tell (e.g. VSCode Remote-SSH, where
 the terminal identity isn't forwarded).
+
+> The full account — why `TIOCGWINSZ` pixels are 0 over SSH, why `CSI 16t` still
+> answers through the pty, and why env vars can't be trusted — is in
+> [over SSH: why Kitty, and how sizing still works](docs/TERMINAL-GRAPHICS.md#6-over-ssh-why-kitty-and-how-sizing-still-works).
 
 **Forcing a protocol.** Two equivalent escape hatches pin the graphics backend
 to `kitty`, `sixel`, or `none` (text-only): the `--img` flag with a protocol
@@ -229,6 +242,10 @@ images it transmits each image to the terminal once, then paints the visible
 band on every scroll with a cheap crop placement — no per-scroll re-encode — so
 scrolling stays smooth and images render correctly over SSH.
 
+> Why a pager paints images one 18-px strip at a time, and why scrolling up is
+> harder than scrolling down, is covered in
+> [paging images: the 18-px strip, and scroll asymmetry](docs/TERMINAL-GRAPHICS.md#4-paging-images-the-18-px-strip-and-scroll-asymmetry).
+
 ```
 gmore [--dump | --dump-images | --imginfo] [file]
 ```
@@ -349,3 +366,12 @@ local-terminal setup on the remote host:
 ssh host mdcat doc.md                     # Kitty graphics over the pty
 ssh -o SendEnv=MDCAT_* host mdcat doc.md  # forward MDCAT_GRAPHICS / MDCAT_CELL_* overrides
 ```
+
+## Further reading
+
+- [Terminal graphics ground truth — a field guide](docs/TERMINAL-GRAPHICS.md) —
+  the nerd-focused companion: what we measured across terminals, the dead ends, and
+  the facts we now rely on for image placement, paging, tables, and SSH.
+- [Architecture decision records](docs/adr/) — the data model
+  ([ADR 0001](docs/adr/0001-gmore-data-model.md)) and remote-graphics architecture
+  ([ADR 0002](docs/adr/0002-remote-graphics-kitty.md)).

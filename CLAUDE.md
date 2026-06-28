@@ -35,6 +35,18 @@ The README doubles as a live sample document — rendering it with `mdcat` shoul
 show the feature in action — so a new capability isn't done until it has a demo
 there.
 
+## Keep the terminal-graphics field guide current
+
+`docs/TERMINAL-GRAPHICS.md` is the nerd-focused companion to the README: the
+measured terminal behaviour, the dead ends, and the ground truth behind image
+placement, paging, table alignment, and remote (SSH/Kitty) rendering.
+
+When a significant architectural change shifts that ground truth — a new graphics
+protocol, a different placement/paging strategy, a new terminal added to the
+support matrix, or a probe that overturns a documented belief — update the
+relevant section of that doc in the same change. New probe scripts under `tools/`
+that establish a durable fact belong in its probe table too.
+
 ## Canonical definition of MarkDown
 
 Refer to https://github.github.com/gfm for the specification of the MarkDown format.
