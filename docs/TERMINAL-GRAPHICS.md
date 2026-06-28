@@ -183,13 +183,32 @@ Capability detection therefore can't lean on env alone. The chosen order:
 
 ```
 MDCAT_GRAPHICS override  →  env allowlist (TERM_PROGRAM ghostty/iTerm.app/vscode,
-                            KITTY_WINDOW_ID)  →  best-effort probe  →
-                            OPTIMISTIC KITTY DEFAULT on silence  →  text fallback
+                            KITTY_WINDOW_ID)  →  probe (Kitty a=q + Primary DA)  →
+                            OPTIMISTIC KITTY DEFAULT on TOTAL SILENCE  →  text
 ```
 
-The optimistic default is what carries VSCode Remote-SSH (Kitty-capable but
-env-blank). `MDCAT_GRAPHICS=kitty|sixel|none` (or `--img <proto>`) is the escape
-hatch; `MDCAT_CELL_W/H` and `MDCAT_AREA_W/H` override the metrics.
+**The probe must distinguish "speaks neither" from "no one answered."** A naive
+"Kitty `a=q`, default to Kitty on no reply" leaks: **Apple Terminal over SSH**
+(where `TERM_PROGRAM` is stripped, so the env allowlist's `Apple_Terminal` guard
+never fires) ignores the Kitty query, has no sixel, and would receive a Kitty APC
+it can't render — printing `a=q,f=24,s=1,v=1;AAAA` as text. Worse, Apple Terminal
+*echoes the inner bytes* of the APC it passes through, so even the probe itself
+leaks if echo isn't off.
+
+So the probe sends the Kitty query **and Primary DA (`CSI c`) in one round-trip**:
+
+- Kitty `;OK` in the reply → **Kitty**.
+- else DA reply contains the sixel attribute `;4;` → **Sixel**.
+- else DA replied but neither → **None** (text). *Every* real terminal answers DA,
+  so a DA reply with no Kitty/sixel is a definite "speaks neither" — this is the
+  Apple Terminal case, and it now falls back to text instead of leaking.
+- else **total silence** → optimistic **Kitty** (the genuinely env-blank
+  Kitty-capable remote, e.g. VSCode Remote-SSH, that just didn't answer in time).
+
+Echo is disabled **before** writing the queries, so any reply (or APC pass-through)
+is consumed in no-echo raw mode, never painted on screen. `MDCAT_GRAPHICS=kitty|
+sixel|none` (or `--img <proto>`) is the escape hatch; `MDCAT_CELL_W/H` and
+`MDCAT_AREA_W/H` override the metrics.
 
 **`timg -pk` facts** that the encoder relies on:
 
