@@ -76,10 +76,13 @@ const std::string kBoldOn = "\033[1m";
 const std::string kBoldOff = "\033[22m";
 const std::string kItalicOn = "\033[3m";
 const std::string kItalicOff = "\033[23m";
-const std::string kCodeOn = "\033[48;5;254;38;5;236m";  // light-gray bg, dark-gray fg
+// Code-block colours depend on the terminal theme (see initTheme, called from main once the OSC 11
+// background is known). Light theme: dark-gray text on light-gray. Dark theme: light-gray text on
+// dark-gray. Both are set before any rendering, so reads during rendering see the chosen palette.
+std::string kCodeOn = "\033[48;5;254;38;5;236m";  // light-gray bg, dark-gray fg (light-theme default)
 const std::string kCodeOff = "\033[39;49m";
 const std::string kReset = "\033[0m";
-const std::string kLightGray = "\033[38;5;250m";
+std::string kLightGray = "\033[38;5;250m";        // table row separators; lightened on a dark theme
 const std::string kQuoteBar = "\033[38;5;244m▎\033[0m ";  // the left rule drawn before quoted lines
 
 // An explicit width from the --width/-w command-line flag, or <= 0 if none was given. Set by main()
@@ -461,6 +464,43 @@ std::string queryBackgroundColor() {
         return out;
     }();
     return color;
+}
+
+// Whether the terminal has a DARK background, so code blocks and syntax highlighting should use the
+// dark palette (light-gray text on dark-gray, lightened hues) instead of the light one. Decided from
+// the OSC 11 background colour's luminance (Rec. 601: a bg darker than mid-gray is "dark"). When the
+// terminal doesn't answer OSC 11 (headless/piped, or a terminal that ignores it) we default to the
+// LIGHT theme, matching mdcat's historical appearance. $MDCAT_THEME=dark|light|auto forces the choice.
+// Cached once per run (the underlying query is memoised; this just classifies it).
+bool darkBackground() {
+    static const bool dark = [] {
+        if (const char* t = std::getenv("MDCAT_THEME")) {
+            if (std::string(t) == "dark") return true;
+            if (std::string(t) == "light") return false;
+            // "auto" (or anything else) falls through to detection.
+        }
+        std::string bg = queryBackgroundColor();      // "#rrggbb" or empty
+        if (bg.size() != 7 || bg[0] != '#') return false;  // no answer -> light (historical default)
+        auto hex = [&](int i) { return std::stoi(bg.substr(i, 2), nullptr, 16); };
+        int r = hex(1), g = hex(3), b = hex(5);
+        // Rec. 601 luma; < 128 (mid-gray) means a dark background.
+        return (299 * r + 587 * g + 114 * b) / 1000 < 128;
+    }();
+    return dark;
+}
+
+// Select the code-block colour palette (kCodeOn / kLightGray here, plus the highlighter's palette) for
+// the terminal theme. Light theme keeps the historical look (dark-gray text on light-gray); dark theme
+// uses light-gray text on dark-gray. Called once on the main thread (initTheme) before rendering, so
+// every kCodeOn/kLightGray read sees the chosen palette and the OSC 11 query (memoised) fires once.
+void initTheme() {
+    if (darkBackground()) {
+        kCodeOn = "\033[48;5;236;38;5;252m";  // dark-gray bg, light-gray fg
+        kLightGray = "\033[38;5;240m";        // a dimmer separator that reads on a dark background
+        setHighlightTheme(true);
+    } else {
+        setHighlightTheme(false);             // kCodeOn/kLightGray keep their light-theme defaults
+    }
 }
 
 // Read a positive integer from an environment variable, or 0 if unset/non-positive.
@@ -3465,6 +3505,7 @@ int main(int argc, char** argv) {
     (void)graphicsBackend();
     (void)cellMetrics();
     (void)queryBackgroundColor();
+    initTheme();  // selects the code-block / highlight palette from the (now-cached) background
 
     // The output destination depends on whether stdout is a terminal:
     //   - tty: render the whole document into an in-memory buffer, then page it through gmore, which

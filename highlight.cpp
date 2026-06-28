@@ -29,13 +29,51 @@ namespace {
 // kColReset must cancel every attribute that any token color activates (bold=22, italic=23)
 // in addition to restoring the fg.  Using SGR 0 would also reset the background set by the
 // caller's kCodeOn, so we cancel only what we set.
-const std::string kColReset      = "\033[22;23;38;5;236m"; // cancel bold+italic, restore fg
-const std::string kColKeyword    = "\033[38;5;26;1m";      // blue bold
-const std::string kColIdentifier = kColReset;               // same as reset (no extra color)
-const std::string kColString     = "\033[38;5;88m";        // dark red
-const std::string kColComment    = "\033[38;5;22;3m";      // dark green italic
-const std::string kColNumber     = "\033[38;5;125m";       // magenta
-const std::string kColPreproc    = "\033[38;5;130m";       // orange/brown
+//
+// Two fixed palettes, one per terminal theme. Both are immutable; setHighlightTheme (called once,
+// before any highlightCode) just points `pal` at one of them. Light keeps the historical saturated /
+// dark hues (readable on the light-gray code background); dark uses the SAME hues lightened, with a
+// light-gray code fg in `reset`. The `reset` fg MUST match mdcat's code-block fg (kCodeOn): 236 light,
+// 252 dark, so an un-coloured token returns to the panel's text colour.
+// (An identifier carries no extra colour — it is emitted on the code-block fg the surrounding kCodeOn
+// already set — so there is no identifier entry; the reset fg is the identifier colour.)
+struct Palette {
+    std::string reset;       // cancel bold+italic, restore code fg
+    std::string keyword;
+    std::string str;         // string literals
+    std::string comment;
+    std::string number;
+    std::string preproc;
+};
+
+const Palette kLightPalette = {
+    /*reset*/      "\033[22;23;38;5;236m",  // dark-gray code fg
+    /*keyword*/    "\033[38;5;26;1m",       // blue bold
+    /*str*/        "\033[38;5;88m",         // dark red
+    /*comment*/    "\033[38;5;22;3m",       // dark green italic
+    /*number*/     "\033[38;5;125m",        // magenta
+    /*preproc*/    "\033[38;5;130m",        // orange/brown
+};
+
+const Palette kDarkPalette = {
+    /*reset*/      "\033[22;23;38;5;252m",  // light-gray code fg
+    /*keyword*/    "\033[38;5;75;1m",       // light blue bold
+    /*str*/        "\033[38;5;210m",        // salmon / light red
+    /*comment*/    "\033[38;5;108;3m",      // light green italic
+    /*number*/     "\033[38;5;176m",        // light pink / magenta
+    /*preproc*/    "\033[38;5;180m",        // tan / light orange
+};
+
+// The active palette: a single mutable selector, defaulting to light (mdcat's historical look).
+const Palette* pal = &kLightPalette;
+
+// Accessors so the tokenizer reads the active palette through one indirection.
+const std::string& kColReset()      { return pal->reset; }
+const std::string& kColKeyword()    { return pal->keyword; }
+const std::string& kColString()     { return pal->str; }
+const std::string& kColComment()    { return pal->comment; }
+const std::string& kColNumber()     { return pal->number; }
+const std::string& kColPreproc()    { return pal->preproc; }
 
 // ---------------------------------------------------------------------------
 // Language configuration
@@ -340,13 +378,13 @@ struct Tokenizer {
         size_t n = src.size();
 
         // Helper: emit current color reset (back to code-fg) inline.
-        auto reset = [&]{ out += kColReset; };
+        auto reset = [&]{ out += kColReset(); };
 
         // Helper: flush an accumulated identifier, coloring if it's a keyword.
         auto flushIdent = [&]{
             if (identBuf.empty()) return;
             if (isKw(identBuf)) {
-                out += kColKeyword;
+                out += kColKeyword();
                 out += identBuf;
                 reset();
             } else {
@@ -383,7 +421,7 @@ struct Tokenizer {
                         if (pk != ' ' && pk != '\t') { atLineStart = false; break; }
                     }
                     if (atLineStart) {
-                        out += kColPreproc;
+                        out += kColPreproc();
                         out += c;
                         state = State::Preprocessor;
                         ++i; continue;
@@ -392,7 +430,7 @@ struct Tokenizer {
 
                 // Line comment
                 if (!cfg.lineComment.empty() && src.compare(i, cfg.lineComment.size(), cfg.lineComment) == 0) {
-                    out += kColComment;
+                    out += kColComment();
                     out += cfg.lineComment;
                     i += cfg.lineComment.size();
                     state = State::LineComment;
@@ -401,7 +439,7 @@ struct Tokenizer {
 
                 // Block comment open
                 if (!cfg.blockOpen.empty() && src.compare(i, cfg.blockOpen.size(), cfg.blockOpen) == 0) {
-                    out += kColComment;
+                    out += kColComment();
                     out += cfg.blockOpen;
                     i += cfg.blockOpen.size();
                     state = State::BlockComment;
@@ -411,18 +449,18 @@ struct Tokenizer {
                 // Triple-quoted string (Python)
                 if (cfg.tripleString) {
                     if (src.compare(i, 3, "\"\"\"") == 0) {
-                        out += kColString + "\"\"\"";
+                        out += kColString() + "\"\"\"";
                         i += 3; state = State::TripleDQ; continue;
                     }
                     if (src.compare(i, 3, "'''") == 0) {
-                        out += kColString + "'''";
+                        out += kColString() + "'''";
                         i += 3; state = State::TripleSQ; continue;
                     }
                 }
 
                 // Double-quoted string
                 if (c == '"') {
-                    out += kColString;
+                    out += kColString();
                     out += c;
                     state = State::StringDQ;
                     ++i; continue;
@@ -430,7 +468,7 @@ struct Tokenizer {
 
                 // Single-quoted: char literal vs. string depending on language
                 if (c == '\'') {
-                    out += kColString;
+                    out += kColString();
                     out += c;
                     state = cfg.charLiterals ? State::CharLit : State::StringSQ;
                     ++i; continue;
@@ -446,7 +484,7 @@ struct Tokenizer {
                 // Start of number: digit, or '.' followed by a digit
                 if (std::isdigit(static_cast<unsigned char>(c)) ||
                     (c == '.' && i + 1 < n && std::isdigit(static_cast<unsigned char>(src[i+1])))) {
-                    out += kColNumber;
+                    out += kColNumber();
                     out += c;
                     state = State::Number;
                     ++i; continue;
@@ -517,7 +555,7 @@ struct Tokenizer {
                     // when the caller splits on '\n' every line carries its own color prefix.
                     reset();
                     out += c;
-                    out += kColComment;
+                    out += kColComment();
                     ++i;
                     break;
                 }
@@ -556,7 +594,7 @@ struct Tokenizer {
             // ----------------------------------------------------------------
             case State::TripleDQ: {
                 if (c == '\n' && !escaped) {
-                    reset(); out += c; out += kColString; ++i; break;
+                    reset(); out += c; out += kColString(); ++i; break;
                 }
                 out += c; ++i;
                 if (c == '\\') { escaped = true; break; }
@@ -566,7 +604,7 @@ struct Tokenizer {
 
             case State::TripleSQ: {
                 if (c == '\n' && !escaped) {
-                    reset(); out += c; out += kColString; ++i; break;
+                    reset(); out += c; out += kColString(); ++i; break;
                 }
                 out += c; ++i;
                 if (c == '\\') { escaped = true; break; }
@@ -607,6 +645,12 @@ std::string normalizeTag(const std::string& lang) {
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+
+// Select the colour palette for syntax highlighting. Call once, before any highlightCode, after the
+// terminal theme is known. Just repoints `pal`; both palettes are fixed (see kLightPalette /
+// kDarkPalette). The reset fg in each is kept in sync with mdcat's code-block fg (236 light, 252 dark).
+void setHighlightTheme(bool dark) { pal = dark ? &kDarkPalette : &kLightPalette; }
+
 std::vector<std::string> highlightCode(const std::vector<std::string>& lines,
                                         const std::string& lang) {
     if (lang.empty() || lines.empty()) return lines;

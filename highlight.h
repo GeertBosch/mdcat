@@ -9,3 +9,8 @@
 // unchanged.
 std::vector<std::string> highlightCode(const std::vector<std::string>& lines,
                                         const std::string& lang);
+
+// Select the syntax-highlight colour palette for the terminal theme. Call once, before any
+// highlightCode, after the background is known. dark=true uses lightened hues + a light-gray code fg;
+// dark=false (the default) keeps the historical palette for a light background.
+void setHighlightTheme(bool dark);
