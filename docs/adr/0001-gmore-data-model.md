@@ -3,14 +3,21 @@
 - Status: Accepted
 - Date: 2026-06-07
 - Component: `gmore` (the graphics-aware pager)
+- Update (2026-06-27): the "separate image layer" now holds **either** a sixel
+  raster **or** a Kitty APC transmission — see ADR 0002 and the "Image layer:
+  sixel and Kitty" note below. The cell-grid decision is unchanged.
 
 ## Context
 
 `gmore` emulates a *pragmatic subset* of a terminal (decision: option C) so it can
-page **any** text+sixel stream with **no constraints on the producer** — crucially
-including cursor movement: mdcat places images with `CSI A/B` + `DECSC/DECRC`,
-progress bars rewrite in place, etc. We must choose how to store the parsed
-screen + scrollback that the parser writes into and the pager renders from.
+page **any** text+graphics stream with **no constraints on the producer** —
+crucially including cursor movement: mdcat places images with `CSI A/B` +
+`DECSC/DECRC`, progress bars rewrite in place, etc. (At the time of this ADR the
+only graphics protocol was sixel; ADR 0002 later added Kitty as a second backend.
+This ADR talks about "sixel" throughout because that was the only case then; read
+"the image layer" generically — the model is protocol-agnostic.) We must choose
+how to store the parsed screen + scrollback that the parser writes into and the
+pager renders from.
 
 Two candidates:
 
@@ -69,13 +76,41 @@ struct Attr { uint32_t fg, bg; uint16_t flags; };  // bold/italic/underline/inve
 ## Consequences
 
 - Wide chars occupy two cells (trailing cell marked); combining marks deferred (YAGNI).
-- Sixels live in a **separate image layer**: `{anchorRow, anchorCol, decoded raster}`.
-  Rendering composites images over the text grid and slices strips (height =
-  `ceil(cellH/6)*6`, queried at runtime) for images the window cuts through.
+- Images live in a **separate image layer** anchored to a cell:
+  `{anchorRow, anchorCol, …}`. Rendering composites images over the text grid and,
+  for images the window cuts through, paints only the visible band. See the dual
+  protocol note below.
 - A scrollback cap is required (flag/env); the lazy reader pulls more input on
   page-down. This is also what bounds memory for pipes/infinite streams.
 - Rendering re-derives minimal SGR from per-cell attrs (run-length), so each window
   edge is self-contained — no color bleed across the top/bottom of the view.
+
+## Image layer: sixel and Kitty (ADR 0002), one anchored struct
+
+The "separate image layer" was sixel-only when this ADR was written. ADR 0002
+added the Kitty graphics protocol as a second backend; the cell-grid model
+absorbed it **additively**, exactly as anticipated — the grid stores text, the
+image layer stores images, and "image" is now a tagged union of the two protocols
+rather than a sixel raster. The `Image` struct (`gmore_core.h`) carries the cell
+anchor `{row, col}` plus, depending on protocol:
+
+- **Sixel:** the producer's verbatim DCS payload (`sixel`) and a decoded RGBA
+  raster (`px`, sized `Ph×Pv`). The raster exists for layout, `--imginfo`, and the
+  clipped re-encode used when a window cuts through the image (`replaySixel` /
+  `encodeSixel`).
+- **Kitty:** the producer's verbatim chunked APC transmission (`kitty`), the Kitty
+  image id (`kid`), and the inner PNG's pixel size (`Pv`, read from the IHDR — **no
+  full decode, no inflate**). There is *no* RGBA raster: gmore transmits the bytes
+  once (rewriting `a=T`→`a=t` so the transmit does not also draw), then paints each
+  visible band with a cheap `a=p` source-crop placement — no per-scroll re-encode.
+
+Both honour the producer's optional `c=`/`r=` cell footprint (`footCols`/`footRows`)
+so a width-bound table image stays in its column. The grid code that reserves rows,
+clips at the window edge, and composites images (`heightCells`, `pxPerRow`,
+`paintImages`, `renderRow`) is written against this protocol-agnostic interface, so
+it does not branch on sixel-vs-Kitty beyond the paint primitive. This is why the
+data-model decision needed no revision when Kitty arrived: a writable cell grid +
+an anchored image layer is the right shape regardless of the wire protocol.
 
 ## Hyperlinks (OSC 8) — planned, requires no rewrite
 

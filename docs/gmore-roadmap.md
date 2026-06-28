@@ -1,9 +1,11 @@
 # gmore — missing `more(1)`/`less(1)` features, ranked
 
 `gmore` is a graphics-aware pager: it emulates a terminal subset into a cell grid
-so it can page any text+sixel stream. The paging *mechanics* (scroll, sixel
-re-encode, full-repaint) work well, and the core motion vocabulary is now in
-place. What it still lacks is most of the interactive **content** surface —
+so it can page any text+graphics stream in either **sixel** or the **Kitty**
+graphics protocol (see ADR 0002). Both work locally; Kitty is also what carries
+images over SSH, where sixel cannot size itself. The paging *mechanics* (scroll, image
+re-encode/re-place, full-repaint) work well, and the core motion vocabulary is now
+in place. What it still lacks is most of the interactive **content** surface —
 above all, search.
 
 This document inventories the `more(1)`/`less(1)` feature set, marks what gmore
@@ -26,7 +28,8 @@ already does, and ranks the remaining gaps by value-to-effort.
 - Quit: `q` / `Q`; `space` at `(END)` quits, like `more(1)`
 - Status line: `--More--(NN%)` / `(END)`, reverse-video
 - OSC 8 hyperlinks re-emitted on render
-- (Bonus over `more`: sixel image rendering, the whole point of the tool)
+- (Bonus over `more`: image rendering — sixel or Kitty, locally and over SSH — the
+  whole point of the tool)
 
 ## Ranked gaps (the TODO)
 
