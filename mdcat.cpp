@@ -1475,6 +1475,39 @@ std::string kittyRewriteId(const std::string& apc, uint32_t id) {
     return apc.substr(0, numStart) + std::to_string(id) + apc.substr(numEnd);
 }
 
+// Inject (or replace) the cell-footprint controls c=<cols>,r=<rows> on the FIRST Kitty controls
+// segment of `apc`, byte-exact. timg emits no c=/r=, so the terminal would otherwise derive the
+// footprint by dividing the PNG's pixel size by ITS OWN cell size — which differs from the ~9px cell
+// timg assumed when it sized the image (it has no terminal to query on a pipe). That mismatch makes a
+// width-bound table image paint wider than the column mdcat reserved, overlapping the next cell. With
+// c=/r= the terminal scales the image into EXACTLY that cell box, so the painted footprint always
+// equals mdcat's reservation. (iTerm requires BOTH c and r and honours them exactly — verified via
+// tools/probe-kitty-aspect.sh — so we always set both; aspect is preserved because cols and rows are
+// computed from the same painted pixels and the same real cell ratio.)
+std::string kittyRewriteFootprint(const std::string& apc, int cols, int rows) {
+    if (cols <= 0 || rows <= 0) return apc;
+    size_t g = apc.find("\033_G");
+    if (g == std::string::npos) return apc;
+    size_t semi = apc.find(';', g + 3);             // controls run up to the first ';'
+    if (semi == std::string::npos) return apc;
+    // Strip any existing c=/r= keys from the controls run so we never duplicate them.
+    std::string ctrls = apc.substr(g + 3, semi - (g + 3));
+    std::string kept;
+    size_t i = 0;
+    while (i < ctrls.size()) {
+        size_t comma = ctrls.find(',', i);
+        std::string kv = ctrls.substr(i, comma == std::string::npos ? std::string::npos : comma - i);
+        if (kv.compare(0, 2, "c=") != 0 && kv.compare(0, 2, "r=") != 0) {
+            if (!kept.empty()) kept += ',';
+            kept += kv;
+        }
+        if (comma == std::string::npos) break;
+        i = comma + 1;
+    }
+    std::string footprint = ",c=" + std::to_string(cols) + ",r=" + std::to_string(rows);
+    return apc.substr(0, g + 3) + kept + footprint + apc.substr(semi);
+}
+
 // Read a PNG's pixel width/height from the IHDR (big-endian uint32s at byte offsets 16 and 20, right
 // after the 8-byte signature + 4-byte length + "IHDR"). `png` is the raw PNG bytes. Returns false if
 // the buffer is too short or not a PNG.
@@ -1637,12 +1670,28 @@ bool renderImageBlock(const std::string& text, int availWidth, std::string& out,
         img = kittyRewriteId(img, nextKittyId());
         int paintedW = 0, paintedH = 0;
         if (kittyImageSize(img, paintedW, paintedH)) {
+            // Width is the binding axis (it is what a table column reserves, and the axis the original
+            // overflow was on): the column count is the painted width in cells, but never more than the
+            // caller's cap — timg sizes the -g box with a fixed ~9px cell, so the painted pixels can map
+            // to a column or two more than reserved (the 38-vs-33 case in table layout). Capping here,
+            // then pinning c=/r= below, makes the terminal scale into exactly that box.
             cellWidth = cell.pxToCols(paintedW);
-            cellHeight = cell.pxToRows(paintedH);
+            if (availWidth > 0 && cellWidth > availWidth) cellWidth = availWidth;
+            // Derive rows from the columns and the painted image's true aspect, rounded to NEAREST (not
+            // ceil): ceil inflates one axis and, when the other axis can't follow, visibly distorts a
+            // small image (a 3-column square would become c=3,r=2). Round-nearest keeps c:r as close to
+            // the source aspect as the cell grid allows. realCellW/H give the terminal's actual cell
+            // shape, so the c:r ratio matches the pixels the terminal will blit into.
+            double aspect = paintedW > 0 ? static_cast<double>(paintedH) / paintedW : 1.0;
+            double rExact = static_cast<double>(cellWidth) * cell.realCellW() * aspect / cell.realCellH();
+            cellHeight = std::max(1, static_cast<int>(rExact + 0.5));
         } else {
             cellWidth = wCells;
             cellHeight = hCells;
         }
+        // Pin the terminal's cell footprint to the one mdcat reserves, so the image never overflows its
+        // column or row band regardless of the local terminal's real cell size. See kittyRewriteFootprint.
+        img = kittyRewriteFootprint(img, cellWidth, cellHeight);
     } else {
         // Sixel path (unchanged): timg paints sixel; the footprint comes from the sixel raster header.
         img = runTimg(src, geom);
