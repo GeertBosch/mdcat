@@ -96,6 +96,20 @@ touching terminal modes entirely; we already pass an explicit `-g` box and proto
 so there is nothing for it to auto-detect. (`mmdc` gets the same `</dev/null` for
 the same reason.)
 
+**A detached `timg` no longer knows the terminal's cell size, so for sixel we
+scale the `-g` box ourselves.** `-g` is in *character cells*, and `timg` converts
+cells→pixels with whatever cell size it can find. Run headless (stdin detached) it
+can't query the terminal and falls back to a **fixed 9 px wide × 18 px tall** cell —
+measured from timg 1.6.3+: `-g33x` paints exactly 297 px (= 33 × 9). Sixel is
+**pixel-absolute**: those 297 px then occupy 297 ÷ *the real cell width* of the
+terminal's columns. On VSCode's ~6 px cell that's ~50 columns, not 33 — the image
+overflows its reserved column into its neighbours (the symptom: oversized images
+bleeding across table cells). So `runTimg` rescales each `-g` axis from real cells to
+timg cells (`gCols = round(cols × realCellW / 9)`, `gRows` likewise with /18) before
+invoking `timg`, making the painted pixels land on exactly the columns mdcat reserved.
+Identity when the real cell is 9 px; a no-op for Kitty, which instead pins the
+footprint after the fact (`kittyRewriteFootprint`) so the terminal does the scaling.
+
 **Placement is made terminal-independent with DECSC/DECRC** (`ESC 7` … `ESC 8`).
 After a sixel, terminals disagree on where the cursor ends up: **VSCode advances to
 the row below the image; iTerm2 does not.** A bare replay that assumed one of these
