@@ -8,24 +8,40 @@ PTHREAD := -pthread
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
 
-all: mdcat gmore
+S := src
+B := build
 
-GMORE_OBJS = gmore_attrs.o gmore_emulator.o gmore_run.o
+all: $(B)/mdcat $(B)/gmore
 
-gmore_attrs.o: gmore_attrs.cpp gmore_attrs.h gmore_types.h
-	$(CXX) $(CXXFLAGS) -c -o $@ gmore_attrs.cpp
+$(B):
+	mkdir -p $(B)
 
-gmore_emulator.o: gmore_emulator.cpp gmore_emulator.h gmore_attrs.h gmore_types.h
-	$(CXX) $(CXXFLAGS) -c -o $@ gmore_emulator.cpp
+GMORE_OBJS = $(B)/gmore_attrs.o $(B)/gmore_emulator.o $(B)/gmore_run.o
 
-gmore_run.o: gmore_run.cpp gmore_run.h gmore_emulator.h gmore_attrs.h gmore_types.h
-	$(CXX) $(CXXFLAGS) -c -o $@ gmore_run.cpp
+$(B)/gmore_attrs.o: $(S)/gmore_attrs.cpp $(S)/gmore_attrs.h $(S)/gmore_types.h | $(B)
+	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
 
-mdcat: mdcat.cpp highlight.cpp highlight.h gmore.h $(GMORE_OBJS)
-	$(CXX) $(CXXFLAGS) $(PTHREAD) -o $@ mdcat.cpp highlight.cpp $(GMORE_OBJS)
+$(B)/gmore_emulator.o: $(S)/gmore_emulator.cpp $(S)/gmore_emulator.h $(S)/gmore_attrs.h $(S)/gmore_types.h | $(B)
+	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
 
-gmore: gmore.cpp gmore.h $(GMORE_OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ gmore.cpp $(GMORE_OBJS)
+$(B)/gmore_run.o: $(S)/gmore_run.cpp $(S)/gmore_run.h $(S)/gmore_emulator.h $(S)/gmore_attrs.h $(S)/gmore_types.h | $(B)
+	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
+
+$(B)/highlight.o: $(S)/highlight.cpp $(S)/highlight.h | $(B)
+	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
+
+$(B)/mdcat: $(S)/mdcat.cpp $(S)/highlight.h $(S)/gmore.h $(GMORE_OBJS) $(B)/highlight.o | $(B)
+	$(CXX) $(CXXFLAGS) $(PTHREAD) -I$(S) -o $@ $(S)/mdcat.cpp $(B)/highlight.o $(GMORE_OBJS)
+
+$(B)/gmore: $(S)/gmore.cpp $(S)/gmore.h $(GMORE_OBJS) | $(B)
+	$(CXX) $(CXXFLAGS) -I$(S) -o $@ $(S)/gmore.cpp $(GMORE_OBJS)
+
+# Convenience symlinks in the project root so tests can run ./mdcat and ./gmore
+mdcat: $(B)/mdcat
+	ln -sf $(B)/mdcat $@
+
+gmore: $(B)/gmore
+	ln -sf $(B)/gmore $@
 
 TESTS := \
 	tests/property-concat.sh \
@@ -58,9 +74,12 @@ check: mdcat gmore
 	done; \
 	exit $$fail
 
-install: mdcat gmore
+clean:
+	rm -rf $(B) mdcat gmore
+
+install: $(B)/mdcat $(B)/gmore
 	mkdir -p $(DESTDIR)$(BINDIR)
-	install -m 755 mdcat gmore $(DESTDIR)$(BINDIR)
+	install -m 755 $(B)/mdcat $(B)/gmore $(DESTDIR)$(BINDIR)
 	@echo "Installed mdcat and gmore to $(DESTDIR)$(BINDIR)"
 
 uninstall:
