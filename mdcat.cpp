@@ -2283,6 +2283,25 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
         if (w > 0) widths[j] = std::min(w, allocWidth[j]);
     }
 
+    // Re-pin each Kitty image's cell footprint (c=/r=) to the FINAL column width. The c=/r= baked in
+    // during rendering reflects that render's availWidth cap (the full budget on the first pass), not
+    // the width this column ends up with after fair-sharing and tightening — so without this an image
+    // can carry a c= wider than its column and overflow into the next cell. We rewrite c to the final
+    // width and scale r by the same ratio to keep the aspect ratio the render already chose. (Sixel
+    // images carry no c=/r=; kittyRewriteFootprint no-ops on a non-Kitty block, so the guard is just
+    // isImage.) imgRows/imgCellW are also corrected so the band reserves the right number of rows.
+    for (size_t j = 0; j < ncols; ++j) {
+        if (imgWidth[j] <= 0) continue;
+        for (size_t i = 0; i < rows.size(); ++i) {
+            if (!isImage[i][j] || !isKittyImage(rows[i][j]) || imgCellW[i][j] <= 0) continue;
+            int newC = widths[j];
+            int newR = std::max(1, (imgRows[i][j] * newC + imgCellW[i][j] / 2) / imgCellW[i][j]);
+            rows[i][j] = kittyRewriteFootprint(rows[i][j], newC, newR);
+            imgCellW[i][j] = newC;
+            imgRows[i][j] = newR;
+        }
+    }
+
     int total = 0;
     for (int w : widths) total += w;
     total += 2 * static_cast<int>(ncols - 1);  // two-space column separators
