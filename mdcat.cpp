@@ -51,6 +51,7 @@
 #include <cstdlib>
 #include <fcntl.h>
 #include <sys/ioctl.h>
+#include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
 #include <fstream>
@@ -3504,33 +3505,7 @@ int main(int argc, char** argv) {
     }
     for (; a < argc; ++a) files.emplace_back(argv[a]);
 
-    // Warm the terminal-probing memoized statics on the main thread before any image worker
-    // (ADR 0003) can touch them: graphicsBackend(), cellMetrics() and queryBackgroundColor() do
-    // one-time terminal I/O (some toggle the tty into raw mode) on first call, which must not happen
-    // concurrently on a worker. After this they are pure reads.
-    (void)graphicsBackend();
-    (void)cellMetrics();
-    (void)queryBackgroundColor();
-    initTheme();  // selects the code-block / highlight palette from the (now-cached) background
-
-    // The output destination depends on whether stdout is a terminal:
-    //   - tty: render the whole document into an in-memory buffer, then page it through gmore, which
-    //     needs the complete text to scroll over it.
-    //   - non-tty (pipe/redirect): render into a SlotSink so each block reaches stdout as soon as it is
-    //     ready, instead of withholding the entire document until the slowest image's subprocess
-    //     returns. Each block is one ordered slot drained by a writer thread; a deferred image reserves
-    //     a future slot and converts in parallel. A Kitty APC chunk (emitted in one slot) is never split
-    //     across writes — a consumer that saw a chunk in pieces with a gap could give up and dump it.
-    bool usePager = isatty(STDOUT_FILENO);
-
-    if (usePager) {
-        // Buffer-mode SlotSink: assemble the whole document into one buffer for gmore, but route image
-        // conversions through the same deferred-slot machinery as the streaming path so they run on the
-        // pool in parallel (ADR 0003 step 6). The writer thread stamps Kitty ids in document (slot)
-        // order and concatenates each drained slot into the buffer, so the result is already renumbered
-        // — no separate kittyRenumberAll pass is needed.
-        SlotSink sink;
-        std::ostream buf(&sink);
+    auto renderAll = [&](std::ostream& out) -> int {
         if (!files.empty()) {
             for (const auto& path : files) {
                 std::ifstream f(path);
@@ -3540,15 +3515,61 @@ int main(int argc, char** argv) {
                 }
                 size_t slash = path.rfind('/');
                 gFileDir = (slash != std::string::npos) ? path.substr(0, slash) : std::string();
-                render(splitLines(f), buf);
+                render(splitLines(f), out);
             }
             gFileDir.clear();
         } else {
-            render(splitLines(std::cin), buf);
+            render(splitLines(std::cin), out);
         }
-        buf.flush();      // commit the final block's text as a slot
-        sink.finish();    // drain all slots, join the writer thread
-        return gmore::run(sink.takeBuffer());
+        return 0;
+    };
+
+    // Eagerly initialize terminal-query state before rendering starts. This avoids deferred
+    // probe traffic while the pager is active and keeps worker threads off terminal I/O.
+    (void)graphicsBackend();
+    (void)cellMetrics();
+    (void)queryBackgroundColor();
+    initTheme();
+
+    // On a TTY, page through gmore by default. The render thread streams bytes into a pipe while
+    // gmore parses from the read end and can paint the first page before the full document is ready.
+    bool usePager = isatty(STDOUT_FILENO);
+    if (usePager) {
+        int pfd[2];
+        if (pipe(pfd) != 0) {
+            std::perror("mdcat: pipe");
+            return 1;
+        }
+        pid_t pid = fork();
+        if (pid < 0) {
+            std::perror("mdcat: fork");
+            close(pfd[0]);
+            close(pfd[1]);
+            return 1;
+        }
+        if (pid == 0) {
+            close(pfd[0]);
+            SlotSink sink(pfd[1]);
+            std::ostream out(&sink);
+            int rc = renderAll(out);
+            out.flush();
+            sink.finish();
+            close(pfd[1]);
+            _exit(rc);
+        }
+
+        close(pfd[1]);
+        int pagerRc = gmore::run(std::string(), false, false, false, false, pfd[0]);
+        close(pfd[0]);
+
+        int status = 0;
+        if (waitpid(pid, &status, 0) < 0) {
+            std::perror("mdcat: waitpid");
+            return 1;
+        }
+        if (WIFEXITED(status) && WEXITSTATUS(status) != 0) return WEXITSTATUS(status);
+        if (WIFSIGNALED(status)) return 128 + WTERMSIG(status);
+        return pagerRc;
     }
 
     // Non-tty: stream blocks out as they are rendered. Each file is rendered independently and the
@@ -3561,21 +3582,7 @@ int main(int argc, char** argv) {
     // byte-identical to the old serial StreamingSink; only timing changes.
     SlotSink sink(STDOUT_FILENO);
     std::ostream out(&sink);
-    if (!files.empty()) {
-        for (const auto& path : files) {
-            std::ifstream f(path);
-            if (!f) {
-                std::cerr << "mdcat: " << path << ": cannot open file\n";
-                return 1;
-            }
-            size_t slash = path.rfind('/');
-            gFileDir = (slash != std::string::npos) ? path.substr(0, slash) : std::string();
-            render(splitLines(f), out);
-        }
-        gFileDir.clear();
-    } else {
-        render(splitLines(std::cin), out);
-    }
+    if (renderAll(out) != 0) return 1;
     out.flush();      // commit the final block's text as a slot
     sink.finish();    // flush trailing text, drain all slots, join the writer thread
     return 0;

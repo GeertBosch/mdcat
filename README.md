@@ -241,7 +241,8 @@ Reads stdin when no files are given. Multiple files are concatenated.
 ### gmore
 
 A graphics-aware pager that understands sixel **and Kitty** images plus OSC 8
-hyperlinks. `mdcat` pipes into it automatically when stdout is a TTY. For Kitty
+hyperlinks. `mdcat` pages through `gmore` by default when stdout is a TTY. For
+Kitty
 images it transmits each image to the terminal once, then paints the visible
 band on every scroll with a cheap crop placement — no per-scroll re-encode — so
 scrolling stays smooth and images render correctly over SSH.
@@ -258,6 +259,22 @@ Reads stdin when given no file (or `-`). gmore does not choose a graphics
 protocol itself: it replays whatever image bytes are in the stream (sixel or
 Kitty, detected per image), so the protocol is whatever `mdcat` emitted — pick it
 on the `mdcat` side with `--img <proto>` or `MDCAT_GRAPHICS`.
+
+When stdout is not a terminal (for example `... | gmore | head -2`), `gmore`
+streams passthrough incrementally instead of buffering all input first.
+
+```bash
+for n in $(seq 100) ; do echo "line $n" ; sleep 0.2 ; done | gmore
+```
+
+On a real terminal, `gmore` keeps pager behavior.
+
+When reading from piped stdin on a real terminal, `gmore` now paints the first
+page as soon as enough rows arrive, then continues ingesting more input as you
+page forward.
+
+While that stream is still open, the prompt shows `--More--` (no percentage);
+the percentage appears once the total is known.
 
 | Flag | Description |
 | ---- | ----------- |

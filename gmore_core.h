@@ -7,6 +7,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cerrno>
 #include <cctype>
 #include <csignal>
 #include <climits>
@@ -1362,12 +1363,13 @@ struct Nav {
 };
 
 // ---------------------------------------------------------------------------
-// run() — the gmore pager entry point. Accepts already-read input data.
+// run() — the gmore pager entry point. Accepts already-read input data, or (when
+// streamFd >= 0) incrementally reads and parses bytes from that fd.
 // Returns 0 on success. When stdout is not a tty and neither dump nor imginfo
 // mode is requested, passes the data through verbatim (pager-as-cat).
 // ---------------------------------------------------------------------------
 static inline int run(std::string data, bool dump = false, bool dumpImages = false, bool imginfo = false,
-                      bool navTrace = false) {
+                      bool navTrace = false, int streamFd = -1) {
     internAttr(Attr{});  // id 0 = default
 
     // Terminal geometry. Env wins (for --dump/tests); then the kernel's TIOCGWINSZ
@@ -1403,8 +1405,43 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
     }
 
     Emulator em(W, H, cellW, cellH);
-    em.feed(data.data(), data.size());
-    const size_t total = em.contentRows();
+    bool inputEof = true;
+    auto feedOneChunk = [&]() {
+        char buf[65536];
+        for (;;) {
+            ssize_t n = read(streamFd, buf, sizeof buf);
+            if (n == 0) return true;                                       // EOF
+            if (n < 0) {
+                if (errno == EINTR) continue;
+                return true;                                               // treat read error as EOF
+            }
+            em.feed(buf, (size_t)n);
+            return false;
+        }
+    };
+    auto feedUntilRows = [&](size_t needRows) {
+        while (em.contentRows() < needRows) {
+            if (feedOneChunk()) return true;
+        }
+        return false;
+    };
+    auto feedAll = [&]() {
+        while (!feedOneChunk()) {}
+        return true;
+    };
+    if (streamFd >= 0) {
+        inputEof = feedUntilRows((size_t)std::max(1, H - 1));
+    } else {
+        em.feed(data.data(), data.size());
+        inputEof = true;
+    }
+    size_t total = em.contentRows();
+
+    // Non-interactive/reporting modes expect a complete input model.
+    if (streamFd >= 0 && !inputEof && (imginfo || dump || navTrace || std::getenv("GMORE_KEYS"))) {
+        inputEof = feedAll();
+        total = em.contentRows();
+    }
 
     if (imginfo) {
         for (size_t k = 0; k < em.images.size(); ++k) {
@@ -1556,8 +1593,10 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
         fwrite(s.data(), 1, s.size(), stdout);
     };
 
-    // Fits on one screen: print and exit, no prompt.
-    if (total <= static_cast<size_t>(H - 1)) {
+    // Fits on one screen: print and exit, no prompt. In streaming mode only take this
+    // path when input has reached EOF; otherwise keep going so we can paint early and
+    // continue ingesting in the background phase below.
+    if (inputEof && total <= static_cast<size_t>(H - 1)) {
         reserveRows(total);
         paintWindow(0, (int)total, total);
         return 0;
@@ -1614,6 +1653,7 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
     std::string message;
     auto showPrompt = [&] {
         if (!message.empty()) std::fprintf(stdout, "\033[7m%s\033[27m", message.c_str());
+        else if (!inputEof) std::fputs("\033[7m--More--\033[27m", stdout);
         else if (nav.atEnd()) std::fputs("\033[7m(END)\033[27m", stdout);
         else std::fprintf(stdout, "\033[7m--More--(%d%%)\033[27m", nav.percent());
         std::fflush(stdout);
@@ -1736,6 +1776,20 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
         return read(gTtyFd, &c, 1) == 1;
     };
 
+    // On streaming input, forward motion from (the current) end needs more rows first.
+    auto maybeLoadMoreForForward = [&](unsigned char c) {
+        if (streamFd < 0 || inputEof) return;
+        bool forwardRequest = (c == ' ' || c == 'f' || c == 'j' || c == '\r' || c == '\n' ||
+                               c == 'd' || c == 0x04 || c == 'G');
+        bool corpusWideRequest = (c == '/' || c == '?' || c == 'n' || c == 'N' || c == 'G');
+        if (!corpusWideRequest && (!forwardRequest || !nav.atEnd())) return;
+        // We can paint the first page early, but once the user asks for movement/search beyond the
+        // currently available tail, finish ingesting so pagination and multi-image rows are coherent.
+        inputEof = feedAll();
+        total = em.contentRows();
+        nav.total = total;
+    };
+
     // Read a pattern on the prompt row after the leading `/`, echoing as typed.
     // Returns true with `out` set on Enter; false if cancelled (ESC) or EOF.
     // Backspace edits; an empty Enter returns true with out empty (reuse last).
@@ -1793,6 +1847,7 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
         if (!counting) showPrompt();
         unsigned char c;
         if (!nextKey(c)) break;
+        maybeLoadMoreForForward(c);
         // Search and help are handled here, before Nav: they need the grid text
         // (search) or take over the prompt row (input editor / overlay), which Nav
         // is deliberately ignorant of.

@@ -27,11 +27,33 @@
 #include <string>
 #include <unistd.h>
 #include <fcntl.h>
+#include <cerrno>
 
 static std::string readAll(int fd) {
     std::string s; char buf[65536]; ssize_t n;
     while ((n = read(fd, buf, sizeof buf)) > 0) s.append(buf, static_cast<size_t>(n));
     return s;
+}
+
+static int streamCopy(int inFd, int outFd) {
+    char buf[65536];
+    for (;;) {
+        ssize_t n = read(inFd, buf, sizeof buf);
+        if (n == 0) return 0;
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            return 1;
+        }
+        ssize_t off = 0;
+        while (off < n) {
+            ssize_t m = write(outFd, buf + off, static_cast<size_t>(n - off));
+            if (m < 0) {
+                if (errno == EINTR) continue;
+                return 1;
+            }
+            off += m;
+        }
+    }
 }
 
 int main(int argc, char** argv) {
@@ -44,6 +66,24 @@ int main(int argc, char** argv) {
         else if (std::strcmp(argv[i], "--nav-trace") == 0) navTrace = true;
         else if (std::strcmp(argv[i], "-") == 0) path = nullptr;
         else path = argv[i];
+    }
+
+    // Fast passthrough: when stdout is not a terminal, gmore behaves like cat and
+    // forwards bytes incrementally instead of buffering all input.
+    if (!dump && !dumpImages && !imginfo && !navTrace && !std::getenv("GMORE_KEYS")) {
+        if (!isatty(STDOUT_FILENO)) {
+            if (path) {
+                int fd = open(path, O_RDONLY);
+                if (fd < 0) { std::perror(path); return 1; }
+                int rc = streamCopy(fd, STDOUT_FILENO);
+                close(fd);
+                return rc;
+            }
+            return streamCopy(STDIN_FILENO, STDOUT_FILENO);
+        }
+        if (!path && !isatty(STDIN_FILENO)) {
+            return gmore::run(std::string(), dump, dumpImages, imginfo, navTrace, STDIN_FILENO);
+        }
     }
 
     std::string data;
