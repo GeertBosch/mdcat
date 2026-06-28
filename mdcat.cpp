@@ -41,6 +41,7 @@
 #include <cctype>
 #include <cerrno>
 #include <condition_variable>
+#include <deque>
 #include <functional>
 #include <future>
 #include <mutex>
@@ -1489,6 +1490,10 @@ uint32_t nextKittyId() {
     return ++id;
 }
 
+// Sentinel kittyId for renderImageBlock: "leave timg's default id; the id is stamped later, in document
+// order, on the writer thread" (ADR 0003 deferred slots). Distinct from 0 (mint now).
+constexpr uint32_t kKittyIdDefer = 0xFFFFFFFFu;
+
 // Rewrite the i= value on the FIRST Kitty controls segment of `apc` to `id` (byte-exact, leaving the
 // base64 payload and all chunk continuations untouched). timg's output is otherwise already correct
 // (q=2 on every chunk, f=100, proper m= chunking), so this is the only edit mdcat needs to make.
@@ -1683,9 +1688,14 @@ ThreadPool& imagePool() {
 // row just below the image, so a sixel painted at the top of a reserved block lands within it. The
 // footprint is computed from the painted pixel size read back out of the sixel (which reflects
 // timg's aspect-preserving fit), divided by the real cell size — not from the requested -g box.
+// `kittyId` controls the Kitty image id stamped on a successful Kitty render: zero mints one now from
+// nextKittyId() (the table and synchronous paths, which run in encounter order); a nonzero value is
+// used verbatim; the sentinel kKittyIdDefer leaves timg's default id untouched, so a deferred slot
+// (ADR 0003) can stamp a document-order id on the writer thread after parallel — possibly out-of-order
+// — conversion completes, keeping output byte-identical to the serial renderer.
 bool renderImageBlock(const std::string& text, int availWidth, const std::string& fileDir,
                       std::string& out, int& cellWidth, int& cellHeight,
-                      bool forceWidthBound = false) {
+                      bool forceWidthBound = false, uint32_t kittyId = 0) {
     std::map<std::string, std::string> attrs;
     if (!parseImgTag(text, attrs) && !parseMdImage(text, attrs)) return false;
 
@@ -1768,7 +1778,7 @@ bool renderImageBlock(const std::string& text, int availWidth, const std::string
         // embedded PNG's IHDR) converted with the precise area ratio, falling back to requested cells.
         img = runTimgKitty(src, geom);
         if (img.empty()) return fallback("timg failed");
-        img = kittyRewriteId(img, nextKittyId());
+        if (kittyId != kKittyIdDefer) img = kittyRewriteId(img, kittyId ? kittyId : nextKittyId());
         int paintedW = 0, paintedH = 0;
         if (kittyImageSize(img, paintedW, paintedH)) {
             // Width is the binding axis (it is what a table column reserves, and the axis the original
@@ -1828,7 +1838,7 @@ bool renderImageBlock(const std::string& text, int availWidth, const std::string
 // we render once to measure the natural width, then re-render at a -s (scale) chosen to enlarge a
 // small diagram toward the column budget — this is what actually fixes "too small" on iTerm2.
 bool renderMermaidBlock(const std::vector<std::string>& lines, int availWidth, std::string& out,
-                        int& cellWidth, int& cellHeight) {
+                        int& cellWidth, int& cellHeight, uint32_t kittyId = 0) {
     if (!mmdcAvailable()) return false;
 
     // Unique temp paths for the mermaid source and the rendered PNG. mkstemp creates the files; we
@@ -1910,8 +1920,10 @@ bool renderMermaidBlock(const std::vector<std::string>& lines, int availWidth, s
     // Hand the rendered PNG to the <img> pipeline as an absolute path (so gFileDir resolution is a
     // no-op), reusing all of its geometry and sixel-capture logic.
     std::string tag = "<img src=\"" + std::string(pngPath) + "\">";
-    // pngPath is absolute, so fileDir resolution is a no-op; pass empty.
-    bool ok = renderImageBlock(tag, availWidth, /*fileDir=*/std::string(), out, cellWidth, cellHeight);
+    // pngPath is absolute, so fileDir resolution is a no-op; pass empty. Forward kittyId so a deferred
+    // mermaid slot gets a document-order Kitty id (ADR 0003).
+    bool ok = renderImageBlock(tag, availWidth, /*fileDir=*/std::string(), out, cellWidth, cellHeight,
+                               /*forceWidthBound=*/false, kittyId);
     cleanup();
     return ok && !out.empty() && cellHeight > 0;
 }
@@ -1942,12 +1954,28 @@ void replaySixel(const std::string& image, std::ostream& out) {
 // room first), move the cursor back up `rows` lines (relative, so unaffected by any scroll), replay
 // the sixel (which restores the cursor to the band top), then step down `rows` to the band bottom —
 // ready for the next block, just like a text paragraph's trailing newline.
-void emitImageParagraph(const std::string& image, int rows, std::ostream& out) {
-    out << std::string(static_cast<size_t>(rows), '\n');  // reserve the band (may scroll)
-    out << "\033[" << rows << 'A';                         // back to the band's top row, column 1
-    replaySixel(image, out);                               // paint; cursor restored to band top
-    out << "\033[" << rows << 'B' << '\r';                 // down to the band bottom, column 1
+// Build the framed bytes for an image paragraph (the same sequence emitImageParagraph writes) as a
+// string, so a deferred slot (ADR 0003) can hold the finished image without an ostream on hand.
+std::string imageParagraphBytes(const std::string& image, int rows) {
+    std::string s;
+    s += std::string(static_cast<size_t>(rows), '\n');  // reserve the band (may scroll)
+    s += "\033[" + std::to_string(rows) + 'A';          // back to the band's top row, column 1
+    s += "\0337"; s += image; s += "\0338";             // paint; cursor restored to band top
+    s += "\033[" + std::to_string(rows) + 'B' + '\r';   // down to the band bottom, column 1
+    return s;
 }
+
+void emitImageParagraph(const std::string& image, int rows, std::ostream& out) {
+    out << imageParagraphBytes(image, rows);
+}
+
+// The non-tty output sink, defined near main(). If `out` is backed by one, deferred image slots can be
+// reserved on it (ADR 0003); otherwise (tty buffer, or a recursive ostringstream) images render
+// synchronously inline. Forward-declared (with thin free-function wrappers, defined after the class)
+// so the deferred call sites here can detect the sink and reserve a slot without the complete type.
+class SlotSink;
+SlotSink* asSlotSink(std::ostream& out);
+void slotDeferImage(SlotSink* sink, std::future<std::string> fut, bool stampKittyId);
 
 // ---------------------------------------------------------------------------
 // Block model
@@ -2112,18 +2140,47 @@ void emitParagraph(const std::vector<std::string>& lines, std::ostream& out) {
     // renderImageBlock returns either a multi-row sixel (ih > 1, or ih == 1 with sixel bytes) or a
     // one-line text fallback (ih == 1, plain text — e.g. on a non-graphics terminal). The sixel is
     // placed via the reserve-and-paint helper; the text fallback is emitted as a normal line.
-    std::string image;
-    int iw = 0, ih = 0;
     std::string imgText = trim(joined);
     int availW = terminalWidth();
     std::string fileDir = gFileDir;
-    if (imagePool().submit([&] {
-            return renderImageBlock(imgText, availW, fileDir, image, iw, ih);
-        }).get()) {
-        if (image.empty()) return;
-        if (isImageBlock(image)) emitImageParagraph(image, ih, out);
-        else                     out << image << '\n';   // one-line text fallback
-        return;
+    // Quick non-rendering test: is this paragraph an image tag at all? parseImgTag/parseMdImage are
+    // pure and cheap, so checking here avoids submitting a job for ordinary paragraphs. (A graphics-
+    // capable check is implicit — renderImageBlock falls back to text when graphics are unavailable.)
+    {
+        std::map<std::string, std::string> probe;
+        bool isImgTag = parseImgTag(imgText, probe) || parseMdImage(imgText, probe);
+        if (isImgTag) {
+            // Deferred slot (non-tty): submit the conversion, reserve an ordered slot for its framed
+            // bytes, and return immediately so later blocks/images proceed in parallel. The worker
+            // produces the exact bytes this site would have written: framed image, or text fallback.
+            if (SlotSink* sink = asSlotSink(out)) {
+                // Defer the Kitty id: the worker leaves timg's default id and the writer stamps a
+                // document-order id when it drains this slot, so out-of-order completion stays serial-
+                // identical (see kKittyIdDefer and SlotSink::deferImage's stampKittyId).
+                std::future<std::string> fut = imagePool().submit([imgText, availW, fileDir] {
+                    std::string image;
+                    int iw = 0, ih = 0;
+                    if (!renderImageBlock(imgText, availW, fileDir, image, iw, ih,
+                                          /*forceWidthBound=*/false, kKittyIdDefer) || image.empty())
+                        return std::string();
+                    if (isImageBlock(image)) return imageParagraphBytes(image, ih);
+                    return image + "\n";  // one-line text fallback
+                });
+                slotDeferImage(sink, std::move(fut), /*stampKittyId=*/true);
+                return;
+            }
+            // Synchronous path (tty buffer or recursive ostringstream): render now and write inline.
+            std::string image;
+            int iw = 0, ih = 0;
+            if (imagePool().submit([&] {
+                    return renderImageBlock(imgText, availW, fileDir, image, iw, ih);
+                }).get()) {
+                if (image.empty()) return;
+                if (isImageBlock(image)) emitImageParagraph(image, ih, out);
+                else                     out << image << '\n';   // one-line text fallback
+                return;
+            }
+        }
     }
     // A paragraph that is exactly one block-math expression ($$...$$) is centered, the way GitHub
     // (and TeX display math) sets it off on its own centered line. Each rendered line is centered
@@ -2794,9 +2851,9 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
         // (and any subprocess-rendered image it contains) reaches the terminal as soon as it is ready
         // rather than the whole document being withheld until the slowest image finishes. The previous
         // block is fully written by now and the cursor sits at a line boundary, so a flush here never
-        // splits a Kitty APC chunk mid-stream. At the top level `out` is the StreamingSink, which writes
-        // through to stdout on flush; in recursive renders it is a local ostringstream and the flush is
-        // a no-op. The very first block flushes a possibly-empty buffer, which is harmless.
+        // splits a Kitty APC chunk mid-stream. At the top level `out` is the SlotSink, whose flush
+        // commits the finished block as an ordered slot for the writer thread; in recursive renders it
+        // is a local ostringstream and the flush is a no-op. A possibly-empty first flush is harmless.
         if (emitted) out.flush();
 
         // ATX heading: 1-6 '#' followed by a space (or end of line).
@@ -2834,14 +2891,30 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
             // terminal) are available; otherwise it falls through to being shown as ordinary code.
             std::string mlang = lang;
             for (char& c : mlang) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-            std::string mimg;
-            int miw = 0, mih = 0;
             int mAvailW = terminalWidth();
-            bool mok = mlang == "mermaid" && imagePool().submit([&] {
-                return renderMermaidBlock(body, mAvailW, mimg, miw, mih);
-            }).get();
-            if (mok && isImageBlock(mimg)) {
-                emitImageParagraph(mimg, mih, out);
+            if (mlang == "mermaid") {
+                // The conversion produces the final bytes: the framed diagram on success, else the
+                // ordinary code block (the fallback). Computing both in the worker lets the whole block
+                // be a single deferred slot (ADR 0003). emitCodeBlock is pure here (top-level gIndent==0,
+                // terminalWidth memoized), so it is safe to run off-thread into a local buffer.
+                auto convert = [body, lang, mAvailW](uint32_t kid) {
+                    std::string mimg;
+                    int miw = 0, mih = 0;
+                    if (renderMermaidBlock(body, mAvailW, mimg, miw, mih, kid) && isImageBlock(mimg))
+                        return imageParagraphBytes(mimg, mih);
+                    std::ostringstream cb;
+                    emitCodeBlock(body, lang, cb);
+                    return cb.str();
+                };
+                if (SlotSink* sink = asSlotSink(out)) {
+                    // Defer the Kitty id (kKittyIdDefer): the writer stamps a document-order id when it
+                    // drains the slot, so out-of-order completion stays serial-identical.
+                    slotDeferImage(sink,
+                                   imagePool().submit([convert] { return convert(kKittyIdDefer); }),
+                                   /*stampKittyId=*/true);
+                } else {
+                    out << imagePool().submit([convert] { return convert(0); }).get();
+                }
             } else {
                 emitCodeBlock(body, lang, out);
             }
@@ -3010,44 +3083,136 @@ std::vector<std::string> splitLines(std::istream& in) {
     return lines;
 }
 
-// A streambuf that buffers into memory and, on sync() (i.e. std::ostream::flush()), writes everything
-// accumulated so far to a file descriptor with a short-write-retry loop. render() flushes at every
-// top-level block boundary, so each block — including any image whose subprocess just finished —
-// reaches the terminal immediately instead of being withheld until the whole document is rendered.
+// An ordered slot list with a dedicated writer thread (ADR 0003), used as the non-tty output sink.
+// render() writes text into it exactly like an ostream; at each block boundary (sync()) the
+// accumulated text is committed as one ordered slot. A deferred image instead reserves a *future* slot
+// (deferImage) and returns immediately, so the render thread keeps converting later images while this
+// one is still in flight.
 //
-// Why drain only on sync(), not on overflow: a single block's bytes must reach the wire contiguously
-// so a Kitty APC chunk is never split by a buffer-boundary write (a consumer that sees a chunk arrive
-// in pieces with a gap can give up and dump the partial base64 as text). render() only flushes at
-// block boundaries, where the cursor is at a line start, so draining there keeps every chunk whole.
-// overflow() therefore just grows the in-memory buffer; the fd write happens solely on flush.
-class StreamingSink : public std::streambuf {
+// A single block's bytes still reach the wire contiguously — a text slot is written in one writeAll,
+// and an image's framed bytes arrive as one slot — so a Kitty APC chunk is never split by a
+// buffer-boundary write (a consumer that sees a chunk arrive in pieces with a gap can give up and dump
+// the partial base64 as text).
+//
+// The writer thread walks slots strictly front-to-back: for a ready slot it writes the bytes; for a
+// future slot it blocks on the future, then writes. Because the writer is its own thread, a stalled
+// write() blocks only the writer — image workers keep filling later future slots. Output emerges in
+// document order (the writer never reorders), so the bytes are identical to StreamingSink's serial
+// output; only timing changes.
+class SlotSink : public std::streambuf {
 public:
-    explicit StreamingSink(int fd) : fd_(fd) {}
+    explicit SlotSink(int fd) : fd_(fd), writer_([this] { writerLoop(); }) {}
+    ~SlotSink() override { finish(); }
+
+    // Commit any buffered text, append `fut` as the next ordered slot, and return without waiting.
+    // `stampKittyId` requests that the writer mint a document-order Kitty id for this slot's bytes when
+    // it drains them (the deferred image left timg's default id), keeping ids serial-identical.
+    void deferImage(std::future<std::string> fut, bool stampKittyId) {
+        commitText();
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            slots_.emplace_back(std::move(fut), stampKittyId);
+        }
+        cv_.notify_one();
+    }
+
+    // Flush any trailing text and join the writer thread. Idempotent.
+    void finish() {
+        if (done_) return;
+        commitText();
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            closed_ = true;
+        }
+        cv_.notify_one();
+        if (writer_.joinable()) writer_.join();
+        done_ = true;
+    }
 
 protected:
     int_type overflow(int_type ch) override {
-        if (ch != traits_type::eof()) buf_.push_back(static_cast<char>(ch));
+        if (ch != traits_type::eof()) text_.push_back(static_cast<char>(ch));
         return ch;
     }
     std::streamsize xsputn(const char* s, std::streamsize n) override {
-        buf_.append(s, static_cast<size_t>(n));
+        text_.append(s, static_cast<size_t>(n));
         return n;
     }
+    // render() flushes at every top-level block boundary; commit the accumulated text as one slot so it
+    // is ordered ahead of whatever the next block produces (text or a deferred image).
     int sync() override {
-        size_t off = 0;
-        while (off < buf_.size()) {
-            ssize_t n = write(fd_, buf_.data() + off, buf_.size() - off);
-            if (n <= 0) { if (errno == EINTR) continue; return -1; }
-            off += static_cast<size_t>(n);
-        }
-        buf_.clear();
+        commitText();
         return 0;
     }
 
 private:
+    struct Slot {
+        bool ready;
+        bool stampKittyId = false;    // when !ready: mint a document-order Kitty id at write time
+        std::string bytes;            // valid when ready
+        std::future<std::string> fut; // valid when !ready
+        explicit Slot(std::string b) : ready(true), bytes(std::move(b)) {}
+        Slot(std::future<std::string> f, bool stamp)
+            : ready(false), stampKittyId(stamp), fut(std::move(f)) {}
+    };
+
+    void commitText() {
+        if (text_.empty()) return;
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            slots_.emplace_back(std::move(text_));
+        }
+        text_.clear();
+        cv_.notify_one();
+    }
+
+    void writeAll(const std::string& b) {
+        size_t off = 0;
+        while (off < b.size()) {
+            ssize_t n = write(fd_, b.data() + off, b.size() - off);
+            if (n <= 0) { if (errno == EINTR) continue; return; }
+            off += static_cast<size_t>(n);
+        }
+    }
+
+    void writerLoop() {
+        for (;;) {
+            std::unique_lock<std::mutex> lk(mu_);
+            cv_.wait(lk, [this] { return closed_ || !slots_.empty(); });
+            if (slots_.empty()) { if (closed_) return; continue; }
+            // Move the front slot out; release the lock before any blocking write/get so the producer
+            // can keep appending and image workers can keep filling later future slots.
+            Slot front = std::move(slots_.front());
+            slots_.pop_front();
+            lk.unlock();
+            if (front.ready) {
+                writeAll(front.bytes);
+            } else {
+                std::string bytes = front.fut.get();
+                // Stamp the document-order Kitty id here, in slot order, so only images that actually
+                // produced a Kitty APC consume an id and they do so gap-free — exactly as the serial
+                // renderer did (ADR 0003). Non-Kitty bytes (sixel, text fallback) are left untouched.
+                if (front.stampKittyId && isKittyImage(bytes))
+                    bytes = kittyRewriteId(bytes, nextKittyId());
+                writeAll(bytes);
+            }
+        }
+    }
+
     int fd_;
-    std::string buf_;
+    std::string text_;                 // current (render-thread) text buffer, pre-commit
+    std::deque<Slot> slots_;
+    std::mutex mu_;
+    std::condition_variable cv_;
+    bool closed_ = false;
+    bool done_ = false;
+    std::thread writer_;
 };
+
+SlotSink* asSlotSink(std::ostream& out) { return dynamic_cast<SlotSink*>(out.rdbuf()); }
+void slotDeferImage(SlotSink* sink, std::future<std::string> fut, bool stampKittyId) {
+    sink->deferImage(std::move(fut), stampKittyId);
+}
 
 }  // namespace
 
@@ -3122,12 +3287,11 @@ int main(int argc, char** argv) {
     // The output destination depends on whether stdout is a terminal:
     //   - tty: render the whole document into an in-memory buffer, then page it through gmore, which
     //     needs the complete text to scroll over it.
-    //   - non-tty (pipe/redirect): render into a StreamingSink so each block reaches stdout as soon as
-    //     render() finishes it, instead of withholding the entire document until the slowest image's
-    //     subprocess returns. render() flushes at every top-level block boundary; the sink drains its
-    //     buffer to stdout only on those flushes, so a Kitty APC chunk (which a block emits in one go)
-    //     is never split across writes — a consumer that saw a chunk arrive in pieces with a gap could
-    //     give up waiting for its ST and dump the partial base64 as text.
+    //   - non-tty (pipe/redirect): render into a SlotSink so each block reaches stdout as soon as it is
+    //     ready, instead of withholding the entire document until the slowest image's subprocess
+    //     returns. Each block is one ordered slot drained by a writer thread; a deferred image reserves
+    //     a future slot and converts in parallel. A Kitty APC chunk (emitted in one slot) is never split
+    //     across writes — a consumer that saw a chunk in pieces with a gap could give up and dump it.
     bool usePager = isatty(STDOUT_FILENO);
 
     if (usePager) {
@@ -3154,7 +3318,11 @@ int main(int argc, char** argv) {
     // results concatenated — the last block of one file can never merge with the first of the next —
     // which makes rendering distribute over the argument list (`mdcat a b` == `mdcat a` then
     // `mdcat b`), as checked by tests/property-concat.sh.
-    StreamingSink sink(STDOUT_FILENO);
+    // SlotSink reserves an ordered slot per block and drains them on a dedicated writer thread, so a
+    // deferred image (standalone <img>, mermaid) returns immediately while its conversion runs on the
+    // pool and a stalled write() blocks only the writer (ADR 0003). Output stays in document order and
+    // byte-identical to the old serial StreamingSink; only timing changes.
+    SlotSink sink(STDOUT_FILENO);
     std::ostream out(&sink);
     if (!files.empty()) {
         for (const auto& path : files) {
@@ -3171,6 +3339,7 @@ int main(int argc, char** argv) {
     } else {
         render(splitLines(std::cin), out);
     }
-    out.flush();  // drain the final block (render() only flushes before each subsequent block)
+    out.flush();      // commit the final block's text as a slot
+    sink.finish();    // flush trailing text, drain all slots, join the writer thread
     return 0;
 }
