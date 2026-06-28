@@ -2076,6 +2076,7 @@ bool renderMermaidBlock(const std::vector<std::string>& lines, int availWidth, s
     // Omitted when the terminal didn't answer OSC 11 (mmdc keeps its default white background).
     std::string bg = queryBackgroundColor();
     std::string bgOpt = bg.empty() ? std::string() : " -b '" + bg + "'";
+    if (darkBackground()) bgOpt += " --theme dark";
 
     // First render at scale 1 to learn the diagram's natural pixel width. mmdc's -w is only a maximum
     // page width: a diagram whose layout is narrower than -w renders at its natural size, which on a
