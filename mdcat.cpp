@@ -2696,6 +2696,15 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
 
         if (t.empty()) { ++i; continue; }  // blank lines separate blocks
 
+        // Stream incrementally: flush the output sink before starting the next block, so each block
+        // (and any subprocess-rendered image it contains) reaches the terminal as soon as it is ready
+        // rather than the whole document being withheld until the slowest image finishes. The previous
+        // block is fully written by now and the cursor sits at a line boundary, so a flush here never
+        // splits a Kitty APC chunk mid-stream. At the top level `out` is the StreamingSink, which writes
+        // through to stdout on flush; in recursive renders it is a local ostringstream and the flush is
+        // a no-op. The very first block flushes a possibly-empty buffer, which is harmless.
+        if (emitted) out.flush();
+
         // ATX heading: 1-6 '#' followed by a space (or end of line).
         if (isAtxHeading(t)) {
             separate();
@@ -2904,6 +2913,45 @@ std::vector<std::string> splitLines(std::istream& in) {
     return lines;
 }
 
+// A streambuf that buffers into memory and, on sync() (i.e. std::ostream::flush()), writes everything
+// accumulated so far to a file descriptor with a short-write-retry loop. render() flushes at every
+// top-level block boundary, so each block — including any image whose subprocess just finished —
+// reaches the terminal immediately instead of being withheld until the whole document is rendered.
+//
+// Why drain only on sync(), not on overflow: a single block's bytes must reach the wire contiguously
+// so a Kitty APC chunk is never split by a buffer-boundary write (a consumer that sees a chunk arrive
+// in pieces with a gap can give up and dump the partial base64 as text). render() only flushes at
+// block boundaries, where the cursor is at a line start, so draining there keeps every chunk whole.
+// overflow() therefore just grows the in-memory buffer; the fd write happens solely on flush.
+class StreamingSink : public std::streambuf {
+public:
+    explicit StreamingSink(int fd) : fd_(fd) {}
+
+protected:
+    int_type overflow(int_type ch) override {
+        if (ch != traits_type::eof()) buf_.push_back(static_cast<char>(ch));
+        return ch;
+    }
+    std::streamsize xsputn(const char* s, std::streamsize n) override {
+        buf_.append(s, static_cast<size_t>(n));
+        return n;
+    }
+    int sync() override {
+        size_t off = 0;
+        while (off < buf_.size()) {
+            ssize_t n = write(fd_, buf_.data() + off, buf_.size() - off);
+            if (n <= 0) { if (errno == EINTR) continue; return -1; }
+            off += static_cast<size_t>(n);
+        }
+        buf_.clear();
+        return 0;
+    }
+
+private:
+    int fd_;
+    std::string buf_;
+};
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -2968,22 +3016,44 @@ int main(int argc, char** argv) {
     }
     for (; a < argc; ++a) files.emplace_back(argv[a]);
 
-    // Always render into an in-memory buffer, then either page it through gmore (tty) or write it to
-    // stdout in one pass (non-tty). Buffering the whole document matters for Kitty graphics: a large
-    // image transmits as many APC chunks, and std::cout's own ~8KB buffer would otherwise flush in the
-    // middle of a chunk, splitting it across two writes. A consumer (e.g. a terminal reached through a
-    // live pipe) that sees a chunk arrive in pieces with a gap can give up waiting for the chunk's ST
-    // and dump the partial base64 as text. Writing the finished buffer with a single write() loop keeps
-    // every chunk contiguous on the wire.
+    // The output destination depends on whether stdout is a terminal:
+    //   - tty: render the whole document into an in-memory buffer, then page it through gmore, which
+    //     needs the complete text to scroll over it.
+    //   - non-tty (pipe/redirect): render into a StreamingSink so each block reaches stdout as soon as
+    //     render() finishes it, instead of withholding the entire document until the slowest image's
+    //     subprocess returns. render() flushes at every top-level block boundary; the sink drains its
+    //     buffer to stdout only on those flushes, so a Kitty APC chunk (which a block emits in one go)
+    //     is never split across writes — a consumer that saw a chunk arrive in pieces with a gap could
+    //     give up waiting for its ST and dump the partial base64 as text.
     bool usePager = isatty(STDOUT_FILENO);
-    std::ostringstream buf;
 
+    if (usePager) {
+        std::ostringstream buf;
+        if (!files.empty()) {
+            for (const auto& path : files) {
+                std::ifstream f(path);
+                if (!f) {
+                    std::cerr << "mdcat: " << path << ": cannot open file\n";
+                    return 1;
+                }
+                size_t slash = path.rfind('/');
+                gFileDir = (slash != std::string::npos) ? path.substr(0, slash) : std::string();
+                render(splitLines(f), buf);
+            }
+            gFileDir.clear();
+        } else {
+            render(splitLines(std::cin), buf);
+        }
+        return gmore::run(buf.str());
+    }
+
+    // Non-tty: stream blocks out as they are rendered. Each file is rendered independently and the
+    // results concatenated — the last block of one file can never merge with the first of the next —
+    // which makes rendering distribute over the argument list (`mdcat a b` == `mdcat a` then
+    // `mdcat b`), as checked by tests/property-concat.sh.
+    StreamingSink sink(STDOUT_FILENO);
+    std::ostream out(&sink);
     if (!files.empty()) {
-        // Render each file independently and concatenate the results, rather than merging the files'
-        // lines into one document. This keeps the boundary between files clean: the last block of one
-        // file can never merge with the first block of the next. It also makes rendering distribute
-        // over the argument list — `mdcat a b` produces exactly `mdcat a` followed by `mdcat b` —
-        // which is checked by tests/property-concat.sh.
         for (const auto& path : files) {
             std::ifstream f(path);
             if (!f) {
@@ -2992,22 +3062,12 @@ int main(int argc, char** argv) {
             }
             size_t slash = path.rfind('/');
             gFileDir = (slash != std::string::npos) ? path.substr(0, slash) : std::string();
-            render(splitLines(f), buf);
+            render(splitLines(f), out);
         }
         gFileDir.clear();
     } else {
-        render(splitLines(std::cin), buf);
+        render(splitLines(std::cin), out);
     }
-
-    std::string data = buf.str();
-    if (usePager) return gmore::run(std::move(data));
-    // Non-tty: write the whole rendered buffer to stdout in one pass, retrying short writes, so a Kitty
-    // APC chunk is never split by a buffer-boundary flush.
-    size_t off = 0;
-    while (off < data.size()) {
-        ssize_t n = write(STDOUT_FILENO, data.data() + off, data.size() - off);
-        if (n <= 0) { if (errno == EINTR) continue; break; }
-        off += static_cast<size_t>(n);
-    }
+    out.flush();  // drain the final block (render() only flushes before each subsequent block)
     return 0;
 }
