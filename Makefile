@@ -74,6 +74,30 @@ check: mdcat gmore
 	done; \
 	exit $$fail
 
+SRCS := \
+	$(S)/gmore_attrs.cpp \
+	$(S)/gmore_emulator.cpp \
+	$(S)/gmore_run.cpp \
+	$(S)/highlight.cpp \
+	$(S)/mdcat.cpp \
+	$(S)/gmore.cpp
+
+ABS := $(abspath .)
+
+compile_commands.json: Makefile
+	@printf '[\n' > $@
+	@first=1; \
+	for f in $(SRCS); do \
+		flags="$(CXXFLAGS) -I$(ABS)/$(S)"; \
+		case $$f in *mdcat*) flags="$$flags $(PTHREAD)";; esac; \
+		[ $$first -eq 0 ] && printf ',\n' >> $@; \
+		printf '  { "directory": "%s", "file": "%s/%s", "command": "$(CXX) %s -c %s/%s" }' \
+			"$(ABS)" "$(ABS)" "$$f" "$$flags" "$(ABS)" "$$f" >> $@; \
+		first=0; \
+	done; \
+	printf '\n]\n' >> $@
+	@echo "wrote compile_commands.json"
+
 clean:
 	rm -rf $(B) mdcat gmore
 
@@ -91,4 +115,4 @@ install-git-pager:
 	git config --global core.pager gmore
 	@echo "Set git's global core.pager to gmore."
 
-.PHONY: all check clean install uninstall install-git-pager
+.PHONY: all check clean install uninstall install-git-pager compile_commands.json
