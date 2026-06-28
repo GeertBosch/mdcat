@@ -55,6 +55,7 @@
 #include <unistd.h>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <sstream>
 #include <string>
@@ -3174,7 +3175,19 @@ public:
         : fd_(fd),
           maxPending_(2 * std::max(1u, std::thread::hardware_concurrency())),
           writer_([this] { writerLoop(); }) {}
+    // Buffer mode (fd_ == -1): the writer appends each drained slot to buffer_ instead of write()ing to
+    // a descriptor. The pager path (ADR 0003 step 6) uses this to get parallel image conversion via the
+    // deferred-slot machinery while still assembling the whole document into one buffer for gmore. No
+    // backpressure cap is needed — there is no stalling consumer, the buffer is the consumer — so the
+    // window is left unbounded so the producer never blocks.
+    SlotSink()
+        : fd_(-1),
+          maxPending_(std::numeric_limits<size_t>::max()),
+          writer_([this] { writerLoop(); }) {}
     ~SlotSink() override { finish(); }
+
+    // Buffer-mode result: the fully assembled, Kitty-renumbered document bytes. Call after finish().
+    std::string takeBuffer() { return std::move(buffer_); }
 
     // Commit any buffered text, then append `fut` as the next ordered slot. Returns without waiting on
     // the conversion, but may block briefly for backpressure if the lookahead window is full.
@@ -3260,11 +3273,14 @@ private:
             // Assign Kitty ids in slot order (document order): every image in this slot's bytes gets the
             // next id. Text slots have no APC, so this is a no-op for them.
             std::string bytes = front.ready ? std::move(front.bytes) : front.fut.get();
-            writeAll(kittyRenumberAll(bytes));
+            std::string renumbered = kittyRenumberAll(bytes);
+            if (fd_ < 0) buffer_ += renumbered;  // buffer mode: assemble in RAM for the pager
+            else writeAll(renumbered);
         }
     }
 
-    int fd_;
+    int fd_;                           // output descriptor, or -1 in buffer mode
+    std::string buffer_;               // buffer mode (fd_ < 0): assembled document, read via takeBuffer()
     size_t maxPending_;                // backpressure cap on unwritten slots
     std::string text_;                 // current (render-thread) text buffer, pre-commit
     std::deque<Slot> slots_;
@@ -3360,7 +3376,13 @@ int main(int argc, char** argv) {
     bool usePager = isatty(STDOUT_FILENO);
 
     if (usePager) {
-        std::ostringstream buf;
+        // Buffer-mode SlotSink: assemble the whole document into one buffer for gmore, but route image
+        // conversions through the same deferred-slot machinery as the streaming path so they run on the
+        // pool in parallel (ADR 0003 step 6). The writer thread stamps Kitty ids in document (slot)
+        // order and concatenates each drained slot into the buffer, so the result is already renumbered
+        // — no separate kittyRenumberAll pass is needed.
+        SlotSink sink;
+        std::ostream buf(&sink);
         if (!files.empty()) {
             for (const auto& path : files) {
                 std::ifstream f(path);
@@ -3376,10 +3398,9 @@ int main(int argc, char** argv) {
         } else {
             render(splitLines(std::cin), buf);
         }
-        // Table images render with a deferred (timg-default) Kitty id; the SlotSink writer would assign
-        // real ids on the streaming path, but the pager path buffers the whole document, so renumber it
-        // here in one pass — every Kitty image in document order — before paging (ADR 0003).
-        return gmore::run(kittyRenumberAll(buf.str()));
+        buf.flush();      // commit the final block's text as a slot
+        sink.finish();    // drain all slots, join the writer thread
+        return gmore::run(sink.takeBuffer());
     }
 
     // Non-tty: stream blocks out as they are rendered. Each file is rendered independently and the

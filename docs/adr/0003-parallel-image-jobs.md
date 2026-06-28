@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed (plan only; not yet implemented).
+Implemented (steps 1–6 complete).
 
 ## Context
 
@@ -136,6 +136,13 @@ coupling them on the critical path.
    submit the width-bound re-render as a follow-up. Verify table docs `cmp`-identical.
 5. **Backpressure window** (bound unwritten slots) + memory check on a big-image doc.
 6. **Pager path**: share the pool for parallel conversion while keeping the single
-   buffer. Re-run `make check`.
+   buffer. Re-run `make check`. *(Done: the pager renders into a buffer-mode
+   `SlotSink` — `fd_ == -1`, unbounded window — so standalone `<img>` and mermaid
+   defer onto the pool and convert in parallel, and the writer thread concatenates
+   each drained, Kitty-renumbered slot into the buffer handed to `gmore::run`. This
+   replaces the old serial `submit().get()` + final `kittyRenumberAll(buf.str())`
+   pass; ids are now minted once, in document order, matching the streaming path —
+   the only byte difference from the old pager output is the Kitty id starting
+   offset, which the old path inflated by double-minting.)*
 
 Each step keeps output byte-identical and is independently committable.
