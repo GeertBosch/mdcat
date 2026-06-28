@@ -3166,17 +3166,21 @@ std::vector<std::string> splitLines(std::istream& in) {
 // APC, so renumbering them is a cheap no-op.)
 class SlotSink : public std::streambuf {
 public:
-    explicit SlotSink(int fd) : fd_(fd), writer_([this] { writerLoop(); }) {}
+    // maxPending bounds the lookahead window: the producer (render thread) blocks before adding a slot
+    // once this many slots are queued-but-unwritten, so a near-bottom giant image can't make workers
+    // buffer the whole rest of the document in RAM ahead of a stalled writer (ADR 0003 backpressure).
+    // 2*N (pool size) keeps every worker busy without unbounded buffering.
+    explicit SlotSink(int fd)
+        : fd_(fd),
+          maxPending_(2 * std::max(1u, std::thread::hardware_concurrency())),
+          writer_([this] { writerLoop(); }) {}
     ~SlotSink() override { finish(); }
 
-    // Commit any buffered text, append `fut` as the next ordered slot, and return without waiting.
+    // Commit any buffered text, then append `fut` as the next ordered slot. Returns without waiting on
+    // the conversion, but may block briefly for backpressure if the lookahead window is full.
     void deferImage(std::future<std::string> fut) {
         commitText();
-        {
-            std::lock_guard<std::mutex> lk(mu_);
-            slots_.emplace_back(std::move(fut));
-        }
-        cv_.notify_one();
+        appendSlot(Slot(std::move(fut)));
     }
 
     // Flush any trailing text and join the writer thread. Idempotent.
@@ -3219,11 +3223,17 @@ private:
 
     void commitText() {
         if (text_.empty()) return;
-        {
-            std::lock_guard<std::mutex> lk(mu_);
-            slots_.emplace_back(std::move(text_));
-        }
+        appendSlot(Slot(std::move(text_)));
         text_.clear();
+    }
+
+    // Append a slot, blocking first if the unwritten-slot window is full so the producer can't race far
+    // ahead of the writer (ADR 0003 backpressure). The writer signals drained_ each time it pops a slot.
+    void appendSlot(Slot&& s) {
+        std::unique_lock<std::mutex> lk(mu_);
+        drained_.wait(lk, [this] { return slots_.size() < maxPending_; });
+        slots_.emplace_back(std::move(s));
+        lk.unlock();
         cv_.notify_one();
     }
 
@@ -3246,6 +3256,7 @@ private:
             Slot front = std::move(slots_.front());
             slots_.pop_front();
             lk.unlock();
+            drained_.notify_one();  // a slot freed: a producer blocked on backpressure may proceed
             // Assign Kitty ids in slot order (document order): every image in this slot's bytes gets the
             // next id. Text slots have no APC, so this is a no-op for them.
             std::string bytes = front.ready ? std::move(front.bytes) : front.fut.get();
@@ -3254,10 +3265,12 @@ private:
     }
 
     int fd_;
+    size_t maxPending_;                // backpressure cap on unwritten slots
     std::string text_;                 // current (render-thread) text buffer, pre-commit
     std::deque<Slot> slots_;
     std::mutex mu_;
-    std::condition_variable cv_;
+    std::condition_variable cv_;       // writer waits for work
+    std::condition_variable drained_;  // producer waits for room (backpressure)
     bool closed_ = false;
     bool done_ = false;
     std::thread writer_;
