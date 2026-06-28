@@ -345,6 +345,23 @@ struct CellMetrics {
     static constexpr int kNominalH = 20;
     int pxToColsNominal(int px) const { return std::max(1, (px + kNominalW - 1) / kNominalW); }
     int pxToRowsNominal(int px) const { return std::max(1, (px + kNominalH - 1) / kNominalH); }
+
+    // The cell size timg assumes for `-g<cols>x<rows>` when it has NO terminal to query (its stdin is
+    // detached from the tty, as mdcat runs it — see runTimg). Measured from timg 1.6.3+: a -g cell is
+    // exactly 9 px wide and ~18 px tall. Because sixel is pixel-absolute, an image timg paints at
+    // gCols*9 px then occupies (gCols*9 / realCellW) of the TERMINAL's cells — wider than gCols whenever
+    // the real cell is narrower than 9 px (e.g. VSCode's ~6 px), so the sixel overflows its reserved
+    // columns. To make timg paint a given number of REAL cells we scale the -g count by realCell/timgCell.
+    static constexpr int kTimgCellW = 9;
+    static constexpr int kTimgCellH = 18;
+    // Convert a desired width in real terminal cells into the -g column count that makes timg paint that
+    // many real cells' worth of pixels (cols * realCellW), rounded to nearest. Identity when realCellW==9.
+    int colsToTimgCols(int cols) const {
+        return std::max(1, (cols * realCellW() + kTimgCellW / 2) / kTimgCellW);
+    }
+    int rowsToTimgRows(int rows) const {
+        return std::max(1, (rows * realCellH() + kTimgCellH / 2) / kTimgCellH);
+    }
 };
 
 // Send a CSI window-op report request ("ESC [ <op> t") over /dev/tty and return the terminal's reply.
@@ -1416,6 +1433,17 @@ std::string completeGeom(const std::string& geom) {
 // read the painted pixel size out of the sixel to compute an exact cell footprint.
 std::string runTimg(const std::string& path, const std::string& geomIn) {
     std::string geom = completeGeom(geomIn);
+    // The -g box arrives in REAL terminal cells, but timg (run headless, stdin detached) sizes it with
+    // its own fixed 9x18 px cell, painting pixels that occupy more of the terminal's narrower cells than
+    // requested. Rescale each axis from real cells to timg cells so the painted pixels match the columns
+    // mdcat reserves. completeGeom always returns a full "WxH", so both fields are present.
+    if (size_t x = geom.find('x'); x != std::string::npos) {
+        CellMetrics cm = cellMetrics();
+        int w = std::atoi(geom.substr(0, x).c_str());
+        int h = std::atoi(geom.substr(x + 1).c_str());
+        if (w > 0 && h > 0)
+            geom = std::to_string(cm.colsToTimgCols(w)) + "x" + std::to_string(cm.rowsToTimgRows(h));
+    }
     std::ostringstream cmd;
     // -ps : sixel pixelation;  -g <geom> : fit inside the given character-cell box.  The path is
     // passed single-quoted with embedded single quotes escaped, so odd filenames stay safe.
