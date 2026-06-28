@@ -238,9 +238,15 @@ we don't re-walk them.
   *mid-chunk*, splitting a 4096-byte APC chunk across two `write()`s; a live
   terminal seeing a chunk arrive in pieces gives up and dumps the partial base64.
   **Rule:** when a terminal garbles graphics but the captured bytes are correct,
-  suspect streaming/buffering. Emit graphics with chunk-contiguous writes (render
-  into a buffer, one retrying `write()` loop). Probes that `cat` a complete stream
-  *cannot* reproduce this.
+  suspect streaming/buffering. Emit graphics with chunk-contiguous writes: never
+  flush mid-chunk. The non-tty path streams **per block** (a `StreamingSink`
+  streambuf that drains to `write()` only on `flush()`, which `render()` calls at
+  each top-level block boundary) so text and finished images appear incrementally
+  instead of the whole document being withheld until the slowest image's subprocess
+  returns — and because a block emits its whole APC in one go and the flush happens
+  at a line boundary between blocks, no chunk is ever split. (The tty/pager path
+  still buffers the entire document: gmore scrolls over the complete text.) Probes
+  that `cat` a complete stream *cannot* reproduce the original split-chunk bug.
 - **`q=2` on every Kitty command.** Without `q=1`/`q=2`, the terminal replies
   `ESC_G…;OK ESC\` to each graphics command and the `OK` echoes onscreen as stray
   escapes. Set `q=2` on **every** transmit *and* placement APC.
