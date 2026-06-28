@@ -405,6 +405,64 @@ TwoInts queryWindowOp(const char* op) {
     return out;
 }
 
+// Query the terminal's background colour with OSC 11 ("ESC ] 11 ; ? BEL") and return it as a timg
+// `-b` argument ("#rrggbb"), or empty if the terminal doesn't answer. timg pads a sixel's height up to
+// the next 6px band and fills the padding (and any alpha) with its -b colour; the default is BLACK,
+// which paints a visible dark line under a light-background image (e.g. a mermaid diagram). Filling
+// with the real terminal background instead makes the pad invisible. Cached once per run.
+//
+// The reply is "ESC ] 11 ; rgb:RRRR/GGGG/BBBB <ST|BEL>" with 1-4 hex digits per channel; we take the
+// high byte of each. Done over /dev/tty in raw mode with a short timeout, like queryWindowOp, so it
+// reaches the local terminal even when stdout is piped and never hangs or echoes.
+std::string queryBackgroundColor() {
+    static const std::string color = []() -> std::string {
+        if (const char* env = std::getenv("MDCAT_BG"))  // explicit override / testability
+            return env[0] ? std::string(env) : std::string();
+        int fd = open("/dev/tty", O_RDWR | O_NOCTTY);
+        if (fd < 0) return std::string();
+        struct termios saved {};
+        if (tcgetattr(fd, &saved) != 0) { close(fd); return std::string(); }
+        struct termios raw = saved;
+        raw.c_lflag &= ~static_cast<tcflag_t>(ICANON | ECHO);
+        raw.c_cc[VMIN] = 0;
+        raw.c_cc[VTIME] = 2;  // 0.2s between bytes
+        tcsetattr(fd, TCSANOW, &raw);
+        std::string out;
+        const char query[] = "\033]11;?\033\\";
+        if (write(fd, query, sizeof query - 1) == static_cast<ssize_t>(sizeof query - 1)) {
+            std::string reply;
+            char c;
+            // Read until ST (ESC \) or BEL, or the inter-byte timeout. The reply is short.
+            while (reply.size() < 64) {
+                ssize_t n = read(fd, &c, 1);
+                if (n <= 0) break;
+                reply += c;
+                if (c == '\a') break;
+                if (c == '\\' && reply.size() >= 2 && reply[reply.size() - 2] == '\033') break;
+            }
+            unsigned r = 0, g = 0, b = 0;
+            // "rgb:RRRR/GGGG/BBBB" (1-4 hex digits each); %x reads however many hex digits are present.
+            size_t pos = reply.find("rgb:");
+            if (pos != std::string::npos &&
+                std::sscanf(reply.c_str() + pos, "rgb:%x/%x/%x", &r, &g, &b) == 3) {
+                // Normalise each channel's high byte: scale a 1-4 digit value to 8 bits. A 4-digit
+                // value is 16-bit, so >>8; map shorter widths by their digit count.
+                auto hi8 = [](unsigned v) {
+                    while (v > 0xFF) v >>= 4;  // collapse 16-/12-bit channels to 8 bits
+                    return v;
+                };
+                char buf[8];
+                std::snprintf(buf, sizeof buf, "#%02x%02x%02x", hi8(r), hi8(g), hi8(b));
+                out = buf;
+            }
+        }
+        tcsetattr(fd, TCSANOW, &saved);
+        close(fd);
+        return out;
+    }();
+    return color;
+}
+
 // Read a positive integer from an environment variable, or 0 if unset/non-positive.
 int envInt(const char* name) {
     if (const char* v = std::getenv(name)) {
@@ -1459,8 +1517,13 @@ std::string runTimg(const std::string& path, const std::string& geomIn) {
     // save/restore races and the last one restores a stale "echo off" state, leaving the user's terminal
     // dead. Detaching stdin stops timg touching terminal modes at all; we already pass an explicit -g
     // box and protocol, so it has nothing to auto-detect.
-    if (!geom.empty()) cmd << "timg -ps -g" << geom << " " << quoted << " </dev/null 2>/dev/null";
-    else               cmd << "timg -ps " << quoted << " </dev/null 2>/dev/null";
+    // -b <bg>: fill the height padding (timg rounds up to a 6px sixel band) and any alpha with the
+    // terminal's background colour instead of timg's default black, which would otherwise paint a dark
+    // line under a light image. Omitted when the terminal didn't answer OSC 11 (timg keeps its default).
+    std::string bg = queryBackgroundColor();
+    std::string bgOpt = bg.empty() ? std::string() : " -b '" + bg + "'";
+    if (!geom.empty()) cmd << "timg -ps" << bgOpt << " -g" << geom << " " << quoted << " </dev/null 2>/dev/null";
+    else               cmd << "timg -ps" << bgOpt << " " << quoted << " </dev/null 2>/dev/null";
     FILE* p = popen(cmd.str().c_str(), "r");
     if (!p) return std::string();
     std::string out;
@@ -3396,10 +3459,12 @@ int main(int argc, char** argv) {
     for (; a < argc; ++a) files.emplace_back(argv[a]);
 
     // Warm the terminal-probing memoized statics on the main thread before any image worker
-    // (ADR 0003) can touch them: graphicsBackend() and cellMetrics() do one-time terminal I/O on
-    // first call, which must not happen concurrently on a worker. After this they are pure reads.
+    // (ADR 0003) can touch them: graphicsBackend(), cellMetrics() and queryBackgroundColor() do
+    // one-time terminal I/O (some toggle the tty into raw mode) on first call, which must not happen
+    // concurrently on a worker. After this they are pure reads.
     (void)graphicsBackend();
     (void)cellMetrics();
+    (void)queryBackgroundColor();
 
     // The output destination depends on whether stdout is a terminal:
     //   - tty: render the whole document into an in-memory buffer, then page it through gmore, which
