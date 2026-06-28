@@ -20,14 +20,16 @@
 // --dump-images renders text + re-encoded sixel strips (for render testing).
 // --imginfo prints decoded image metadata + ASCII rasters.
 
-#include "gmore_core.h"
+#include "gmore.h"
 
+#include <fcntl.h>
+#include <unistd.h>
+
+#include <cerrno>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
-#include <unistd.h>
-#include <fcntl.h>
-#include <cerrno>
 
 static std::string readAll(int fd) {
     std::string s; char buf[65536]; ssize_t n;

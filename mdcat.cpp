@@ -36,33 +36,34 @@
 //         --width N forces the render width, overriding $COLUMNS and the terminal size.
 //         --img forces image output even when piped; an optional protocol pins the graphics backend.
 
-#include <algorithm>
-#include <atomic>
-#include <cctype>
-#include <cerrno>
-#include <condition_variable>
-#include <deque>
-#include <functional>
-#include <future>
-#include <mutex>
-#include <queue>
-#include <thread>
-#include <cstdio>
-#include <cstdlib>
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
+
+#include <algorithm>
+#include <atomic>
+#include <cctype>
+#include <cerrno>
+#include <condition_variable>
+#include <cstdio>
+#include <cstdlib>
+#include <deque>
 #include <fstream>
+#include <functional>
+#include <future>
 #include <iostream>
 #include <limits>
 #include <map>
+#include <mutex>
+#include <queue>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
-#include "gmore_core.h"
+#include "gmore.h"
 #include "highlight.h"
 
 namespace {

@@ -10,11 +10,22 @@ BINDIR ?= $(PREFIX)/bin
 
 all: mdcat gmore
 
-mdcat: mdcat.cpp highlight.cpp highlight.h gmore_core.h
-	$(CXX) $(CXXFLAGS) $(PTHREAD) -o $@ mdcat.cpp highlight.cpp
+GMORE_OBJS = gmore_attrs.o gmore_emulator.o gmore_run.o
 
-gmore: gmore.cpp gmore_core.h
-	$(CXX) $(CXXFLAGS) -o $@ gmore.cpp
+gmore_attrs.o: gmore_attrs.cpp gmore_attrs.h gmore_types.h
+	$(CXX) $(CXXFLAGS) -c -o $@ gmore_attrs.cpp
+
+gmore_emulator.o: gmore_emulator.cpp gmore_emulator.h gmore_attrs.h gmore_types.h
+	$(CXX) $(CXXFLAGS) -c -o $@ gmore_emulator.cpp
+
+gmore_run.o: gmore_run.cpp gmore_run.h gmore_emulator.h gmore_attrs.h gmore_types.h
+	$(CXX) $(CXXFLAGS) -c -o $@ gmore_run.cpp
+
+mdcat: mdcat.cpp highlight.cpp highlight.h gmore.h $(GMORE_OBJS)
+	$(CXX) $(CXXFLAGS) $(PTHREAD) -o $@ mdcat.cpp highlight.cpp $(GMORE_OBJS)
+
+gmore: gmore.cpp gmore.h $(GMORE_OBJS)
+	$(CXX) $(CXXFLAGS) -o $@ gmore.cpp $(GMORE_OBJS)
 
 TESTS := \
 	tests/property-concat.sh \
