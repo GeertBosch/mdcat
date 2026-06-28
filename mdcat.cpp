@@ -1511,6 +1511,36 @@ std::string kittyRewriteId(const std::string& apc, uint32_t id) {
     return apc.substr(0, numStart) + std::to_string(id) + apc.substr(numEnd);
 }
 
+// Renumber the i= id of every Kitty image in `bytes`, in order, with successive ids from nextKittyId().
+// Each image's FIRST chunk carries the controls run with i=; continuation chunks (m=) carry no i= and
+// are left alone, so exactly one fresh id is minted per image. Used by the writer thread (ADR 0003) to
+// stamp ids in document (slot) order, regardless of the order parallel workers produced the bytes —
+// keeping output byte-identical to the serial renderer, which minted ids in document order on one
+// thread. `bytes` may hold zero, one, or many images (a single deferred <img>, or a whole table row).
+std::string kittyRenumberAll(const std::string& bytes) {
+    std::string out;
+    out.reserve(bytes.size());
+    size_t pos = 0;
+    for (;;) {
+        size_t g = bytes.find("\033_G", pos);
+        if (g == std::string::npos) { out.append(bytes, pos, std::string::npos); break; }
+        size_t semi = bytes.find(';', g + 3);
+        size_t ip = bytes.find("i=", g + 3);
+        out.append(bytes, pos, g - pos);                         // bytes before this APC
+        if (semi == std::string::npos || ip == std::string::npos || ip > semi) {
+            // No i= in this controls run: a continuation chunk (or not an image). Copy "\033_G" only
+            // and continue scanning just past it.
+            out.append("\033_G");
+            pos = g + 3;
+            continue;
+        }
+        // An image's first chunk: rewrite its i= to the next document-order id and copy through the ';'.
+        out.append(kittyRewriteId(bytes.substr(g, semi - g + 1), nextKittyId()));
+        pos = semi + 1;
+    }
+    return out;
+}
+
 // Inject (or replace) the cell-footprint controls c=<cols>,r=<rows> on the FIRST Kitty controls
 // segment of `apc`, byte-exact. timg emits no c=/r=, so the terminal would otherwise derive the
 // footprint by dividing the PNG's pixel size by ITS OWN cell size — which differs from the ~9px cell
@@ -1975,7 +2005,7 @@ void emitImageParagraph(const std::string& image, int rows, std::ostream& out) {
 // so the deferred call sites here can detect the sink and reserve a slot without the complete type.
 class SlotSink;
 SlotSink* asSlotSink(std::ostream& out);
-void slotDeferImage(SlotSink* sink, std::future<std::string> fut, bool stampKittyId);
+void slotDeferImage(SlotSink* sink, std::future<std::string> fut);
 
 // ---------------------------------------------------------------------------
 // Block model
@@ -2166,7 +2196,7 @@ void emitParagraph(const std::vector<std::string>& lines, std::ostream& out) {
                     if (isImageBlock(image)) return imageParagraphBytes(image, ih);
                     return image + "\n";  // one-line text fallback
                 });
-                slotDeferImage(sink, std::move(fut), /*stampKittyId=*/true);
+                slotDeferImage(sink, std::move(fut));
                 return;
             }
             // Synchronous path (tty buffer or recursive ostringstream): render now and write inline.
@@ -2331,27 +2361,48 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
     std::vector<std::vector<int>> imgCellW(rows.size(), std::vector<int>(ncols, 0)); // image width
     std::vector<std::vector<std::string>> imgText(rows.size(), std::vector<std::string>(ncols));
     std::vector<int> imgWidth(ncols, 0);   // forced width of an image column, if any
+    // Batch-join (ADR 0003): submit every image-tag cell's conversion to the pool up front, then wait
+    // on the whole batch before laying out the table — the column-width algorithm needs every image's
+    // footprint, so the table can't be emitted until its own cells are measured, but the conversions
+    // run in parallel with each other (and overlap any earlier blocks' deferred images already queued).
+    // Per-cell results live in stable storage so each job writes its own slot without racing.
+    struct CellImg { std::string block; int iw = 0, ih = 0; bool ok = false; };
+    std::vector<std::vector<CellImg>> cimg(rows.size(), std::vector<CellImg>(ncols));
+    // future is move-only, so the row vectors can't be copy-filled; resize each instead.
+    std::vector<std::vector<std::future<void>>> cfut(rows.size());
+    for (auto& row : cfut) row.resize(ncols);
+    std::string fileDir = gFileDir;
     for (size_t i = 0; i < rows.size(); ++i) {
         for (size_t j = 0; j < ncols; ++j) {
-            std::string block;
-            int iw = 0, ih = 0;
+            std::string cellText = trim(rows[i][j]);
+            std::map<std::string, std::string> probe;
+            if (!parseImgTag(cellText, probe) && !parseMdImage(cellText, probe)) continue;
+            imgText[i][j] = cellText;
+            CellImg* r = &cimg[i][j];
             // Render at the full content budget so an explicit height is honoured at the image's
             // natural width; a column too narrow to hold it is handled by a re-render after layout.
-            std::string cellText = trim(rows[i][j]);
-            std::string fileDir = gFileDir;
-            bool isImg = imagePool().submit([&] {
-                return renderImageBlock(cellText, budget, fileDir, block, iw, ih);
-            }).get();
-            if (isImg && isImageBlock(block)) {
-                rows[i][j] = block;
+            cfut[i][j] = imagePool().submit([cellText, budget, fileDir, r] {
+                r->ok = renderImageBlock(cellText, budget, fileDir, r->block, r->iw, r->ih,
+                                         /*forceWidthBound=*/false, kKittyIdDefer);
+            });
+        }
+    }
+    for (size_t i = 0; i < rows.size(); ++i) {
+        for (size_t j = 0; j < ncols; ++j) {
+            if (cfut[i][j].valid()) cfut[i][j].get();  // join this cell's conversion
+            const CellImg& r = cimg[i][j];
+            if (r.ok && isImageBlock(r.block)) {
+                // The Kitty id is left as timg's default (kKittyIdDefer); the writer renumbers every
+                // image in document order when it drains this table's slot.
+                rows[i][j] = r.block;
                 isImage[i][j] = true;
-                imgRows[i][j] = std::max(1, ih);
-                imgCellW[i][j] = iw;
-                imgText[i][j] = cellText;     // kept so we can re-render at a clamped width
-                imgWidth[j] = std::max(imgWidth[j], iw);
-            } else if (!block.empty() && ih == 1) {
-                rows[i][j] = block;          // <img> fallback text (alt/filename): reflow as text
+                imgRows[i][j] = std::max(1, r.ih);
+                imgCellW[i][j] = r.iw;
+                imgWidth[j] = std::max(imgWidth[j], r.iw);
+            } else if (r.ok && !r.block.empty() && r.ih == 1) {
+                rows[i][j] = r.block;        // <img> fallback text (alt/filename): reflow as text
             } else {
+                imgText[i][j].clear();       // not an image after all; drop the kept tag
                 rows[i][j] = renderInline(rows[i][j]);
             }
         }
@@ -2419,22 +2470,32 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
     // does not, so renderImageBlock's own heuristic would otherwise keep it height-bound and too
     // wide. This is the only case that runs timg twice, and only when columns are tight.
     std::vector<int> allocWidth = widths;   // the budgeted width; tightening must not exceed it
+    // The forced width-bound re-renders are submitted as a follow-up batch and joined the same way
+    // (ADR 0003), again with kKittyIdDefer + row-major id stamping for serial-identical output.
+    std::vector<std::vector<CellImg>> rimg(rows.size(), std::vector<CellImg>(ncols));
+    std::vector<std::vector<std::future<void>>> rfut(rows.size());
+    for (auto& row : rfut) row.resize(ncols);
     for (size_t i = 0; i < rows.size(); ++i) {
         for (size_t j = 0; j < ncols; ++j) {
             if (!isImage[i][j] || allocWidth[j] >= imgCellW[i][j]) continue;
-            std::string block;
-            int iw = 0, ih = 0;
-            const std::string& cellText = imgText[i][j];
+            std::string cellText = imgText[i][j];
             int allocW = allocWidth[j];
-            std::string fileDir = gFileDir;
-            bool isImg = imagePool().submit([&] {
-                return renderImageBlock(cellText, allocW, fileDir, block, iw, ih,
-                                        /*forceWidthBound=*/true);
-            }).get();
-            if (isImg && isImageBlock(block)) {
-                rows[i][j] = block;
-                imgRows[i][j] = std::max(1, ih);
-                imgCellW[i][j] = iw;
+            CellImg* r = &rimg[i][j];
+            rfut[i][j] = imagePool().submit([cellText, allocW, fileDir, r] {
+                r->ok = renderImageBlock(cellText, allocW, fileDir, r->block, r->iw, r->ih,
+                                         /*forceWidthBound=*/true, kKittyIdDefer);
+            });
+        }
+    }
+    for (size_t i = 0; i < rows.size(); ++i) {
+        for (size_t j = 0; j < ncols; ++j) {
+            if (!rfut[i][j].valid()) continue;
+            rfut[i][j].get();
+            CellImg& r = rimg[i][j];
+            if (r.ok && isImageBlock(r.block)) {
+                rows[i][j] = r.block;        // id left deferred; writer renumbers in document order
+                imgRows[i][j] = std::max(1, r.ih);
+                imgCellW[i][j] = r.iw;
             }
         }
     }
@@ -2907,11 +2968,9 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
                     return cb.str();
                 };
                 if (SlotSink* sink = asSlotSink(out)) {
-                    // Defer the Kitty id (kKittyIdDefer): the writer stamps a document-order id when it
+                    // Defer the Kitty id (kKittyIdDefer): the writer assigns a document-order id when it
                     // drains the slot, so out-of-order completion stays serial-identical.
-                    slotDeferImage(sink,
-                                   imagePool().submit([convert] { return convert(kKittyIdDefer); }),
-                                   /*stampKittyId=*/true);
+                    slotDeferImage(sink, imagePool().submit([convert] { return convert(kKittyIdDefer); }));
                 } else {
                     out << imagePool().submit([convert] { return convert(0); }).get();
                 }
@@ -3097,21 +3156,25 @@ std::vector<std::string> splitLines(std::istream& in) {
 // The writer thread walks slots strictly front-to-back: for a ready slot it writes the bytes; for a
 // future slot it blocks on the future, then writes. Because the writer is its own thread, a stalled
 // write() blocks only the writer — image workers keep filling later future slots. Output emerges in
-// document order (the writer never reorders), so the bytes are identical to StreamingSink's serial
+// document order (the writer never reorders), so the bytes are identical to the serial renderer's
 // output; only timing changes.
+//
+// All Kitty image ids are assigned HERE, on the writer thread, in slot (= document) order: workers and
+// tables render with kKittyIdDefer (leaving timg's default id), and writerLoop runs kittyRenumberAll on
+// every slot's bytes. That is the one place ids are minted, so parallel, out-of-order conversion still
+// yields the exact id sequence the single-threaded serial renderer produced. (Text slots contain no
+// APC, so renumbering them is a cheap no-op.)
 class SlotSink : public std::streambuf {
 public:
     explicit SlotSink(int fd) : fd_(fd), writer_([this] { writerLoop(); }) {}
     ~SlotSink() override { finish(); }
 
     // Commit any buffered text, append `fut` as the next ordered slot, and return without waiting.
-    // `stampKittyId` requests that the writer mint a document-order Kitty id for this slot's bytes when
-    // it drains them (the deferred image left timg's default id), keeping ids serial-identical.
-    void deferImage(std::future<std::string> fut, bool stampKittyId) {
+    void deferImage(std::future<std::string> fut) {
         commitText();
         {
             std::lock_guard<std::mutex> lk(mu_);
-            slots_.emplace_back(std::move(fut), stampKittyId);
+            slots_.emplace_back(std::move(fut));
         }
         cv_.notify_one();
     }
@@ -3148,12 +3211,10 @@ protected:
 private:
     struct Slot {
         bool ready;
-        bool stampKittyId = false;    // when !ready: mint a document-order Kitty id at write time
         std::string bytes;            // valid when ready
         std::future<std::string> fut; // valid when !ready
         explicit Slot(std::string b) : ready(true), bytes(std::move(b)) {}
-        Slot(std::future<std::string> f, bool stamp)
-            : ready(false), stampKittyId(stamp), fut(std::move(f)) {}
+        explicit Slot(std::future<std::string> f) : ready(false), fut(std::move(f)) {}
     };
 
     void commitText() {
@@ -3185,17 +3246,10 @@ private:
             Slot front = std::move(slots_.front());
             slots_.pop_front();
             lk.unlock();
-            if (front.ready) {
-                writeAll(front.bytes);
-            } else {
-                std::string bytes = front.fut.get();
-                // Stamp the document-order Kitty id here, in slot order, so only images that actually
-                // produced a Kitty APC consume an id and they do so gap-free — exactly as the serial
-                // renderer did (ADR 0003). Non-Kitty bytes (sixel, text fallback) are left untouched.
-                if (front.stampKittyId && isKittyImage(bytes))
-                    bytes = kittyRewriteId(bytes, nextKittyId());
-                writeAll(bytes);
-            }
+            // Assign Kitty ids in slot order (document order): every image in this slot's bytes gets the
+            // next id. Text slots have no APC, so this is a no-op for them.
+            std::string bytes = front.ready ? std::move(front.bytes) : front.fut.get();
+            writeAll(kittyRenumberAll(bytes));
         }
     }
 
@@ -3210,9 +3264,7 @@ private:
 };
 
 SlotSink* asSlotSink(std::ostream& out) { return dynamic_cast<SlotSink*>(out.rdbuf()); }
-void slotDeferImage(SlotSink* sink, std::future<std::string> fut, bool stampKittyId) {
-    sink->deferImage(std::move(fut), stampKittyId);
-}
+void slotDeferImage(SlotSink* sink, std::future<std::string> fut) { sink->deferImage(std::move(fut)); }
 
 }  // namespace
 
@@ -3311,7 +3363,10 @@ int main(int argc, char** argv) {
         } else {
             render(splitLines(std::cin), buf);
         }
-        return gmore::run(buf.str());
+        // Table images render with a deferred (timg-default) Kitty id; the SlotSink writer would assign
+        // real ids on the streaming path, but the pager path buffers the whole document, so renumber it
+        // here in one pass — every Kitty image in document order — before paging (ADR 0003).
+        return gmore::run(kittyRenumberAll(buf.str()));
     }
 
     // Non-tty: stream blocks out as they are rendered. Each file is rendered independently and the
