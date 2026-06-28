@@ -110,6 +110,18 @@ invoking `timg`, making the painted pixels land on exactly the columns mdcat res
 Identity when the real cell is 9 px; a no-op for Kitty, which instead pins the
 footprint after the fact (`kittyRewriteFootprint`) so the terminal does the scaling.
 
+**Pass the terminal background to `timg -b`, or sixel padding paints black.** Sixel
+data is written in 6-px-tall **bands**, so `timg` rounds an image's height *up* to the
+next multiple of 6 (a 70 px mermaid diagram → 72 px raster) and fills those extra rows
+— and any alpha — with its `-b` colour. The default is **black**, which draws a hard
+dark line under a light-background image. The fix is image-agnostic: query the
+terminal's background once with **OSC 11** (`ESC ] 11 ; ? ST` → `rgb:RRRR/GGGG/BBBB`,
+done over `/dev/tty` like the cell-size queries so it survives a piped stdout) and pass
+it as `timg -b '#rrggbb'`, so the pad matches the terminal and disappears. When the
+terminal doesn't answer (headless/piped) `-b` is omitted and timg keeps its default —
+harmless, since nothing is displayed there. Kitty needs none of this: it sends the PNG
+verbatim with no banding or pad. (`MDCAT_BG` overrides the query for tests.)
+
 **Placement is made terminal-independent with DECSC/DECRC** (`ESC 7` … `ESC 8`).
 After a sixel, terminals disagree on where the cursor ends up: **VSCode advances to
 the row below the image; iTerm2 does not.** A bare replay that assumed one of these
