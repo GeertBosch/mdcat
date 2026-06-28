@@ -198,7 +198,25 @@ struct Image {
     // crop placements — no per-scroll re-encode. See transmitKitty / placeKitty.
     std::string kitty;
     uint32_t kid = 0;     // Kitty image id (parsed from the APC's i=)
+    // Cell footprint the PRODUCER requested via c=/r= on the APC (a table column width, a
+    // paragraph's reserved box). 0 = none given, fall back to the pixel-derived size. Honouring
+    // this is what keeps a width-bound table image inside its column instead of painting native-wide.
+    int footCols = 0, footRows = 0;
     bool isKitty() const { return !kitty.empty(); }
+    // How many cell rows this image occupies on the grid: the producer's r= footprint when given
+    // (so reservation and clipping match the cells it was laid out in), else the pixel height ceil-
+    // divided by the cell height. Used everywhere the image's row extent is needed so finishKitty's
+    // reservation, renderRow's clip, and paintImages all agree.
+    int heightCells(int cellH) const {
+        return footRows > 0 ? footRows : std::max(1, (Pv + cellH - 1) / cellH);
+    }
+    // Source pixels that map to one grid row. When the producer reserved r= rows for a Pv-pixel
+    // image, the image is scaled so its Pv pixels span r= rows, i.e. Pv/r= pixels per row — which is
+    // what the top/bottom scroll-clip must skip per off-screen row, NOT the raw cell height.
+    int pxPerRow(int cellH) const {
+        int hc = heightCells(cellH);
+        return std::max(1, (Pv + hc - 1) / hc);
+    }
 };
 
 // Decode a sixel DCS payload (everything after `ESC P`, up to but not including ST)
@@ -487,7 +505,24 @@ static bool kittyPngSize(const std::string& png, int& w, int& h) {
 // Parse a Kitty APC transmission `apc` (ESC _ G <controls>;<b64> ESC \ ... chunks) for
 // its image id (i=) and pixel size (from the first chunk's PNG IHDR). Returns false if
 // it is not a recoverable Kitty image transmission.
-static bool kittyParse(const std::string& apc, uint32_t& id, int& pw, int& ph) {
+// Read the value of a `key=<int>` from a comma-separated Kitty controls run; 0 if absent.
+static int kittyCtrlInt(const std::string& controls, const char* key) {
+    std::string k = key;
+    for (size_t p = 0; (p = controls.find(k, p)) != std::string::npos; p += k.size()) {
+        // Match only at a key boundary (start of run or just after a comma) so "c=" does not
+        // hit the 'c' inside another value.
+        if (p == 0 || controls[p - 1] == ',') return std::atoi(controls.c_str() + p + k.size());
+    }
+    return 0;
+}
+
+// Parse a captured Kitty APC: its image id, the inner PNG's pixel size (from the IHDR), and the
+// cell FOOTPRINT (c=/r=) the producer requested. mdcat injects c=/r= matching the cells it laid the
+// image out in (e.g. a table column width); gmore must honour that footprint rather than re-deriving
+// one from the pixel size, or a width-bound table image paints at its native width and overflows its
+// column. footCols/footRows are 0 if the producer set no c=/r= (then the caller falls back to pixels).
+static bool kittyParse(const std::string& apc, uint32_t& id, int& pw, int& ph, int& footCols,
+                       int& footRows) {
     size_t g = apc.find("\033_G");
     if (g == std::string::npos) return false;
     size_t semi = apc.find(';', g);
@@ -495,6 +530,8 @@ static bool kittyParse(const std::string& apc, uint32_t& id, int& pw, int& ph) {
     std::string controls = apc.substr(g + 3, semi - (g + 3));
     size_t ip = controls.find("i=");
     id = (ip != std::string::npos) ? static_cast<uint32_t>(std::atoi(controls.c_str() + ip + 2)) : 0;
+    footCols = kittyCtrlInt(controls, "c=");
+    footRows = kittyCtrlInt(controls, "r=");
     size_t end = apc.find("\033\\", semi);
     if (end == std::string::npos) return false;
     std::string png = kittyB64DecodePrefix(apc.substr(semi + 1, end - semi - 1), 24);
@@ -804,16 +841,20 @@ struct Emulator {
     // at the cursor, advancing the cursor below it exactly as for a sixel. gmore never decodes
     // the PNG; it keeps the verbatim chunks and paints visible bands via crop placements.
     void finishKitty() {
-        uint32_t id = 0; int pw = 0, ph = 0;
-        if (!kittyParse(kittyAcc, id, pw, ph)) { kittyAcc.clear(); return; }
+        uint32_t id = 0; int pw = 0, ph = 0, footCols = 0, footRows = 0;
+        if (!kittyParse(kittyAcc, id, pw, ph, footCols, footRows)) { kittyAcc.clear(); return; }
         Image img;
         img.row = top + cr; img.col = cc;
         img.Ph = pw; img.Pv = ph;
+        img.footCols = footCols; img.footRows = footRows;
         img.kitty = kittyAcc;
         img.kid = id;
         images.push_back(std::move(img));
         kittyAcc.clear();
-        int rowsCells = (ph + cellH - 1) / cellH;
+        // Reserve the image's height in cells: the producer's r= when it set one (so the band matches
+        // the cells mdcat laid out), else the pixel-derived height. Ceil for the pixel fallback so a
+        // fractional last row is not clipped.
+        int rowsCells = footRows > 0 ? footRows : (ph + cellH - 1) / cellH;
         cc = 0;
         for (int k = 0; k < rowsCells; ++k) { if (cr + 1 >= H) scrollUp(); else ++cr; }
         absorbLf = true;   // a single trailing LF from the producer is now redundant
@@ -944,7 +985,7 @@ struct Emulator {
             }
         }
         for (const Image& img : images) {
-            size_t imgEnd = img.row + (size_t)((img.Pv + cellH - 1) / cellH);
+            size_t imgEnd = img.row + (size_t)img.heightCells(cellH);
             if (imgEnd > last) last = imgEnd;
         }
         return last;
@@ -975,9 +1016,15 @@ struct Emulator {
         if (!img.isKitty()) { out += replaySixel(img, skipPx, keepPx); return; }
         if (kittyTransmitted.insert(img.kid).second)
             out += kittyTransmitOnly(img.kitty);                 // first paint: send the data once
-        int cols = std::max(1, (img.Ph + cellW - 1) / cellW);    // full image width in cells
-        int rows = std::max(1, (keepPx + cellH - 1) / cellH);    // visible band height in cells
-        out += kittyPlace(img.kid, img.Ph, skipPx, keepPx, cols, rows);
+        // The full-image footprint: the producer's c=/r= when present (so a width-bound table image
+        // stays in its column), else derived from the pixel size (ceil so it isn't clipped).
+        int fullCols = img.footCols > 0 ? img.footCols : std::max(1, (img.Ph + cellW - 1) / cellW);
+        int fullRows = img.footRows > 0 ? img.footRows : std::max(1, (img.Pv + cellH - 1) / cellH);
+        // This placement shows the pixel band [skipPx, skipPx+keepPx) of a Pv-tall image. Scale the
+        // full row footprint by the visible fraction so a partially-scrolled image keeps its aspect;
+        // round to nearest (not ceil) so an unclipped image is exactly fullRows, never one row tall-er.
+        int rows = img.Pv > 0 ? std::max(1, (fullRows * keepPx + img.Pv / 2) / img.Pv) : fullRows;
+        out += kittyPlace(img.kid, img.Ph, skipPx, keepPx, fullCols, rows);
     }
 
     // `withImages` inline-paints sixels (the --dump-images path); the interactive pager
@@ -989,14 +1036,15 @@ struct Emulator {
                    const Highlight* hl = nullptr) const {
         if (withImages) {
             for (const Image& img : images) {
-                size_t imgEnd = img.row + (size_t)((img.Pv + cellH - 1) / cellH);
+                size_t imgEnd = img.row + (size_t)img.heightCells(cellH);
                 if (absRow < img.row || absRow >= imgEnd) continue;   // row not within the image
                 size_t firstVisible = std::max(img.row, viewTop);
                 if (absRow != firstVisible) continue;        // paint only on the top visible row
-                int skipPx = (int)(firstVisible - img.row) * cellH;   // off-screen rows above
+                int ppr = img.pxPerRow(cellH);
+                int skipPx = (int)(firstVisible - img.row) * ppr;     // off-screen rows above
                 int keepPx = img.Pv - skipPx;
                 if (viewBot > firstVisible)                  // clip to the window bottom
-                    keepPx = std::min(keepPx, (int)(viewBot - firstVisible) * cellH);
+                    keepPx = std::min(keepPx, (int)(viewBot - firstVisible) * ppr);
                 out += "\0337";                              // DECSC: save cursor
                 if (img.col > 0) { out += "\033["; out += std::to_string(img.col + 1); out += 'G'; }
                 paintImageBand(img, skipPx, keepPx, out);
@@ -1066,13 +1114,14 @@ struct Emulator {
     // `winBot` is the absolute row just past the window (for bottom band-clipping).
     void paintImages(std::string& out, size_t winFirst, int winRows, size_t winBot) const {
         for (const Image& img : images) {
-            size_t imgEnd = img.row + (size_t)((img.Pv + cellH - 1) / cellH);
+            size_t imgEnd = img.row + (size_t)img.heightCells(cellH);
             size_t firstVisible = std::max(img.row, winFirst);
             if (firstVisible >= imgEnd || firstVisible >= winFirst + (size_t)winRows) continue;
-            int skipPx = (int)(firstVisible - img.row) * cellH;   // rows above the window
+            int ppr = img.pxPerRow(cellH);
+            int skipPx = (int)(firstVisible - img.row) * ppr;     // rows above the window
             int keepPx = img.Pv - skipPx;
             if (winBot > firstVisible)                            // clip to the window bottom
-                keepPx = std::min(keepPx, (int)(winBot - firstVisible) * cellH);
+                keepPx = std::min(keepPx, (int)(winBot - firstVisible) * ppr);
             int up = winRows - (int)(firstVisible - winFirst);    // lines up from below the window
             out += "\033["; out += std::to_string(up); out += 'A';  // up to the image's top line
             out += "\033[";  out += std::to_string(img.col + 1); out += 'G';  // to its column
@@ -1360,7 +1409,8 @@ static inline int run(std::string data, bool dump = false, bool dumpImages = fal
     if (imginfo) {
         for (size_t k = 0; k < em.images.size(); ++k) {
             const Image& I = em.images[k];
-            int cols = (I.Ph + cellW - 1) / cellW, rws = (I.Pv + cellH - 1) / cellH;
+            int cols = I.footCols > 0 ? I.footCols : (I.Ph + cellW - 1) / cellW;
+            int rws = I.heightCells(cellH);
             std::printf("image %zu @%zu,%d %dx%dpx %dx%dcells\n", k + 1, I.row, I.col, I.Ph, I.Pv, cols, rws);
             // ASCII raster only for sixels: Kitty images keep no decoded px raster
             // (they're transmitted verbatim), so I.px is empty — indexing it would crash.
