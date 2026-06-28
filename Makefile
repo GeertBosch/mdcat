@@ -1,5 +1,8 @@
 CXX ?= c++
 CXXFLAGS ?= -std=c++17 -O2 -Wall
+# mdcat's image worker pool (ADR 0003) needs threads; -pthread is appended unconditionally so an
+# overridden CXXFLAGS can't drop it.
+PTHREAD := -pthread
 
 # Where `make install` copies the binaries. Override with `make install PREFIX=~/.local`.
 PREFIX ?= /usr/local
@@ -8,7 +11,7 @@ BINDIR ?= $(PREFIX)/bin
 all: mdcat gmore
 
 mdcat: mdcat.cpp highlight.cpp highlight.h gmore_core.h
-	$(CXX) $(CXXFLAGS) -o $@ mdcat.cpp highlight.cpp
+	$(CXX) $(CXXFLAGS) $(PTHREAD) -o $@ mdcat.cpp highlight.cpp
 
 gmore: gmore.cpp gmore_core.h
 	$(CXX) $(CXXFLAGS) -o $@ gmore.cpp

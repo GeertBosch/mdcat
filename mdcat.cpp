@@ -40,6 +40,12 @@
 #include <atomic>
 #include <cctype>
 #include <cerrno>
+#include <condition_variable>
+#include <functional>
+#include <future>
+#include <mutex>
+#include <queue>
+#include <thread>
 #include <cstdio>
 #include <cstdlib>
 #include <fcntl.h>
@@ -1597,6 +1603,74 @@ bool sixelPixelSize(const std::string& sixel, int& pw, int& ph) {
     return false;
 }
 
+// ---------------------------------------------------------------------------
+// Image worker thread pool (ADR 0003)
+// ---------------------------------------------------------------------------
+//
+// A fixed pool of N = hardware-concurrency workers that run image-conversion tasks (timg / mmdc
+// subprocesses) off the render thread. Each task is a std::function returning void and captures its
+// own inputs/outputs, so the pool stays agnostic about ImageJob shape; callers submit() a packaged
+// task and wait on the returned future. For now (step 2) call sites submit and immediately .get(), so
+// behaviour and output are unchanged — later steps overlap the work.
+class ThreadPool {
+public:
+    explicit ThreadPool(unsigned n) {
+        for (unsigned i = 0; i < n; ++i)
+            workers_.emplace_back([this] { workerLoop(); });
+    }
+    ~ThreadPool() {
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            stop_ = true;
+        }
+        cv_.notify_all();
+        for (auto& t : workers_) t.join();
+    }
+
+    // Enqueue `fn` and return a future for its result. The task runs on some worker thread.
+    template <class F>
+    std::future<typename std::result_of<F()>::type> submit(F&& fn) {
+        using R = typename std::result_of<F()>::type;
+        auto task = std::make_shared<std::packaged_task<R()>>(std::forward<F>(fn));
+        std::future<R> fut = task->get_future();
+        {
+            std::lock_guard<std::mutex> lk(mu_);
+            queue_.emplace([task] { (*task)(); });
+        }
+        cv_.notify_one();
+        return fut;
+    }
+
+private:
+    void workerLoop() {
+        for (;;) {
+            std::function<void()> job;
+            {
+                std::unique_lock<std::mutex> lk(mu_);
+                cv_.wait(lk, [this] { return stop_ || !queue_.empty(); });
+                if (stop_ && queue_.empty()) return;
+                job = std::move(queue_.front());
+                queue_.pop();
+            }
+            job();
+        }
+    }
+
+    std::vector<std::thread> workers_;
+    std::queue<std::function<void()>> queue_;
+    std::mutex mu_;
+    std::condition_variable cv_;
+    bool stop_ = false;
+};
+
+// The process-wide image pool, created on first use. Sized to hardware concurrency (at least one
+// worker). Lazy + leaked-on-exit via a function-local static so terminal probes (graphicsBackend,
+// cellMetrics) have run on the main thread before any worker touches them.
+ThreadPool& imagePool() {
+    static ThreadPool pool(std::max(1u, std::thread::hardware_concurrency()));
+    return pool;
+}
+
 // If `text` (already trimmed) is a single <img> tag for a local PNG, render it and return true,
 // writing the raw sixel bytes to `out` and the image's exact cell footprint to `cellWidth` /
 // `cellHeight` (columns / rows). Otherwise return false and leave the outputs untouched.
@@ -2040,7 +2114,12 @@ void emitParagraph(const std::vector<std::string>& lines, std::ostream& out) {
     // placed via the reserve-and-paint helper; the text fallback is emitted as a normal line.
     std::string image;
     int iw = 0, ih = 0;
-    if (renderImageBlock(trim(joined), terminalWidth(), gFileDir, image, iw, ih)) {
+    std::string imgText = trim(joined);
+    int availW = terminalWidth();
+    std::string fileDir = gFileDir;
+    if (imagePool().submit([&] {
+            return renderImageBlock(imgText, availW, fileDir, image, iw, ih);
+        }).get()) {
         if (image.empty()) return;
         if (isImageBlock(image)) emitImageParagraph(image, ih, out);
         else                     out << image << '\n';   // one-line text fallback
@@ -2202,7 +2281,11 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
             // Render at the full content budget so an explicit height is honoured at the image's
             // natural width; a column too narrow to hold it is handled by a re-render after layout.
             std::string cellText = trim(rows[i][j]);
-            if (renderImageBlock(cellText, budget, gFileDir, block, iw, ih) && isImageBlock(block)) {
+            std::string fileDir = gFileDir;
+            bool isImg = imagePool().submit([&] {
+                return renderImageBlock(cellText, budget, fileDir, block, iw, ih);
+            }).get();
+            if (isImg && isImageBlock(block)) {
                 rows[i][j] = block;
                 isImage[i][j] = true;
                 imgRows[i][j] = std::max(1, ih);
@@ -2284,9 +2367,14 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
             if (!isImage[i][j] || allocWidth[j] >= imgCellW[i][j]) continue;
             std::string block;
             int iw = 0, ih = 0;
-            if (renderImageBlock(imgText[i][j], allocWidth[j], gFileDir, block, iw, ih,
-                                 /*forceWidthBound=*/true) &&
-                isImageBlock(block)) {
+            const std::string& cellText = imgText[i][j];
+            int allocW = allocWidth[j];
+            std::string fileDir = gFileDir;
+            bool isImg = imagePool().submit([&] {
+                return renderImageBlock(cellText, allocW, fileDir, block, iw, ih,
+                                        /*forceWidthBound=*/true);
+            }).get();
+            if (isImg && isImageBlock(block)) {
                 rows[i][j] = block;
                 imgRows[i][j] = std::max(1, ih);
                 imgCellW[i][j] = iw;
@@ -2748,8 +2836,11 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
             for (char& c : mlang) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
             std::string mimg;
             int miw = 0, mih = 0;
-            if (mlang == "mermaid" &&
-                renderMermaidBlock(body, terminalWidth(), mimg, miw, mih) && isImageBlock(mimg)) {
+            int mAvailW = terminalWidth();
+            bool mok = mlang == "mermaid" && imagePool().submit([&] {
+                return renderMermaidBlock(body, mAvailW, mimg, miw, mih);
+            }).get();
+            if (mok && isImageBlock(mimg)) {
                 emitImageParagraph(mimg, mih, out);
             } else {
                 emitCodeBlock(body, lang, out);
@@ -3021,6 +3112,12 @@ int main(int argc, char** argv) {
         }
     }
     for (; a < argc; ++a) files.emplace_back(argv[a]);
+
+    // Warm the terminal-probing memoized statics on the main thread before any image worker
+    // (ADR 0003) can touch them: graphicsBackend() and cellMetrics() do one-time terminal I/O on
+    // first call, which must not happen concurrently on a worker. After this they are pure reads.
+    (void)graphicsBackend();
+    (void)cellMetrics();
 
     // The output destination depends on whether stdout is a terminal:
     //   - tty: render the whole document into an in-memory buffer, then page it through gmore, which
