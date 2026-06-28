@@ -184,40 +184,56 @@ int terminalWidth() {
 // images at all (not a terminal, or a known text-only terminal) — an <img> falls back to its alt text.
 enum class GraphicsBackend { None, Sixel, Kitty };
 
-// Best-effort Kitty graphics capability probe: send a 1x1 RGB query graphic (a=q) over /dev/tty and
-// look for the terminal's APC reply (ESC _ G ... ; OK ESC \). Modeled on queryCellSize16t: raw mode
-// with a short timeout, over the controlling tty so it works even when stdout is piped, and — crucially
-// — echo is disabled BEFORE the query is written so a reply that races back is not echoed onto the
-// screen. Returns true only on a positive ";OK" reply. SILENCE IS INCONCLUSIVE (a terminal that does
-// not support the protocol simply ignores the query, indistinguishable from a slow/lost reply), so the
-// caller treats a false here as "unknown", not "unsupported".
-bool probeKittyGraphics() {
+// Probe sentinel: total silence (no reply at all) is distinct from a definite "supports neither".
+// A terminal that answers Primary DA but advertises neither Kitty nor sixel is Unsupported; a
+// terminal that answers nothing is Unknown, and the caller may fall back to an optimistic default.
+enum class ProbeResult { Unknown, Unsupported, Sixel, Kitty };
+
+// Best-effort graphics capability probe over /dev/tty. Sends, in ONE raw-mode round-trip:
+//   1. a Kitty query graphic (a=q) -> terminal replies ESC _ G ... ; OK ESC \ if it speaks Kitty;
+//   2. Primary DA (CSI c)          -> EVERY real terminal replies ESC [ ? ... c, and a sixel-capable
+//      one includes attribute ";4;". DA is the anchor: it tells us the terminal is THERE and lets us
+//      distinguish "speaks neither" (Apple Terminal: DA reply, no OK, no ;4;) from "no one answered".
+// Modeled on queryCellSize16t: raw mode with a short timeout, over the controlling tty so it works
+// even when stdout is piped, and — crucially — echo is disabled BEFORE the queries are written so any
+// reply (or an APC a non-Kitty terminal echoes through) is consumed in no-echo mode, not painted on
+// screen. We read until BOTH the Kitty ST and the DA 'c' terminator arrive, or the timeout fires.
+ProbeResult probeGraphics() {
     int fd = open("/dev/tty", O_RDWR | O_NOCTTY);
-    if (fd < 0) return false;
+    if (fd < 0) return ProbeResult::Unknown;
     struct termios saved {};
-    if (tcgetattr(fd, &saved) != 0) { close(fd); return false; }
+    if (tcgetattr(fd, &saved) != 0) { close(fd); return ProbeResult::Unknown; }
     struct termios raw = saved;
     raw.c_lflag &= ~static_cast<tcflag_t>(ICANON | ECHO);  // no canon, NO ECHO (set before the query)
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 2;  // 0.2s between bytes before giving up
     tcsetattr(fd, TCSANOW, &raw);
-    // 1x1 RGB pixel, action a=q (validate + reply, do not draw). "AAAA" is one black pixel.
-    static const char query[] = "\033_Gi=1,a=q,f=24,s=1,v=1;AAAA\033\\";
-    bool ok = false;
+    // a=q: validate + reply, do not draw ("AAAA" is one 1x1 black pixel). Then Primary DA (CSI c).
+    static const char query[] = "\033_Gi=1,a=q,f=24,s=1,v=1;AAAA\033\\\033[c";
+    ProbeResult result = ProbeResult::Unknown;
     if (write(fd, query, sizeof query - 1) == static_cast<ssize_t>(sizeof query - 1)) {
         std::string reply;
+        bool sawDA = false;
         char c;
-        while (reply.size() < 64) {
+        while (reply.size() < 128) {
             ssize_t n = read(fd, &c, 1);
-            if (n <= 0) break;
+            if (n <= 0) break;  // timeout: no more bytes coming
             reply += c;
-            if (reply.size() >= 2 && reply[reply.size() - 2] == '\033' && c == '\\') break;  // ST
+            // DA terminates with a literal 'c' after an ESC [ ? ... sequence; once we've seen it the
+            // exchange is complete (Kitty's ;OK, if any, precedes DA since we wrote it first).
+            if (c == 'c' && reply.find("\033[?") != std::string::npos) { sawDA = true; break; }
         }
-        ok = reply.find(";OK") != std::string::npos;
+        if (reply.find(";OK") != std::string::npos)
+            result = ProbeResult::Kitty;                       // Kitty answered -> definite
+        else if (sawDA && reply.find(";4;") != std::string::npos)
+            result = ProbeResult::Sixel;                       // DA advertises sixel (attribute 4)
+        else if (sawDA)
+            result = ProbeResult::Unsupported;                 // answered, speaks neither (Apple Terminal)
+        // else: total silence -> Unknown (slow/lost reply, or env-stripped Kitty-capable remote)
     }
     tcsetattr(fd, TCSANOW, &saved);
     close(fd);
-    return ok;
+    return result;
 }
 
 // Resolve the graphics backend once, cached for the run. Resolution order (most explicit first):
@@ -228,10 +244,12 @@ bool probeKittyGraphics() {
 //   4. Not a terminal -> None (nothing to draw to).
 //   5. Env allowlist (no probe): a Kitty-capable terminal we recognize -> Kitty. KITTY_WINDOW_ID set,
 //      or TERM_PROGRAM in {ghostty, iTerm.app, vscode}. Apple_Terminal is known sixel-incapable -> None.
-//   6. Best-effort Kitty probe -> Kitty on a positive reply.
-//   7. Optimistic default: Kitty. A user running mdcat for graphics (esp. over SSH, where env often
-//      doesn't survive — e.g. VSCode Remote-SSH presents as a bare xterm) almost certainly has a
-//      Kitty-capable terminal, and Kitty degrades more gracefully than a wrong sixel guess.
+//   6. Probe (Kitty a=q + Primary DA in one round-trip): Kitty reply -> Kitty; DA sixel attr -> Sixel;
+//      DA reply but neither -> None (the terminal answered and speaks neither, e.g. Apple Terminal over
+//      SSH where TERM_PROGRAM is stripped — this is what stops mdcat leaking a Kitty APC to it).
+//   7. Optimistic default (TOTAL SILENCE only): Kitty. A user who ran mdcat for graphics and got no
+//      probe reply at all (esp. over SSH, where env often doesn't survive — VSCode Remote-SSH presents
+//      as a bare xterm) most likely has a Kitty-capable terminal that just didn't answer in time.
 GraphicsBackend graphicsBackend() {
     static const GraphicsBackend backend = [] {
         if (gForcedBackend >= 0) return static_cast<GraphicsBackend>(gForcedBackend);  // --img <protocol>
@@ -248,8 +266,13 @@ GraphicsBackend graphicsBackend() {
         if (tp == "Apple_Terminal") return GraphicsBackend::None;  // no sixel, no Kitty
         if (std::getenv("KITTY_WINDOW_ID") || tp == "ghostty" || tp == "iTerm.app" || tp == "vscode")
             return GraphicsBackend::Kitty;
-        if (probeKittyGraphics()) return GraphicsBackend::Kitty;
-        return GraphicsBackend::Kitty;  // optimistic default
+        switch (probeGraphics()) {
+            case ProbeResult::Kitty:       return GraphicsBackend::Kitty;
+            case ProbeResult::Sixel:       return GraphicsBackend::Sixel;
+            case ProbeResult::Unsupported: return GraphicsBackend::None;   // answered, speaks neither
+            case ProbeResult::Unknown:     return GraphicsBackend::Kitty;  // silence -> optimistic
+        }
+        return GraphicsBackend::Kitty;  // unreachable; satisfies non-void return
     }();
     if (std::getenv("MDCAT_DEBUG_CELL"))
         std::fprintf(stderr, "mdcat: graphics backend: %s\n",
