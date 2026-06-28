@@ -2072,18 +2072,23 @@ bool renderMermaidBlock(const std::vector<std::string>& lines, int availWidth, s
     int availPx = availWidth > 0 ? availWidth * cellMetrics().realCellW() : 0;
     std::string widthOpt = availPx > 0 ? " -w " + std::to_string(availPx) : std::string();
 
+    // Pass the terminal background to mmdc so the diagram background matches the terminal theme.
+    // Omitted when the terminal didn't answer OSC 11 (mmdc keeps its default white background).
+    std::string bg = queryBackgroundColor();
+    std::string bgOpt = bg.empty() ? std::string() : " -b '" + bg + "'";
+
     // First render at scale 1 to learn the diagram's natural pixel width. mmdc's -w is only a maximum
     // page width: a diagram whose layout is narrower than -w renders at its natural size, which on a
     // HiDPI terminal is a tiny sixel. So if the natural width is well under the available width, pick
     // a -s (Puppeteer scale) that enlarges it to roughly fill the column budget and re-render. Scale
     // is capped at 2 so a small diagram is not blown up to fill most of the screen.
-    if (!runMmdc(widthOpt)) { cleanup(); return false; }
+    if (!runMmdc(widthOpt + bgOpt)) { cleanup(); return false; }
     int naturalW = pngWidth(pngPath);
     if (availPx > 0 && naturalW > 0) {
         int scale = availPx / naturalW;
         if (scale > 2) scale = 2;
         if (scale >= 2) {
-            if (!runMmdc(widthOpt + " -s " + std::to_string(scale))) { cleanup(); return false; }
+            if (!runMmdc(widthOpt + bgOpt + " -s " + std::to_string(scale))) { cleanup(); return false; }
         }
     }
 
