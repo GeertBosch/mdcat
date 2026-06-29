@@ -2391,8 +2391,8 @@ public:
 
     // Enqueue `fn` and return a future for its result. The task runs on some worker thread.
     template <class F>
-    std::future<typename std::result_of<F()>::type> submit(F&& fn) {
-        using R = typename std::result_of<F()>::type;
+    std::future<typename std::invoke_result<F>::type> submit(F&& fn) {
+        using R = typename std::invoke_result<F>::type;
         auto task = std::make_shared<std::packaged_task<R()>>(std::forward<F>(fn));
         std::future<R> fut = task->get_future();
         {
