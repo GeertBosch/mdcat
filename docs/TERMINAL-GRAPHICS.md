@@ -273,7 +273,39 @@ sixel|none` (or `--img <proto>`) is the escape hatch; `MDCAT_CELL_W/H` and
 
 ---
 
-## 7. Hard-won gotchas (the ones that cost a round-trip)
+## 7. Remote images: fetch it ourselves, don't let timg do it
+
+The CI badge at the top of the README is a remote `https://…/badge.svg`. Two
+ground-truth facts shaped how mdcat renders it.
+
+**timg's URL support is a trap on the image path.** timg links `libav`, which
+*can* open `http(s)` URLs — but only through the **video** subsystem (`-V`). The
+**image** path (GraphicsMagick / librsvg, which is what a static `.svg`/`.png`
+goes through) opens the argument as a **local file**: handed a URL it reports
+`No such file or directory` and emits nothing. Forcing `-V` on a static SVG
+didn't fetch it either on the build we measured (timg 1.6.3+, ffmpeg libav 62).
+So "let timg fetch the URL" is not reliable for badges. mdcat fetches the bytes
+itself with `curl` into a temp file and hands timg an ordinary **local** path —
+the exact pipeline used for `<img src="local.png">`. (`tools/probe-remote-image.sh`
+records the timg-URL failure and the curl→timg success.)
+
+**Fetching is a trust boundary, so it is gated.** Viewing a Markdown file must
+not pull from arbitrary servers. mdcat fetches only over **https** and only when
+the URL's host is on a trust list built from (1) the git remotes of the rendered
+file's repository — both `git@host:…` and `https://host/…` forms are parsed for
+their host — and (2) `$XDG_CONFIG_HOME/mdcat/trusted-hosts` (bare host = exact;
+`.host`/`*.host` = subdomains too). No hosts are trusted by default. The check is
+on the **initial** URL's host only; `curl -L` then follows redirects to other
+hosts (GitHub's `badge.svg` 302s to a `*.githubusercontent`/pipelines host),
+which is the accepted cost of making badges work. `curl` runs `--proto '=https'`,
+with a connect+total timeout and a `--max-filesize` cap so a render can't hang or
+pull an unbounded body. Anything refused falls back to alt text, identical to a
+non-graphics terminal. The temp file is unlinked on every return path (an RAII
+guard in `renderImageBlock`).
+
+---
+
+## 8. Hard-won gotchas (the ones that cost a round-trip)
 
 These are the traps that *looked* like deep terminal bugs and were not. Listed so
 we don't re-walk them.
@@ -318,7 +350,7 @@ we don't re-walk them.
 
 ---
 
-## 8. The probes
+## 9. The probes
 
 The probe scripts in [`tools/`](../tools) are durable, runnable proof of every
 claim above. They are throwaway-grade (ImageMagick allowed, shell heuristics) and
@@ -339,6 +371,7 @@ exist to be re-run on a new terminal before trusting it. Notable ones:
 | `probe-kitty-cell-footprint.sh` | overlap without `c=`/`r=` vs the fix (§5) |
 | `probe-kitty-multichunk-*.sh` | multi-chunk transmit + footprint + placement |
 | `probe-remote-cellinfo.sh` | CSI queries answer over SSH (§6) |
+| `probe-remote-image.sh` | timg can't fetch a URL on the image path; curl→timg works (§7) |
 
 `tools/probe-common.sh` holds the shared raw-mode `term_query` helper (with the
 dash workaround above).
