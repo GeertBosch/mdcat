@@ -23,18 +23,20 @@
 // shelling out to timg(1) on terminals that support sixel graphics; elsewhere (e.g. Apple's
 // Terminal.app) it falls back to the tag's alt text or filename. See renderImageBlock. Supported
 // formats: PNG, JPG, GIF, SVG. As a second exception, an inline <br> tag (in any of the <br>,
-// <br/>, <br /> spellings) is rendered as a hard line break wherever it appears — see scanHardBreak.
-// All other inline HTML is passed through literally. LaTeX math between $...$ (inline) or $$...$$
-// (block) is transliterated to Unicode on a best-effort basis — Greek letters, common operator and
-// relation symbols, super/subscripts, and \mathrm/\mathbf wrappers; see renderMath and scanMath.
-// A ```mermaid fenced code block is rendered as a diagram via the mermaid CLI (mmdc) when it and a
-// graphics terminal are available; otherwise it falls back to ordinary code. See renderMermaidBlock.
+// <br/>, <br /> spellings) is rendered as a hard line break wherever it appears — see
+// scanHardBreak. All other inline HTML is passed through literally. LaTeX math between $...$
+// (inline) or $$...$$ (block) is transliterated to Unicode on a best-effort basis — Greek letters,
+// common operator and relation symbols, super/subscripts, and \mathrm/\mathbf wrappers; see
+// renderMath and scanMath. A ```mermaid fenced code block is rendered as a diagram via the mermaid
+// CLI (mmdc) when it and a graphics terminal are available; otherwise it falls back to ordinary
+// code. See renderMermaidBlock.
 //
 // Build:  c++ -std=c++17 -O2 -o mdcat mdcat.cpp
 // Usage:  mdcat [--width N] [--img[=kitty|sixel|none]] [--] [file ...]   (reads standard input when
 //         given no file arguments)
 //         --width N forces the render width, overriding $COLUMNS and the terminal size.
-//         --img forces image output even when piped; an optional protocol pins the graphics backend.
+//         --img forces image output even when piped; an optional protocol pins the graphics
+//         backend.
 
 #include <fcntl.h>
 #include <sys/ioctl.h>
@@ -63,7 +65,7 @@
 #include <thread>
 #include <vector>
 
-#include "gmore.h"
+#include "gmore_run.h"
 #include "highlight.h"
 
 namespace {
@@ -81,10 +83,11 @@ const std::string kItalicOff = "\033[23m";
 // Code-block colours depend on the terminal theme (see initTheme, called from main once the OSC 11
 // background is known). Light theme: dark-gray text on light-gray. Dark theme: light-gray text on
 // dark-gray. Both are set before any rendering, so reads during rendering see the chosen palette.
-std::string kCodeOn = "\033[48;5;254;38;5;236m";  // light-gray bg, dark-gray fg (light-theme default)
+std::string kCodeOn =
+    "\033[48;5;254;38;5;236m";  // light-gray bg, dark-gray fg (light-theme default)
 const std::string kCodeOff = "\033[39;49m";
 const std::string kReset = "\033[0m";
-std::string kLightGray = "\033[38;5;250m";        // table row separators; lightened on a dark theme
+std::string kLightGray = "\033[38;5;250m";  // table row separators; lightened on a dark theme
 const std::string kQuoteBar = "\033[38;5;244m▎\033[0m ";  // the left rule drawn before quoted lines
 
 // An explicit width from the --width/-w command-line flag, or <= 0 if none was given. Set by main()
@@ -93,14 +96,15 @@ int gWidthOverride = 0;
 
 // Force inline image output even when stdout is not a terminal (--img). Lets mdcat be used as an
 // image source when piped, e.g. `mdcat --img doc.md | gmore` for visual pager testing. Set by
-// main() before rendering, so before terminalSupportsGraphics() caches its result. Cell-size detection
-// still works over /dev/tty, and the terminal width is read from $COLUMNS / stderr's TIOCGWINSZ.
+// main() before rendering, so before terminalSupportsGraphics() caches its result. Cell-size
+// detection still works over /dev/tty, and the terminal width is read from $COLUMNS / stderr's
+// TIOCGWINSZ.
 bool gForceGraphics = false;
 
 // Backend explicitly chosen on the command line via `--img <kitty|sixel|none>`. When set, this is
 // authoritative (same force as MDCAT_GRAPHICS), so `mdcat --img sixel doc.md | gmore` pins the
-// protocol regardless of terminal or env. Unset (-1) means a bare `--img` with no protocol argument:
-// the historical "force output, default to Kitty when piped" behaviour. Set by main().
+// protocol regardless of terminal or env. Unset (-1) means a bare `--img` with no protocol
+// argument: the historical "force output, default to Kitty when piped" behaviour. Set by main().
 int gForcedBackend = -1;  // -1 = unset; else a GraphicsBackend value
 
 // Directory of the file currently being rendered, used to resolve relative image paths.
@@ -108,8 +112,8 @@ int gForcedBackend = -1;  // -1 = unset; else a GraphicsBackend value
 std::string gFileDir;
 
 // Resolve an OSC 8 link target. Absolute URLs (those with a scheme like http://, or a
-// fragment/mailto/etc.) are emitted unchanged so they stay portable; a relative path is rewritten to
-// an absolute file:// URL anchored on the rendered file's directory, so terminals can open it on
+// fragment/mailto/etc.) are emitted unchanged so they stay portable; a relative path is rewritten
+// to an absolute file:// URL anchored on the rendered file's directory, so terminals can open it on
 // click. A bare in-document fragment (#anchor) is left alone — there's nothing local to point at.
 std::string resolveLinkTarget(const std::string& url) {
     if (url.empty() || url[0] == '#') return url;
@@ -147,26 +151,29 @@ int gIndent = 0;
 int gListDepth = 0;
 
 // Nesting depth across *all* lists (bullet and ordered). Used so only the outermost list block gets
-// the two-space left lead that sets a list off from surrounding text; nested lists already step in via
-// their parent item's marker. Raised around any list's items and restored after. See emitList.
+// the two-space left lead that sets a list off from surrounding text; nested lists already step in
+// via their parent item's marker. Raised around any list's items and restored after. See emitList.
 int gListNesting = 0;
 
 // Set just before rendering the content of a *tight* list item. A tight list draws no blank line
-// between its items, and likewise its item bodies should not put a blank line between the item's lead
-// paragraph and an immediately-following nested list (GFM renders a tight item's paragraph without
-// <p> spacing). render() reads this once at entry to suppress its own top-level block separators,
-// then clears it so blocks nested deeper (and recursive renders) separate normally. See emitList.
+// between its items, and likewise its item bodies should not put a blank line between the item's
+// lead paragraph and an immediately-following nested list (GFM renders a tight item's paragraph
+// without <p> spacing). render() reads this once at entry to suppress its own top-level block
+// separators, then clears it so blocks nested deeper (and recursive renders) separate normally. See
+// emitList.
 bool gTightItem = false;
 
-// The full terminal width, before any container indentation is taken out. Determined once and cached
-// (see the comment in terminalWidth). Callers want terminalWidth(), which subtracts the indent.
+// The full terminal width, before any container indentation is taken out. Determined once and
+// cached (see the comment in terminalWidth). Callers want terminalWidth(), which subtracts the
+// indent.
 int fullTerminalWidth() {
     // Determined once and cached for the rest of the run: the width is fixed for our purposes and
     // there is no reason to repeat the syscall for every block and every reflowed line.
     //
     // Precedence, most explicit first:
     //   1. --width / -w on the command line (gWidthOverride): an unconditional override.
-    //   2. $COLUMNS, when set to a positive value: lets the caller force a width even when a terminal
+    //   2. $COLUMNS, when set to a positive value: lets the caller force a width even when a
+    //   terminal
     //      is attached (e.g. `COLUMNS=44 mdcat ... | less`). Note bash does not export COLUMNS by
     //      default, so it must be exported or passed inline to reach us.
     //   3. The kernel window size of whichever standard stream is a terminal.
@@ -179,7 +186,8 @@ int fullTerminalWidth() {
         }
         for (int fd : {STDOUT_FILENO, STDERR_FILENO, STDIN_FILENO}) {
             struct winsize ws;
-            if (ioctl(fd, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0) return static_cast<int>(ws.ws_col);
+            if (ioctl(fd, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0)
+                return static_cast<int>(ws.ws_col);
         }
         return 100;  // sensible default when not attached to a terminal
     }();
@@ -194,8 +202,9 @@ int terminalWidth() {
 
 // The graphics protocol used to paint inline images. Kitty carries pixel data plus an explicit cell
 // footprint (so the terminal does the scaling and a remote host needn't know the local cell size);
-// Sixel is pixel-absolute and is the local fallback for terminals that lack Kitty. None means draw no
-// images at all (not a terminal, or a known text-only terminal) — an <img> falls back to its alt text.
+// Sixel is pixel-absolute and is the local fallback for terminals that lack Kitty. None means draw
+// no images at all (not a terminal, or a known text-only terminal) — an <img> falls back to its alt
+// text.
 enum class GraphicsBackend { None, Sixel, Kitty };
 
 // Probe sentinel: total silence (no reply at all) is distinct from a definite "supports neither".
@@ -205,20 +214,27 @@ enum class ProbeResult { Unknown, Unsupported, Sixel, Kitty };
 
 // Best-effort graphics capability probe over /dev/tty. Sends, in ONE raw-mode round-trip:
 //   1. a Kitty query graphic (a=q) -> terminal replies ESC _ G ... ; OK ESC \ if it speaks Kitty;
-//   2. Primary DA (CSI c)          -> EVERY real terminal replies ESC [ ? ... c, and a sixel-capable
-//      one includes attribute ";4;". DA is the anchor: it tells us the terminal is THERE and lets us
-//      distinguish "speaks neither" (Apple Terminal: DA reply, no OK, no ;4;) from "no one answered".
+//   2. Primary DA (CSI c)          -> EVERY real terminal replies ESC [ ? ... c, and a
+//   sixel-capable
+//      one includes attribute ";4;". DA is the anchor: it tells us the terminal is THERE and lets
+//      us distinguish "speaks neither" (Apple Terminal: DA reply, no OK, no ;4;) from "no one
+//      answered".
 // Modeled on queryCellSize16t: raw mode with a short timeout, over the controlling tty so it works
-// even when stdout is piped, and — crucially — echo is disabled BEFORE the queries are written so any
-// reply (or an APC a non-Kitty terminal echoes through) is consumed in no-echo mode, not painted on
-// screen. We read until BOTH the Kitty ST and the DA 'c' terminator arrive, or the timeout fires.
+// even when stdout is piped, and — crucially — echo is disabled BEFORE the queries are written so
+// any reply (or an APC a non-Kitty terminal echoes through) is consumed in no-echo mode, not
+// painted on screen. We read until BOTH the Kitty ST and the DA 'c' terminator arrive, or the
+// timeout fires.
 ProbeResult probeGraphics() {
     int fd = open("/dev/tty", O_RDWR | O_NOCTTY);
     if (fd < 0) return ProbeResult::Unknown;
-    struct termios saved {};
-    if (tcgetattr(fd, &saved) != 0) { close(fd); return ProbeResult::Unknown; }
+    struct termios saved{};
+    if (tcgetattr(fd, &saved) != 0) {
+        close(fd);
+        return ProbeResult::Unknown;
+    }
     struct termios raw = saved;
-    raw.c_lflag &= ~static_cast<tcflag_t>(ICANON | ECHO);  // no canon, NO ECHO (set before the query)
+    raw.c_lflag &=
+        ~static_cast<tcflag_t>(ICANON | ECHO);  // no canon, NO ECHO (set before the query)
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 2;  // 0.2s between bytes before giving up
     tcsetattr(fd, TCSANOW, &raw);
@@ -233,16 +249,19 @@ ProbeResult probeGraphics() {
             ssize_t n = read(fd, &c, 1);
             if (n <= 0) break;  // timeout: no more bytes coming
             reply += c;
-            // DA terminates with a literal 'c' after an ESC [ ? ... sequence; once we've seen it the
-            // exchange is complete (Kitty's ;OK, if any, precedes DA since we wrote it first).
-            if (c == 'c' && reply.find("\033[?") != std::string::npos) { sawDA = true; break; }
+            // DA terminates with a literal 'c' after an ESC [ ? ... sequence; once we've seen it
+            // the exchange is complete (Kitty's ;OK, if any, precedes DA since we wrote it first).
+            if (c == 'c' && reply.find("\033[?") != std::string::npos) {
+                sawDA = true;
+                break;
+            }
         }
         if (reply.find(";OK") != std::string::npos)
-            result = ProbeResult::Kitty;                       // Kitty answered -> definite
+            result = ProbeResult::Kitty;  // Kitty answered -> definite
         else if (sawDA && reply.find(";4;") != std::string::npos)
-            result = ProbeResult::Sixel;                       // DA advertises sixel (attribute 4)
+            result = ProbeResult::Sixel;  // DA advertises sixel (attribute 4)
         else if (sawDA)
-            result = ProbeResult::Unsupported;                 // answered, speaks neither (Apple Terminal)
+            result = ProbeResult::Unsupported;  // answered, speaks neither (Apple Terminal)
         // else: total silence -> Unknown (slow/lost reply, or env-stripped Kitty-capable remote)
     }
     tcsetattr(fd, TCSANOW, &saved);
@@ -256,48 +275,60 @@ ProbeResult probeGraphics() {
 //   3. bare --img (gForceGraphics): force image output even when piped, defaulting to Kitty; kept
 //      for the `mdcat --img doc.md | gmore` pipeline.
 //   4. Not a terminal -> None (nothing to draw to).
-//   5. Env allowlist (no probe): a Kitty-capable terminal we recognize -> Kitty. KITTY_WINDOW_ID set,
-//      or TERM_PROGRAM in {ghostty, iTerm.app, vscode}. Apple_Terminal is known sixel-incapable -> None.
-//   6. Probe (Kitty a=q + Primary DA in one round-trip): Kitty reply -> Kitty; DA sixel attr -> Sixel;
-//      DA reply but neither -> None (the terminal answered and speaks neither, e.g. Apple Terminal over
-//      SSH where TERM_PROGRAM is stripped — this is what stops mdcat leaking a Kitty APC to it).
+//   5. Env allowlist (no probe): a Kitty-capable terminal we recognize -> Kitty. KITTY_WINDOW_ID
+//   set,
+//      or TERM_PROGRAM in {ghostty, iTerm.app, vscode}. Apple_Terminal is known sixel-incapable ->
+//      None.
+//   6. Probe (Kitty a=q + Primary DA in one round-trip): Kitty reply -> Kitty; DA sixel attr ->
+//   Sixel;
+//      DA reply but neither -> None (the terminal answered and speaks neither, e.g. Apple Terminal
+//      over SSH where TERM_PROGRAM is stripped — this is what stops mdcat leaking a Kitty APC to
+//      it).
 //   7. Optimistic default (TOTAL SILENCE only): Kitty. A user who ran mdcat for graphics and got no
-//      probe reply at all (esp. over SSH, where env often doesn't survive — VSCode Remote-SSH presents
-//      as a bare xterm) most likely has a Kitty-capable terminal that just didn't answer in time.
+//      probe reply at all (esp. over SSH, where env often doesn't survive — VSCode Remote-SSH
+//      presents as a bare xterm) most likely has a Kitty-capable terminal that just didn't answer
+//      in time.
 GraphicsBackend graphicsBackend() {
     static const GraphicsBackend backend = [] {
-        if (gForcedBackend >= 0) return static_cast<GraphicsBackend>(gForcedBackend);  // --img <protocol>
+        if (gForcedBackend >= 0)
+            return static_cast<GraphicsBackend>(gForcedBackend);  // --img <protocol>
         if (const char* g = std::getenv("MDCAT_GRAPHICS")) {
             std::string s(g);
             if (s == "kitty") return GraphicsBackend::Kitty;
             if (s == "sixel") return GraphicsBackend::Sixel;
             if (s == "none") return GraphicsBackend::None;
         }
-        if (gForceGraphics) return GraphicsBackend::Kitty;  // bare --img: default to Kitty when piped
+        if (gForceGraphics)
+            return GraphicsBackend::Kitty;  // bare --img: default to Kitty when piped
         if (!isatty(STDOUT_FILENO)) return GraphicsBackend::None;
         const char* prog = std::getenv("TERM_PROGRAM");
         std::string tp = prog ? prog : "";
         if (tp == "Apple_Terminal") return GraphicsBackend::None;  // no sixel, no Kitty
-        if (std::getenv("KITTY_WINDOW_ID") || tp == "ghostty" || tp == "iTerm.app" || tp == "vscode")
+        if (std::getenv("KITTY_WINDOW_ID") || tp == "ghostty" || tp == "iTerm.app" ||
+            tp == "vscode")
             return GraphicsBackend::Kitty;
         switch (probeGraphics()) {
-            case ProbeResult::Kitty:       return GraphicsBackend::Kitty;
-            case ProbeResult::Sixel:       return GraphicsBackend::Sixel;
-            case ProbeResult::Unsupported: return GraphicsBackend::None;   // answered, speaks neither
-            case ProbeResult::Unknown:     return GraphicsBackend::Kitty;  // silence -> optimistic
+        case ProbeResult::Kitty: return GraphicsBackend::Kitty;
+        case ProbeResult::Sixel: return GraphicsBackend::Sixel;
+        case ProbeResult::Unsupported: return GraphicsBackend::None;  // answered, speaks neither
+        case ProbeResult::Unknown: return GraphicsBackend::Kitty;     // silence -> optimistic
         }
         return GraphicsBackend::Kitty;  // unreachable; satisfies non-void return
     }();
     if (std::getenv("MDCAT_DEBUG_CELL"))
-        std::fprintf(stderr, "mdcat: graphics backend: %s\n",
-                     backend == GraphicsBackend::Kitty ? "kitty"
-                     : backend == GraphicsBackend::Sixel ? "sixel" : "none");
+        std::fprintf(stderr,
+                     "mdcat: graphics backend: %s\n",
+                     backend == GraphicsBackend::Kitty       ? "kitty"
+                         : backend == GraphicsBackend::Sixel ? "sixel"
+                                                             : "none");
     return backend;
 }
 
 // Whether any inline-image backend is available (Kitty or Sixel). When false an <img> falls back to
 // its alt text or filename. Kept as a thin predicate so existing call sites read clearly.
-bool terminalSupportsGraphics() { return graphicsBackend() != GraphicsBackend::None; }
+bool terminalSupportsGraphics() {
+    return graphicsBackend() != GraphicsBackend::None;
+}
 
 // Whether the mermaid CLI (mmdc) is on $PATH, so a ```mermaid code block can be rendered as a
 // diagram. Probed once via `command -v` and cached. When absent, mermaid blocks fall back to being
@@ -314,10 +345,10 @@ bool mmdcAvailable() {
 // Metrics for converting an image's pixel footprint (read from the sixel it produces) into a number
 // of text rows/columns to reserve. A single cell is often a fractional number of pixels (e.g. ~5.83
 // px wide), so rounding it to an integer before dividing mis-counts: rounding up under-counts the
-// columns the terminal actually uses (image overflows its reserved space), rounding down over-counts
-// (leaves a gap). We therefore keep the text-area pixel size and cell count as a ratio and do the
-// pixel->cell conversion exactly, matching how the terminal lays a sixel out. `cellW`/`cellH` are an
-// integer fallback used only when the area ratio is unavailable.
+// columns the terminal actually uses (image overflows its reserved space), rounding down
+// over-counts (leaves a gap). We therefore keep the text-area pixel size and cell count as a ratio
+// and do the pixel->cell conversion exactly, matching how the terminal lays a sixel out.
+// `cellW`/`cellH` are an integer fallback used only when the area ratio is unavailable.
 struct CellMetrics {
     int areaW = 0, areaH = 0;   // text-area size in pixels (0 if unknown)
     int cols = 0, rows = 0;     // text-area size in cells (0 if unknown)
@@ -325,8 +356,8 @@ struct CellMetrics {
 
     // ceil-divide pixels to the cell count the terminal will use, via the precise area ratio when
     // known (px * cells / areaPx, rounded up) and the integer cell size otherwise. Used for the
-    // FOOTPRINT: turning a painted sixel's pixel size into the columns/rows it actually occupies, so
-    // the layout matches reality (on a HiDPI terminal the real cell is large, e.g. 14x34).
+    // FOOTPRINT: turning a painted sixel's pixel size into the columns/rows it actually occupies,
+    // so the layout matches reality (on a HiDPI terminal the real cell is large, e.g. 14x34).
     int pxToCols(int px) const {
         if (cols > 0 && areaW > 0) return std::max(1, (px * cols + areaW - 1) / areaW);
         return std::max(1, (px + cellW - 1) / cellW);
@@ -342,25 +373,28 @@ struct CellMetrics {
 
     // A FIXED "nominal" cell used only to turn a REQUESTED (or intrinsic) pixel size into the -g
     // geometry, the same on every terminal. Using a fixed ratio (rather than the real cell) makes a
-    // given width/height render at the same size everywhere: on a HiDPI terminal where one cell spans
-    // many device pixels, the real cell would map a requested height to too few rows (a tiny image),
-    // and on a low-DPI terminal it would render larger than on HiDPI — both undesirable. 8x20 keeps
-    // images compact and sharp. The FOOTPRINT still uses the real cell, so columns line up exactly.
+    // given width/height render at the same size everywhere: on a HiDPI terminal where one cell
+    // spans many device pixels, the real cell would map a requested height to too few rows (a tiny
+    // image), and on a low-DPI terminal it would render larger than on HiDPI — both undesirable.
+    // 8x20 keeps images compact and sharp. The FOOTPRINT still uses the real cell, so columns line
+    // up exactly.
     static constexpr int kNominalW = 8;
     static constexpr int kNominalH = 20;
     int pxToColsNominal(int px) const { return std::max(1, (px + kNominalW - 1) / kNominalW); }
     int pxToRowsNominal(int px) const { return std::max(1, (px + kNominalH - 1) / kNominalH); }
 
-    // The cell size timg assumes for `-g<cols>x<rows>` when it has NO terminal to query (its stdin is
-    // detached from the tty, as mdcat runs it — see runTimg). Measured from timg 1.6.3+: a -g cell is
-    // exactly 9 px wide and ~18 px tall. Because sixel is pixel-absolute, an image timg paints at
-    // gCols*9 px then occupies (gCols*9 / realCellW) of the TERMINAL's cells — wider than gCols whenever
-    // the real cell is narrower than 9 px (e.g. VSCode's ~6 px), so the sixel overflows its reserved
-    // columns. To make timg paint a given number of REAL cells we scale the -g count by realCell/timgCell.
+    // The cell size timg assumes for `-g<cols>x<rows>` when it has NO terminal to query (its stdin
+    // is detached from the tty, as mdcat runs it — see runTimg). Measured from timg 1.6.3+: a -g
+    // cell is exactly 9 px wide and ~18 px tall. Because sixel is pixel-absolute, an image timg
+    // paints at gCols*9 px then occupies (gCols*9 / realCellW) of the TERMINAL's cells — wider than
+    // gCols whenever the real cell is narrower than 9 px (e.g. VSCode's ~6 px), so the sixel
+    // overflows its reserved columns. To make timg paint a given number of REAL cells we scale the
+    // -g count by realCell/timgCell.
     static constexpr int kTimgCellW = 9;
     static constexpr int kTimgCellH = 18;
-    // Convert a desired width in real terminal cells into the -g column count that makes timg paint that
-    // many real cells' worth of pixels (cols * realCellW), rounded to nearest. Identity when realCellW==9.
+    // Convert a desired width in real terminal cells into the -g column count that makes timg paint
+    // that many real cells' worth of pixels (cols * realCellW), rounded to nearest. Identity when
+    // realCellW==9.
     int colsToTimgCols(int cols) const {
         return std::max(1, (cols * realCellW() + kTimgCellW / 2) / kTimgCellW);
     }
@@ -369,20 +403,27 @@ struct CellMetrics {
     }
 };
 
-// Send a CSI window-op report request ("ESC [ <op> t") over /dev/tty and return the terminal's reply.
-// Used for the cell-size / text-area queries (16 t, 14 t, 18 t), which all reply "ESC [ <p1> ; A ; B t".
-// Done over /dev/tty (not stdout) so it works even when our output is piped to a pager, and in raw mode
-// with echo off and a short timeout so the reply is not echoed, line-buffered, or able to hang us.
-// CRITICALLY these queries reach the LOCAL terminal even over SSH (the bytes traverse the pty), which is
-// what lets mdcat learn the local cell size remotely, where TIOCGWINSZ pixel fields are zero. Returns
-// {0,0} if there is no controlling terminal or it doesn't answer. `op` is e.g. "16" / "14" / "18"; the
-// two parsed numbers (in reply order: height-ish then width-ish) are returned as {a, b}.
-struct TwoInts { int a; int b; };
+// Send a CSI window-op report request ("ESC [ <op> t") over /dev/tty and return the terminal's
+// reply. Used for the cell-size / text-area queries (16 t, 14 t, 18 t), which all reply "ESC [ <p1>
+// ; A ; B t". Done over /dev/tty (not stdout) so it works even when our output is piped to a pager,
+// and in raw mode with echo off and a short timeout so the reply is not echoed, line-buffered, or
+// able to hang us. CRITICALLY these queries reach the LOCAL terminal even over SSH (the bytes
+// traverse the pty), which is what lets mdcat learn the local cell size remotely, where TIOCGWINSZ
+// pixel fields are zero. Returns {0,0} if there is no controlling terminal or it doesn't answer.
+// `op` is e.g. "16" / "14" / "18"; the two parsed numbers (in reply order: height-ish then
+// width-ish) are returned as {a, b}.
+struct TwoInts {
+    int a;
+    int b;
+};
 TwoInts queryWindowOp(const char* op) {
     int fd = open("/dev/tty", O_RDWR | O_NOCTTY);
     if (fd < 0) return {0, 0};
-    struct termios saved {};
-    if (tcgetattr(fd, &saved) != 0) { close(fd); return {0, 0}; }
+    struct termios saved{};
+    if (tcgetattr(fd, &saved) != 0) {
+        close(fd);
+        return {0, 0};
+    }
     struct termios raw = saved;
     raw.c_lflag &= ~static_cast<tcflag_t>(ICANON | ECHO);
     raw.c_cc[VMIN] = 0;
@@ -411,22 +452,25 @@ TwoInts queryWindowOp(const char* op) {
 }
 
 // Query the terminal's background colour with OSC 11 ("ESC ] 11 ; ? BEL") and return it as a timg
-// `-b` argument ("#rrggbb"), or empty if the terminal doesn't answer. timg pads a sixel's height up to
-// the next 6px band and fills the padding (and any alpha) with its -b colour; the default is BLACK,
-// which paints a visible dark line under a light-background image (e.g. a mermaid diagram). Filling
-// with the real terminal background instead makes the pad invisible. Cached once per run.
+// `-b` argument ("#rrggbb"), or empty if the terminal doesn't answer. timg pads a sixel's height up
+// to the next 6px band and fills the padding (and any alpha) with its -b colour; the default is
+// BLACK, which paints a visible dark line under a light-background image (e.g. a mermaid diagram).
+// Filling with the real terminal background instead makes the pad invisible. Cached once per run.
 //
-// The reply is "ESC ] 11 ; rgb:RRRR/GGGG/BBBB <ST|BEL>" with 1-4 hex digits per channel; we take the
-// high byte of each. Done over /dev/tty in raw mode with a short timeout, like queryWindowOp, so it
-// reaches the local terminal even when stdout is piped and never hangs or echoes.
+// The reply is "ESC ] 11 ; rgb:RRRR/GGGG/BBBB <ST|BEL>" with 1-4 hex digits per channel; we take
+// the high byte of each. Done over /dev/tty in raw mode with a short timeout, like queryWindowOp,
+// so it reaches the local terminal even when stdout is piped and never hangs or echoes.
 std::string queryBackgroundColor() {
     static const std::string color = []() -> std::string {
         if (const char* env = std::getenv("MDCAT_BG"))  // explicit override / testability
             return env[0] ? std::string(env) : std::string();
         int fd = open("/dev/tty", O_RDWR | O_NOCTTY);
         if (fd < 0) return std::string();
-        struct termios saved {};
-        if (tcgetattr(fd, &saved) != 0) { close(fd); return std::string(); }
+        struct termios saved{};
+        if (tcgetattr(fd, &saved) != 0) {
+            close(fd);
+            return std::string();
+        }
         struct termios raw = saved;
         raw.c_lflag &= ~static_cast<tcflag_t>(ICANON | ECHO);
         raw.c_cc[VMIN] = 0;
@@ -446,7 +490,8 @@ std::string queryBackgroundColor() {
                 if (c == '\\' && reply.size() >= 2 && reply[reply.size() - 2] == '\033') break;
             }
             unsigned r = 0, g = 0, b = 0;
-            // "rgb:RRRR/GGGG/BBBB" (1-4 hex digits each); %x reads however many hex digits are present.
+            // "rgb:RRRR/GGGG/BBBB" (1-4 hex digits each); %x reads however many hex digits are
+            // present.
             size_t pos = reply.find("rgb:");
             if (pos != std::string::npos &&
                 std::sscanf(reply.c_str() + pos, "rgb:%x/%x/%x", &r, &g, &b) == 3) {
@@ -469,11 +514,12 @@ std::string queryBackgroundColor() {
 }
 
 // Whether the terminal has a DARK background, so code blocks and syntax highlighting should use the
-// dark palette (light-gray text on dark-gray, lightened hues) instead of the light one. Decided from
-// the OSC 11 background colour's luminance (Rec. 601: a bg darker than mid-gray is "dark"). When the
-// terminal doesn't answer OSC 11 (headless/piped, or a terminal that ignores it) we default to the
-// LIGHT theme, matching mdcat's historical appearance. $MDCAT_THEME=dark|light|auto forces the choice.
-// Cached once per run (the underlying query is memoised; this just classifies it).
+// dark palette (light-gray text on dark-gray, lightened hues) instead of the light one. Decided
+// from the OSC 11 background colour's luminance (Rec. 601: a bg darker than mid-gray is "dark").
+// When the terminal doesn't answer OSC 11 (headless/piped, or a terminal that ignores it) we
+// default to the LIGHT theme, matching mdcat's historical appearance. $MDCAT_THEME=dark|light|auto
+// forces the choice. Cached once per run (the underlying query is memoised; this just classifies
+// it).
 bool darkBackground() {
     static const bool dark = [] {
         if (const char* t = std::getenv("MDCAT_THEME")) {
@@ -481,8 +527,9 @@ bool darkBackground() {
             if (std::string(t) == "light") return false;
             // "auto" (or anything else) falls through to detection.
         }
-        std::string bg = queryBackgroundColor();      // "#rrggbb" or empty
-        if (bg.size() != 7 || bg[0] != '#') return false;  // no answer -> light (historical default)
+        std::string bg = queryBackgroundColor();  // "#rrggbb" or empty
+        if (bg.size() != 7 || bg[0] != '#')
+            return false;  // no answer -> light (historical default)
         auto hex = [&](int i) { return std::stoi(bg.substr(i, 2), nullptr, 16); };
         int r = hex(1), g = hex(3), b = hex(5);
         // Rec. 601 luma; < 128 (mid-gray) means a dark background.
@@ -491,17 +538,18 @@ bool darkBackground() {
     return dark;
 }
 
-// Select the code-block colour palette (kCodeOn / kLightGray here, plus the highlighter's palette) for
-// the terminal theme. Light theme keeps the historical look (dark-gray text on light-gray); dark theme
-// uses light-gray text on dark-gray. Called once on the main thread (initTheme) before rendering, so
-// every kCodeOn/kLightGray read sees the chosen palette and the OSC 11 query (memoised) fires once.
+// Select the code-block colour palette (kCodeOn / kLightGray here, plus the highlighter's palette)
+// for the terminal theme. Light theme keeps the historical look (dark-gray text on light-gray);
+// dark theme uses light-gray text on dark-gray. Called once on the main thread (initTheme) before
+// rendering, so every kCodeOn/kLightGray read sees the chosen palette and the OSC 11 query
+// (memoised) fires once.
 void initTheme() {
     if (darkBackground()) {
         kCodeOn = "\033[48;5;236;38;5;252m";  // dark-gray bg, light-gray fg
         kLightGray = "\033[38;5;240m";        // a dimmer separator that reads on a dark background
         setHighlightTheme(true);
     } else {
-        setHighlightTheme(false);             // kCodeOn/kLightGray keep their light-theme defaults
+        setHighlightTheme(false);  // kCodeOn/kLightGray keep their light-theme defaults
     }
 }
 
@@ -515,14 +563,18 @@ int envInt(const char* name) {
 }
 
 // Cached cell metrics for the run. Preference order:
-//   1. $MDCAT_CELL_W/H and $MDCAT_AREA_W/H overrides — explicit, work headless and forward over SSH.
-//   2. The kernel's text-area pixels + cell counts (TIOCGWINSZ ws_xpixel/ws_ypixel with ws_col/ws_row)
+//   1. $MDCAT_CELL_W/H and $MDCAT_AREA_W/H overrides — explicit, work headless and forward over
+//   SSH.
+//   2. The kernel's text-area pixels + cell counts (TIOCGWINSZ ws_xpixel/ws_ypixel with
+//   ws_col/ws_row)
 //      — the precise area ratio for exact pixel<->cell conversion. Zero over SSH (not forwarded).
-//   3. The CSI terminal queries, which reach the LOCAL terminal even over SSH: CSI 18 t (area in cells)
-//      + CSI 14 t (area in pixels) together give the same precise area ratio remotely; CSI 16 t gives
-//      the integer cell size. We take whatever subset answers.
+//   3. The CSI terminal queries, which reach the LOCAL terminal even over SSH: CSI 18 t (area in
+//   cells)
+//      + CSI 14 t (area in pixels) together give the same precise area ratio remotely; CSI 16 t
+//      gives the integer cell size. We take whatever subset answers.
 //   4. Typical defaults.
-// Only consulted when an image is actually rendered, so non-image documents never pay for the queries.
+// Only consulted when an image is actually rendered, so non-image documents never pay for the
+// queries.
 CellMetrics cellMetrics() {
     static const CellMetrics m = [] {
         CellMetrics c;
@@ -536,8 +588,12 @@ CellMetrics cellMetrics() {
         if (c.areaW > 0 || envInt("MDCAT_CELL_W")) {
             // An override was given; trust it and skip the queries.
             if (std::getenv("MDCAT_DEBUG_CELL"))
-                std::fprintf(stderr, "mdcat: cell metrics (env): area=%dx%d cell=%dx%d\n",
-                             c.areaW, c.areaH, c.cellW, c.cellH);
+                std::fprintf(stderr,
+                             "mdcat: cell metrics (env): area=%dx%d cell=%dx%d\n",
+                             c.areaW,
+                             c.areaH,
+                             c.cellW,
+                             c.cellH);
             return c;
         }
         // 2. Kernel window size with pixel fields (best when local).
@@ -554,24 +610,37 @@ CellMetrics cellMetrics() {
                 return c;
             }
         }
-        // 3. Terminal queries (reach the local terminal over SSH). CSI 14 t (area px) + CSI 18 t (area
-        //    cells) give the precise area ratio; CSI 16 t gives the integer cell size as a backstop.
+        // 3. Terminal queries (reach the local terminal over SSH). CSI 14 t (area px) + CSI 18 t
+        // (area
+        //    cells) give the precise area ratio; CSI 16 t gives the integer cell size as a
+        //    backstop.
         TwoInts area = queryWindowOp("14");   // ESC [ 4 ; H ; W t
         TwoInts cells = queryWindowOp("18");  // ESC [ 8 ; rows ; cols t
         if (area.a > 0 && area.b > 0 && cells.a > 0 && cells.b > 0) {
-            c.areaH = area.a; c.areaW = area.b;
-            c.rows = cells.a; c.cols = cells.b;
+            c.areaH = area.a;
+            c.areaW = area.b;
+            c.rows = cells.a;
+            c.cols = cells.b;
             c.cellW = std::max(1, c.areaW / c.cols);
             c.cellH = std::max(1, c.areaH / c.rows);
             return c;
         }
-        TwoInts cell = queryWindowOp("16");   // ESC [ 6 ; H ; W t
-        if (cell.a > 0 && cell.b > 0) { c.cellH = cell.a; c.cellW = cell.b; }  // area ratio stays unknown
+        TwoInts cell = queryWindowOp("16");  // ESC [ 6 ; H ; W t
+        if (cell.a > 0 && cell.b > 0) {
+            c.cellH = cell.a;
+            c.cellW = cell.b;
+        }  // area ratio stays unknown
         return c;  // else the {8,16} struct defaults
     }();
     if (std::getenv("MDCAT_DEBUG_CELL"))
-        std::fprintf(stderr, "mdcat: cell metrics: area=%dx%d px, cells=%dx%d, cell~%dx%d px\n",
-                     m.areaW, m.areaH, m.cols, m.rows, m.cellW, m.cellH);
+        std::fprintf(stderr,
+                     "mdcat: cell metrics: area=%dx%d px, cells=%dx%d, cell~%dx%d px\n",
+                     m.areaW,
+                     m.areaH,
+                     m.cols,
+                     m.rows,
+                     m.cellW,
+                     m.cellH);
     return m;
 }
 
@@ -593,57 +662,66 @@ int utf8SequenceLength(unsigned char c) {
 int decodeUtf8(const std::string& s, size_t i, uint32_t& cp) {
     unsigned char c = static_cast<unsigned char>(s[i]);
     int len = utf8SequenceLength(c);
-    if (len == 1 || i + static_cast<size_t>(len) > s.size()) { cp = c; return 1; }
+    if (len == 1 || i + static_cast<size_t>(len) > s.size()) {
+        cp = c;
+        return 1;
+    }
     static const unsigned char kLeadMask[5] = {0, 0x7F, 0x1F, 0x0F, 0x07};
     cp = c & kLeadMask[len];
     for (int k = 1; k < len; ++k) {
         unsigned char cc = static_cast<unsigned char>(s[i + k]);
-        if ((cc & 0xC0) != 0x80) { cp = c; return 1; }  // not a continuation byte: invalid
+        if ((cc & 0xC0) != 0x80) {
+            cp = c;
+            return 1;
+        }  // not a continuation byte: invalid
         cp = (cp << 6) | (cc & 0x3F);
     }
     return len;
 }
 
 // True if `cp` is between lo and hi inclusive (used by the width tables below).
-static inline bool inRange(uint32_t cp, uint32_t lo, uint32_t hi) { return cp >= lo && cp <= hi; }
+static inline bool inRange(uint32_t cp, uint32_t lo, uint32_t hi) {
+    return cp >= lo && cp <= hi;
+}
 
 // Terminal column width of a single Unicode code point: 0 for zero-width (combining marks, joiners,
 // variation selectors, the BOM), 2 for East-Asian-Wide / Fullwidth and the emoji that render as a
-// double-width cell, and 1 otherwise. This is a pragmatic subset of UAX #11 / the Unicode emoji data
-// — the ranges that actually occur in the content mdcat renders — not a full property database. See
-// gmore_core.h, which mirrors this exactly so the pager and the renderer agree on alignment.
+// double-width cell, and 1 otherwise. This is a pragmatic subset of UAX #11 / the Unicode emoji
+// data — the ranges that actually occur in the content mdcat renders — not a full property
+// database. See gmore_core.h, which mirrors this exactly so the pager and the renderer agree on
+// alignment.
 int codePointWidth(uint32_t cp) {
     if (cp == 0) return 0;
     // Zero-width: combining diacritics, joiners (ZWJ/ZWNJ), variation selectors, BOM/ZWNBSP.
-    if (inRange(cp, 0x0300, 0x036F) ||   // combining diacritical marks
-        inRange(cp, 0x1AB0, 0x1AFF) ||   // combining diacritical marks extended
-        inRange(cp, 0x1DC0, 0x1DFF) ||   // combining diacritical marks supplement
-        inRange(cp, 0x20D0, 0x20FF) ||   // combining marks for symbols
-        inRange(cp, 0xFE20, 0xFE2F) ||   // combining half marks
+    if (inRange(cp, 0x0300, 0x036F) ||                   // combining diacritical marks
+        inRange(cp, 0x1AB0, 0x1AFF) ||                   // combining diacritical marks extended
+        inRange(cp, 0x1DC0, 0x1DFF) ||                   // combining diacritical marks supplement
+        inRange(cp, 0x20D0, 0x20FF) ||                   // combining marks for symbols
+        inRange(cp, 0xFE20, 0xFE2F) ||                   // combining half marks
         cp == 0x200B || cp == 0x200C || cp == 0x200D ||  // ZWSP, ZWNJ, ZWJ
-        cp == 0xFEFF ||                  // ZWNBSP / BOM
-        inRange(cp, 0xFE00, 0xFE0F) ||   // variation selectors 1-16 (incl. VS16 emoji presentation)
-        inRange(cp, 0xE0100, 0xE01EF))   // variation selectors supplement
+        cp == 0xFEFF ||                                  // ZWNBSP / BOM
+        inRange(cp, 0xFE00, 0xFE0F) ||  // variation selectors 1-16 (incl. VS16 emoji presentation)
+        inRange(cp, 0xE0100, 0xE01EF))  // variation selectors supplement
         return 0;
     // East-Asian Wide / Fullwidth and the wide symbol/emoji blocks that occupy two cells.
-    if (inRange(cp, 0x1100, 0x115F) ||   // Hangul Jamo
-        cp == 0x2329 || cp == 0x232A ||  // angle brackets
-        inRange(cp, 0x2E80, 0x303E) ||   // CJK radicals, Kangxi, CJK symbols/punctuation
-        inRange(cp, 0x3041, 0x33FF) ||   // Hiragana, Katakana, CJK symbols, enclosed CJK
-        inRange(cp, 0x3400, 0x4DBF) ||   // CJK Extension A
-        inRange(cp, 0x4E00, 0x9FFF) ||   // CJK Unified Ideographs
-        inRange(cp, 0xA000, 0xA4CF) ||   // Yi
-        inRange(cp, 0xAC00, 0xD7A3) ||   // Hangul Syllables
-        inRange(cp, 0xF900, 0xFAFF) ||   // CJK compatibility ideographs
-        inRange(cp, 0xFE10, 0xFE19) ||   // vertical forms
-        inRange(cp, 0xFE30, 0xFE6F) ||   // CJK compatibility forms, small form variants
-        inRange(cp, 0xFF00, 0xFF60) ||   // fullwidth forms
-        inRange(cp, 0xFFE0, 0xFFE6) ||   // fullwidth signs
-        inRange(cp, 0x1F300, 0x1F64F) || // Misc symbols & pictographs, emoticons
-        inRange(cp, 0x1F680, 0x1F6FF) || // transport & map symbols
-        inRange(cp, 0x1F900, 0x1F9FF) || // supplemental symbols & pictographs
-        inRange(cp, 0x1FA70, 0x1FAFF) || // symbols & pictographs extended-A
-        inRange(cp, 0x20000, 0x3FFFD))   // CJK Extension B+ and plane 3
+    if (inRange(cp, 0x1100, 0x115F) ||    // Hangul Jamo
+        cp == 0x2329 || cp == 0x232A ||   // angle brackets
+        inRange(cp, 0x2E80, 0x303E) ||    // CJK radicals, Kangxi, CJK symbols/punctuation
+        inRange(cp, 0x3041, 0x33FF) ||    // Hiragana, Katakana, CJK symbols, enclosed CJK
+        inRange(cp, 0x3400, 0x4DBF) ||    // CJK Extension A
+        inRange(cp, 0x4E00, 0x9FFF) ||    // CJK Unified Ideographs
+        inRange(cp, 0xA000, 0xA4CF) ||    // Yi
+        inRange(cp, 0xAC00, 0xD7A3) ||    // Hangul Syllables
+        inRange(cp, 0xF900, 0xFAFF) ||    // CJK compatibility ideographs
+        inRange(cp, 0xFE10, 0xFE19) ||    // vertical forms
+        inRange(cp, 0xFE30, 0xFE6F) ||    // CJK compatibility forms, small form variants
+        inRange(cp, 0xFF00, 0xFF60) ||    // fullwidth forms
+        inRange(cp, 0xFFE0, 0xFFE6) ||    // fullwidth signs
+        inRange(cp, 0x1F300, 0x1F64F) ||  // Misc symbols & pictographs, emoticons
+        inRange(cp, 0x1F680, 0x1F6FF) ||  // transport & map symbols
+        inRange(cp, 0x1F900, 0x1F9FF) ||  // supplemental symbols & pictographs
+        inRange(cp, 0x1FA70, 0x1FAFF) ||  // symbols & pictographs extended-A
+        inRange(cp, 0x20000, 0x3FFFD))    // CJK Extension B+ and plane 3
         return 2;
     return 1;
 }
@@ -651,8 +729,8 @@ int codePointWidth(uint32_t cp) {
 // Display width of a string in terminal columns, skipping ANSI escape (CSI) sequences and OSC 8
 // hyperlink sequences so that styled text measures by what is actually shown. Each code point is
 // measured by codePointWidth, so fullwidth emoji / CJK count as two columns and combining marks,
-// joiners and variation selectors as zero — keeping tables and reflow aligned with what the terminal
-// actually draws.
+// joiners and variation selectors as zero — keeping tables and reflow aligned with what the
+// terminal actually draws.
 int displayWidth(const std::string& s) {
     int width = 0;
     for (size_t i = 0; i < s.size();) {
@@ -668,8 +746,14 @@ int displayWidth(const std::string& s) {
             // OSC sequence: ESC ] ... terminated by BEL or ST (ESC backslash)
             i += 2;
             while (i < s.size()) {
-                if (static_cast<unsigned char>(s[i]) == 0x07) { ++i; break; }
-                if (s[i] == kEsc && i + 1 < s.size() && s[i + 1] == '\\') { i += 2; break; }
+                if (static_cast<unsigned char>(s[i]) == 0x07) {
+                    ++i;
+                    break;
+                }
+                if (s[i] == kEsc && i + 1 < s.size() && s[i + 1] == '\\') {
+                    i += 2;
+                    break;
+                }
                 ++i;
             }
             continue;
@@ -681,7 +765,11 @@ int displayWidth(const std::string& s) {
         if (inRange(cp, 0x1F1E6, 0x1F1FF) && i + adv < s.size()) {
             uint32_t cp2;
             size_t adv2 = static_cast<size_t>(decodeUtf8(s, i + adv, cp2));
-            if (inRange(cp2, 0x1F1E6, 0x1F1FF)) { width += 2; i += adv + adv2; continue; }
+            if (inRange(cp2, 0x1F1E6, 0x1F1FF)) {
+                width += 2;
+                i += adv + adv2;
+                continue;
+            }
         }
         i += adv;
         width += codePointWidth(cp);
@@ -715,13 +803,13 @@ std::string padAligned(const std::string& s, int width, Align a) {
     if (w >= width) return s;
     int pad = width - w;
     switch (a) {
-        case Align::Right:  return std::string(pad, ' ') + s;
-        case Align::Center: {
-            int left = pad / 2;
-            return std::string(left, ' ') + s + std::string(pad - left, ' ');
-        }
-        case Align::Left:
-        default:            return s + std::string(pad, ' ');
+    case Align::Right: return std::string(pad, ' ') + s;
+    case Align::Center: {
+        int left = pad / 2;
+        return std::string(left, ' ') + s + std::string(pad - left, ' ');
+    }
+    case Align::Left:
+    default: return s + std::string(pad, ' ');
     }
 }
 
@@ -744,44 +832,128 @@ std::string trim(const std::string& s) {
 // Bare Latin letters render in math italic by default (as in LaTeX math mode); \mathrm/\text keep
 // them upright and \mathbf makes them bold.
 // Anything it can't represent is left as-is — and a `\cmd{...}` group that can't be fully rendered
-// is kept verbatim INCLUDING its braces (so a LaTeX reader still sees `\mathbb{R}`, not `\mathbbR`),
-// so the output is never worse than the raw source. The function is total: never throws.
+// is kept verbatim INCLUDING its braces (so a LaTeX reader still sees `\mathbb{R}`, not
+// `\mathbbR`), so the output is never worse than the raw source. The function is total: never
+// throws.
 
 // Greek letters and named symbols, keyed by the LaTeX command without its backslash.
 const std::map<std::string, std::string>& mathSymbols() {
     static const std::map<std::string, std::string> m = {
         // Lowercase Greek
-        {"alpha", "α"}, {"beta", "β"}, {"gamma", "γ"}, {"delta", "δ"},
-        {"epsilon", "ε"}, {"varepsilon", "ε"}, {"zeta", "ζ"}, {"eta", "η"},
-        {"theta", "θ"}, {"vartheta", "ϑ"}, {"iota", "ι"}, {"kappa", "κ"},
-        {"lambda", "λ"}, {"mu", "μ"}, {"nu", "ν"}, {"xi", "ξ"},
-        {"omicron", "ο"}, {"pi", "π"}, {"varpi", "ϖ"}, {"rho", "ρ"},
-        {"varrho", "ϱ"}, {"sigma", "σ"}, {"varsigma", "ς"}, {"tau", "τ"},
-        {"upsilon", "υ"}, {"phi", "φ"}, {"varphi", "ϕ"}, {"chi", "χ"},
-        {"psi", "ψ"}, {"omega", "ω"},
+        {"alpha", "α"},
+        {"beta", "β"},
+        {"gamma", "γ"},
+        {"delta", "δ"},
+        {"epsilon", "ε"},
+        {"varepsilon", "ε"},
+        {"zeta", "ζ"},
+        {"eta", "η"},
+        {"theta", "θ"},
+        {"vartheta", "ϑ"},
+        {"iota", "ι"},
+        {"kappa", "κ"},
+        {"lambda", "λ"},
+        {"mu", "μ"},
+        {"nu", "ν"},
+        {"xi", "ξ"},
+        {"omicron", "ο"},
+        {"pi", "π"},
+        {"varpi", "ϖ"},
+        {"rho", "ρ"},
+        {"varrho", "ϱ"},
+        {"sigma", "σ"},
+        {"varsigma", "ς"},
+        {"tau", "τ"},
+        {"upsilon", "υ"},
+        {"phi", "φ"},
+        {"varphi", "ϕ"},
+        {"chi", "χ"},
+        {"psi", "ψ"},
+        {"omega", "ω"},
         // Uppercase Greek
-        {"Alpha", "Α"}, {"Beta", "Β"}, {"Gamma", "Γ"}, {"Delta", "Δ"},
-        {"Epsilon", "Ε"}, {"Zeta", "Ζ"}, {"Eta", "Η"}, {"Theta", "Θ"},
-        {"Iota", "Ι"}, {"Kappa", "Κ"}, {"Lambda", "Λ"}, {"Mu", "Μ"},
-        {"Nu", "Ν"}, {"Xi", "Ξ"}, {"Omicron", "Ο"}, {"Pi", "Π"},
-        {"Rho", "Ρ"}, {"Sigma", "Σ"}, {"Tau", "Τ"}, {"Upsilon", "Υ"},
-        {"Phi", "Φ"}, {"Chi", "Χ"}, {"Psi", "Ψ"}, {"Omega", "Ω"},
+        {"Alpha", "Α"},
+        {"Beta", "Β"},
+        {"Gamma", "Γ"},
+        {"Delta", "Δ"},
+        {"Epsilon", "Ε"},
+        {"Zeta", "Ζ"},
+        {"Eta", "Η"},
+        {"Theta", "Θ"},
+        {"Iota", "Ι"},
+        {"Kappa", "Κ"},
+        {"Lambda", "Λ"},
+        {"Mu", "Μ"},
+        {"Nu", "Ν"},
+        {"Xi", "Ξ"},
+        {"Omicron", "Ο"},
+        {"Pi", "Π"},
+        {"Rho", "Ρ"},
+        {"Sigma", "Σ"},
+        {"Tau", "Τ"},
+        {"Upsilon", "Υ"},
+        {"Phi", "Φ"},
+        {"Chi", "Χ"},
+        {"Psi", "Ψ"},
+        {"Omega", "Ω"},
         // Operators / relations / misc
-        {"exists", "∃"}, {"in", "∈"}, {"int", "∫"}, {"sum", "∑"},
-        {"prod", "∏"}, {"partial", "∂"}, {"infty", "∞"}, {"perp", "⊥"},
-        {"parallel", "∥"}, {"therefore", "∴"}, {"because", "∵"},
-        {"subset", "⊂"}, {"supset", "⊃"}, {"subseteq", "⊆"}, {"supseteq", "⊇"},
-        {"to", "→"}, {"rightarrow", "→"}, {"longrightarrow", "⟶"},
-        {"leftarrow", "←"}, {"Rightarrow", "⇒"}, {"Leftarrow", "⇐"},
-        {"times", "×"}, {"div", "÷"}, {"pm", "±"}, {"mp", "∓"},
-        {"simeq", "≃"}, {"approx", "≈"}, {"cong", "≅"}, {"equiv", "≡"},
-        {"neq", "≠"}, {"leq", "≤"}, {"geq", "≥"}, {"ll", "≪"}, {"gg", "≫"},
-        {"cdot", "⋅"}, {"cdots", "⋯"}, {"ldots", "…"}, {"dots", "…"},
-        {"nabla", "∇"}, {"forall", "∀"}, {"notin", "∉"}, {"emptyset", "∅"},
-        {"cup", "∪"}, {"cap", "∩"}, {"wedge", "∧"}, {"vee", "∨"},
-        {"neg", "¬"}, {"oplus", "⊕"}, {"otimes", "⊗"}, {"sqrt", "√"},
-        {"angle", "∠"}, {"prime", "′"}, {"circ", "∘"}, {"star", "⋆"},
-        {"langle", "⟨"}, {"rangle", "⟩"}, {"propto", "∝"}, {"mapsto", "↦"},
+        {"exists", "∃"},
+        {"in", "∈"},
+        {"int", "∫"},
+        {"sum", "∑"},
+        {"prod", "∏"},
+        {"partial", "∂"},
+        {"infty", "∞"},
+        {"perp", "⊥"},
+        {"parallel", "∥"},
+        {"therefore", "∴"},
+        {"because", "∵"},
+        {"subset", "⊂"},
+        {"supset", "⊃"},
+        {"subseteq", "⊆"},
+        {"supseteq", "⊇"},
+        {"to", "→"},
+        {"rightarrow", "→"},
+        {"longrightarrow", "⟶"},
+        {"leftarrow", "←"},
+        {"Rightarrow", "⇒"},
+        {"Leftarrow", "⇐"},
+        {"times", "×"},
+        {"div", "÷"},
+        {"pm", "±"},
+        {"mp", "∓"},
+        {"simeq", "≃"},
+        {"approx", "≈"},
+        {"cong", "≅"},
+        {"equiv", "≡"},
+        {"neq", "≠"},
+        {"leq", "≤"},
+        {"geq", "≥"},
+        {"ll", "≪"},
+        {"gg", "≫"},
+        {"cdot", "⋅"},
+        {"cdots", "⋯"},
+        {"ldots", "…"},
+        {"dots", "…"},
+        {"nabla", "∇"},
+        {"forall", "∀"},
+        {"notin", "∉"},
+        {"emptyset", "∅"},
+        {"cup", "∪"},
+        {"cap", "∩"},
+        {"wedge", "∧"},
+        {"vee", "∨"},
+        {"neg", "¬"},
+        {"oplus", "⊕"},
+        {"otimes", "⊗"},
+        {"sqrt", "√"},
+        {"angle", "∠"},
+        {"prime", "′"},
+        {"circ", "∘"},
+        {"star", "⋆"},
+        {"langle", "⟨"},
+        {"rangle", "⟩"},
+        {"propto", "∝"},
+        {"mapsto", "↦"},
     };
     return m;
 }
@@ -790,18 +962,44 @@ const std::map<std::string, std::string>& mathSymbols() {
 // form are left unconverted (the whole script group is then rendered literally with ^ or _).
 const std::map<char, std::string>& superscripts() {
     static const std::map<char, std::string> m = {
-        {'0', "⁰"}, {'1', "¹"}, {'2', "²"}, {'3', "³"}, {'4', "⁴"},
-        {'5', "⁵"}, {'6', "⁶"}, {'7', "⁷"}, {'8', "⁸"}, {'9', "⁹"},
-        {'+', "⁺"}, {'-', "⁻"}, {'=', "⁼"}, {'(', "⁽"}, {')', "⁾"},
-        {'n', "ⁿ"}, {'i', "ⁱ"}, {'.', "·"},
+        {'0', "⁰"},
+        {'1', "¹"},
+        {'2', "²"},
+        {'3', "³"},
+        {'4', "⁴"},
+        {'5', "⁵"},
+        {'6', "⁶"},
+        {'7', "⁷"},
+        {'8', "⁸"},
+        {'9', "⁹"},
+        {'+', "⁺"},
+        {'-', "⁻"},
+        {'=', "⁼"},
+        {'(', "⁽"},
+        {')', "⁾"},
+        {'n', "ⁿ"},
+        {'i', "ⁱ"},
+        {'.', "·"},
     };
     return m;
 }
 const std::map<char, std::string>& subscripts() {
     static const std::map<char, std::string> m = {
-        {'0', "₀"}, {'1', "₁"}, {'2', "₂"}, {'3', "₃"}, {'4', "₄"},
-        {'5', "₅"}, {'6', "₆"}, {'7', "₇"}, {'8', "₈"}, {'9', "₉"},
-        {'+', "₊"}, {'-', "₋"}, {'=', "₌"}, {'(', "₍"}, {')', "₎"},
+        {'0', "₀"},
+        {'1', "₁"},
+        {'2', "₂"},
+        {'3', "₃"},
+        {'4', "₄"},
+        {'5', "₅"},
+        {'6', "₆"},
+        {'7', "₇"},
+        {'8', "₈"},
+        {'9', "₉"},
+        {'+', "₊"},
+        {'-', "₋"},
+        {'=', "₌"},
+        {'(', "₍"},
+        {')', "₎"},
     };
     return m;
 }
@@ -811,15 +1009,32 @@ const std::map<char, std::string>& subscripts() {
 // literal rather than dropping the styling).
 std::string mathbbLetter(char c) {
     switch (c) {
-        case 'A': return "𝔸"; case 'B': return "𝔹"; case 'C': return "ℂ";
-        case 'D': return "𝔻"; case 'E': return "𝔼"; case 'F': return "𝔽";
-        case 'G': return "𝔾"; case 'H': return "ℍ"; case 'I': return "𝕀";
-        case 'J': return "𝕁"; case 'K': return "𝕂"; case 'L': return "𝕃";
-        case 'M': return "𝕄"; case 'N': return "ℕ"; case 'O': return "𝕆";
-        case 'P': return "ℙ"; case 'Q': return "ℚ"; case 'R': return "ℝ";
-        case 'S': return "𝕊"; case 'T': return "𝕋"; case 'U': return "𝕌";
-        case 'V': return "𝕍"; case 'W': return "𝕎"; case 'X': return "𝕏";
-        case 'Y': return "𝕐"; case 'Z': return "ℤ";
+    case 'A': return "𝔸";
+    case 'B': return "𝔹";
+    case 'C': return "ℂ";
+    case 'D': return "𝔻";
+    case 'E': return "𝔼";
+    case 'F': return "𝔽";
+    case 'G': return "𝔾";
+    case 'H': return "ℍ";
+    case 'I': return "𝕀";
+    case 'J': return "𝕁";
+    case 'K': return "𝕂";
+    case 'L': return "𝕃";
+    case 'M': return "𝕄";
+    case 'N': return "ℕ";
+    case 'O': return "𝕆";
+    case 'P': return "ℙ";
+    case 'Q': return "ℚ";
+    case 'R': return "ℝ";
+    case 'S': return "𝕊";
+    case 'T': return "𝕋";
+    case 'U': return "𝕌";
+    case 'V': return "𝕍";
+    case 'W': return "𝕎";
+    case 'X': return "𝕏";
+    case 'Y': return "𝕐";
+    case 'Z': return "ℤ";
     }
     return "";
 }
@@ -858,14 +1073,17 @@ std::string mathStyledLetter(char c, MathStyle style) {
     unsigned idx = upper ? (c - 'A') : 26 + (c - 'a');
     std::string out;
     switch (style) {
-        case MathStyle::Upright: return std::string(1, c);
-        case MathStyle::Italic:
-            if (c == 'h') { appendUtf8(out, 0x210E); return out; }  // Planck constant ℎ
-            appendUtf8(out, 0x1D434 + idx);                          // 𝐴..𝑧 (italic)
+    case MathStyle::Upright: return std::string(1, c);
+    case MathStyle::Italic:
+        if (c == 'h') {
+            appendUtf8(out, 0x210E);
             return out;
-        case MathStyle::Bold:
-            appendUtf8(out, 0x1D400 + idx);                          // 𝐀..𝐳 (bold)
-            return out;
+        }  // Planck constant ℎ
+        appendUtf8(out, 0x1D434 + idx);  // 𝐴..𝑧 (italic)
+        return out;
+    case MathStyle::Bold:
+        appendUtf8(out, 0x1D400 + idx);  // 𝐀..𝐳 (bold)
+        return out;
     }
     return std::string(1, c);
 }
@@ -875,15 +1093,15 @@ std::string mathStyledLetter(char c, MathStyle style) {
 // i/out unchanged so the caller can emit the marker literally.
 bool convertScript(const std::string& s, size_t& i, std::string& out, bool sup) {
     const auto& table = sup ? superscripts() : subscripts();
-    std::string body;        // the raw characters being scripted
+    std::string body;  // the raw characters being scripted
     size_t j = i + 1;
     if (j < s.size() && s[j] == '{') {
         size_t k = j + 1;
         while (k < s.size() && s[k] != '}') body += s[k++];
-        if (k >= s.size()) return false;   // unbalanced brace: give up
+        if (k >= s.size()) return false;  // unbalanced brace: give up
         j = k + 1;
     } else if (j < s.size()) {
-        body = s[j];                        // single-character script: x^2, a_i
+        body = s[j];  // single-character script: x^2, a_i
         j += 1;
     } else {
         return false;
@@ -915,19 +1133,34 @@ std::string renderMath(const std::string& tex, MathStyle style = MathStyle::Ital
             if (j == i + 1) {
                 // Non-letter after backslash: \, \; \! are spacing (drop); \{ \} \$ are literals.
                 char e = (j < n) ? tex[j] : '\0';
-                if (e == ',' || e == ';' || e == ':' || e == '!' || e == ' ') { i = j + 1; continue; }
-                if (e == '{' || e == '}' || e == '$' || e == '%' || e == '&' || e == '#') {
-                    out += e; i = j + 1; continue;
+                if (e == ',' || e == ';' || e == ':' || e == '!' || e == ' ') {
+                    i = j + 1;
+                    continue;
                 }
-                out += c; ++i; continue;   // unknown: keep the backslash literally
+                if (e == '{' || e == '}' || e == '$' || e == '%' || e == '&' || e == '#') {
+                    out += e;
+                    i = j + 1;
+                    continue;
+                }
+                out += c;
+                ++i;
+                continue;  // unknown: keep the backslash literally
             }
             std::string cmd = tex.substr(i + 1, j - (i + 1));
-            if (cmd == "quad" || cmd == "qquad") { out += ' '; i = j; continue; }
-            if (cmd == "left" || cmd == "right") { i = j; continue; }  // delimiter sizing: drop
+            if (cmd == "quad" || cmd == "qquad") {
+                out += ' ';
+                i = j;
+                continue;
+            }
+            if (cmd == "left" || cmd == "right") {
+                i = j;
+                continue;
+            }  // delimiter sizing: drop
 
-            // If the command takes a braced argument, read the whole balanced group now. `arg` is the
-            // argument contents; `groupEnd` is the position just past the closing '}'. If there is no
-            // balanced group, argEnd stays == j (no argument) and we keep the bare command logic.
+            // If the command takes a braced argument, read the whole balanced group now. `arg` is
+            // the argument contents; `groupEnd` is the position just past the closing '}'. If there
+            // is no balanced group, argEnd stays == j (no argument) and we keep the bare command
+            // logic.
             std::string arg;
             size_t groupEnd = j;
             bool hasArg = false;
@@ -935,12 +1168,18 @@ std::string renderMath(const std::string& tex, MathStyle style = MathStyle::Ital
                 size_t k = j + 1;
                 int depth = 1;
                 while (k < n && depth > 0) {
-                    if (tex[k] == '{') ++depth;
-                    else if (tex[k] == '}') { if (--depth == 0) break; }
+                    if (tex[k] == '{')
+                        ++depth;
+                    else if (tex[k] == '}') {
+                        if (--depth == 0) break;
+                    }
                     if (depth > 0) arg += tex[k];
                     ++k;
                 }
-                if (k < n) { hasArg = true; groupEnd = k + 1; }  // balanced; else leave hasArg false
+                if (k < n) {
+                    hasArg = true;
+                    groupEnd = k + 1;
+                }  // balanced; else leave hasArg false
             }
 
             // \mathbb / \mathcal: each letter must have a Unicode form, or the whole group is kept.
@@ -949,10 +1188,17 @@ std::string renderMath(const std::string& tex, MathStyle style = MathStyle::Ital
                 bool ok = !arg.empty();
                 for (char ch : arg) {
                     std::string g = mathbbLetter(ch);
-                    if (g.empty()) { ok = false; break; }
+                    if (g.empty()) {
+                        ok = false;
+                        break;
+                    }
                     conv += g;
                 }
-                if (ok) { out += conv; i = groupEnd; continue; }
+                if (ok) {
+                    out += conv;
+                    i = groupEnd;
+                    continue;
+                }
                 out += tex.substr(i, groupEnd - i);  // keep \mathbb{...} verbatim, braces and all
                 i = groupEnd;
                 continue;
@@ -960,35 +1206,53 @@ std::string renderMath(const std::string& tex, MathStyle style = MathStyle::Ital
 
             // \mathrm / \mathbf / ...: styling wrappers. Recurse on the argument with the wrapper's
             // font, but only accept the result if it is fully representable (no leftover backslash
-            // from an unmapped command); otherwise keep the entire \cmd{...} so a LaTeX reader still
-            // sees the intent.
-            if (hasArg && (cmd == "mathrm" || cmd == "mathbf" || cmd == "mathit" || cmd == "mathsf" ||
-                           cmd == "text" || cmd == "operatorname")) {
+            // from an unmapped command); otherwise keep the entire \cmd{...} so a LaTeX reader
+            // still sees the intent.
+            if (hasArg &&
+                (cmd == "mathrm" || cmd == "mathbf" || cmd == "mathit" || cmd == "mathsf" ||
+                 cmd == "text" || cmd == "operatorname")) {
                 MathStyle inner = cmd == "mathbf" ? MathStyle::Bold
-                                : cmd == "mathit" ? MathStyle::Italic
-                                : MathStyle::Upright;  // mathrm, text, mathsf, operatorname
+                    : cmd == "mathit"             ? MathStyle::Italic
+                                      : MathStyle::Upright;  // mathrm, text, mathsf, operatorname
                 std::string conv = renderMath(arg, inner);
-                if (conv.find('\\') == std::string::npos) { out += conv; i = groupEnd; continue; }
+                if (conv.find('\\') == std::string::npos) {
+                    out += conv;
+                    i = groupEnd;
+                    continue;
+                }
                 out += tex.substr(i, groupEnd - i);  // keep \cmd{...} verbatim
                 i = groupEnd;
                 continue;
             }
 
             auto it = mathSymbols().find(cmd);
-            if (it != mathSymbols().end()) { out += it->second; i = j; continue; }
+            if (it != mathSymbols().end()) {
+                out += it->second;
+                i = j;
+                continue;
+            }
 
-            // Unknown command: leave it as written, INCLUDING any braced argument, so the source stays
-            // readable (e.g. \mathbb{R} -> "\mathbb{R}", not "\mathbbR").
-            if (hasArg) { out += tex.substr(i, groupEnd - i); i = groupEnd; continue; }
+            // Unknown command: leave it as written, INCLUDING any braced argument, so the source
+            // stays readable (e.g. \mathbb{R} -> "\mathbb{R}", not "\mathbbR").
+            if (hasArg) {
+                out += tex.substr(i, groupEnd - i);
+                i = groupEnd;
+                continue;
+            }
             out += "\\" + cmd;
             i = j;
             continue;
         }
         if (c == '^' || c == '_') {
             if (convertScript(tex, i, out, c == '^')) continue;
-            out += c; ++i; continue;
+            out += c;
+            ++i;
+            continue;
         }
-        if (c == '{' || c == '}') { ++i; continue; }  // bare grouping braces have no visual effect
+        if (c == '{' || c == '}') {
+            ++i;
+            continue;
+        }  // bare grouping braces have no visual effect
         if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
             out += mathStyledLetter(c, style);  // Latin letters take the current math font
             ++i;
@@ -1039,11 +1303,11 @@ private:
     enum class Kind { Text, Code, Link, Image, Delim };
     struct Token {
         Kind kind;
-        std::string text;   // Text: literal; Code: content; Link: rendered link text
-        std::string url;    // Link: target URL
+        std::string text;  // Text: literal; Code: content; Link: rendered link text
+        std::string url;   // Link: target URL
         // Delim fields:
-        char delim = 0;     // '*' or '_'
-        int count = 0;      // remaining usable delimiter characters
+        char delim = 0;  // '*' or '_'
+        int count = 0;   // remaining usable delimiter characters
         bool canOpen = false;
         bool canClose = false;
         // Emphasis resolution result, applied at emit time:
@@ -1062,8 +1326,14 @@ private:
     char prevAt(size_t i) const { return i == 0 ? '\n' : s_[i - 1]; }
 
     void addText(const std::string& t) {
-        if (!toks_.empty() && toks_.back().kind == Kind::Text) toks_.back().text += t;
-        else { Token tk; tk.kind = Kind::Text; tk.text = t; toks_.push_back(std::move(tk)); }
+        if (!toks_.empty() && toks_.back().kind == Kind::Text)
+            toks_.back().text += t;
+        else {
+            Token tk;
+            tk.kind = Kind::Text;
+            tk.text = t;
+            toks_.push_back(std::move(tk));
+        }
     }
 
     // --- Pass 1 -------------------------------------------------------------
@@ -1076,12 +1346,25 @@ private:
                 i += 2;
                 continue;
             }
-            if (c == '`') { if (scanCode(i)) continue; }
-            if (c == '$') { if (scanMath(i)) continue; }
-            if (c == '<') { if (scanHardBreak(i)) continue; }
-            if (c == '!' && i + 1 < n && s_[i + 1] == '[') { if (scanImage(i)) continue; }
-            if (c == '[') { if (scanLink(i)) continue; }
-            if (c == '*' || c == '_') { scanDelim(i); continue; }
+            if (c == '`') {
+                if (scanCode(i)) continue;
+            }
+            if (c == '$') {
+                if (scanMath(i)) continue;
+            }
+            if (c == '<') {
+                if (scanHardBreak(i)) continue;
+            }
+            if (c == '!' && i + 1 < n && s_[i + 1] == '[') {
+                if (scanImage(i)) continue;
+            }
+            if (c == '[') {
+                if (scanLink(i)) continue;
+            }
+            if (c == '*' || c == '_') {
+                scanDelim(i);
+                continue;
+            }
             int len = utf8SequenceLength(static_cast<unsigned char>(c));
             addText(s_.substr(i, len));
             i += len;
@@ -1098,14 +1381,16 @@ private:
                 size_t run = 0;
                 while (j + run < s_.size() && s_[j + run] == '`') ++run;
                 if (run == open) {
-                    Token tk; tk.kind = Kind::Code;
+                    Token tk;
+                    tk.kind = Kind::Code;
                     tk.text = s_.substr(i + open, j - (i + open));
                     toks_.push_back(std::move(tk));
                     i = j + run;
                     return true;
                 }
                 j += run;
-            } else ++j;
+            } else
+                ++j;
         }
         return false;  // unmatched: fall through and treat the backticks as text
     }
@@ -1118,26 +1403,32 @@ private:
     bool scanMath(size_t& i) {
         size_t open = (i + 1 < s_.size() && s_[i + 1] == '$') ? 2 : 1;  // $ or $$
         size_t start = i + open;
-        if (start >= s_.size() || isSpace(s_[start])) return false;     // no space right after opener
+        if (start >= s_.size() || isSpace(s_[start])) return false;  // no space right after opener
         size_t j = start;
         while (j < s_.size()) {
-            if (s_[j] == '\\' && j + 1 < s_.size()) { j += 2; continue; }  // skip escaped char
+            if (s_[j] == '\\' && j + 1 < s_.size()) {
+                j += 2;
+                continue;
+            }  // skip escaped char
             if (s_[j] == '$') {
                 size_t run = 0;
                 while (j + run < s_.size() && s_[j + run] == '$') ++run;
                 if (run >= open) {
-                    if (j == start) return false;                    // empty: "$$" is not math
-                    if (isSpace(s_[j - 1])) return false;            // no space right before closer
+                    if (j == start) return false;          // empty: "$$" is not math
+                    if (isSpace(s_[j - 1])) return false;  // no space right before closer
                     size_t after = j + open;
-                    // For inline ($) math, a digit right after the closer means it's likely a price.
+                    // For inline ($) math, a digit right after the closer means it's likely a
+                    // price.
                     if (open == 1 && after < s_.size() &&
-                        std::isdigit(static_cast<unsigned char>(s_[after]))) return false;
+                        std::isdigit(static_cast<unsigned char>(s_[after])))
+                        return false;
                     addText(renderMath(s_.substr(start, j - start)));
                     i = j + open;
                     return true;
                 }
                 j += run;
-            } else ++j;
+            } else
+                ++j;
         }
         return false;  // unterminated: treat the opening '$' as literal text
     }
@@ -1145,16 +1436,18 @@ private:
     // <br>, <br/>, <br />: an HTML hard line break (GFM treats it as a literal line break wherever
     // it appears in inline content). Emitted as a '\n' Text token; downstream reflow and table-cell
     // layout split on '\n'. Tag/attribute matching is case-insensitive but otherwise strict: a
-    // malformed run like "<brx" or "<br foo" falls through and is rendered as literal text, matching
-    // how mdcat passes all other inline HTML through unchanged. The '<' is at position i.
+    // malformed run like "<brx" or "<br foo" falls through and is rendered as literal text,
+    // matching how mdcat passes all other inline HTML through unchanged. The '<' is at position i.
     bool scanHardBreak(size_t& i) {
         size_t j = i + 1;  // just past '<'
-        auto lower = [](char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); };
+        auto lower = [](char c) {
+            return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        };
         if (j + 1 >= s_.size() || lower(s_[j]) != 'b' || lower(s_[j + 1]) != 'r') return false;
         j += 2;
         while (j < s_.size() && (s_[j] == ' ' || s_[j] == '\t')) ++j;  // optional whitespace
         if (j < s_.size() && s_[j] == '/') ++j;                        // optional self-close slash
-        if (j >= s_.size() || s_[j] != '>') return false;             // must end at '>'
+        if (j >= s_.size() || s_[j] != '>') return false;              // must end at '>'
         addText("\n");
         i = j + 1;
         return true;
@@ -1166,9 +1459,15 @@ private:
         size_t close = j + 1;
         int depth = 1;
         while (close < s_.size()) {
-            if (s_[close] == '\\' && close + 1 < s_.size()) { close += 2; continue; }
-            if (s_[close] == '[') ++depth;
-            else if (s_[close] == ']') { if (--depth == 0) break; }
+            if (s_[close] == '\\' && close + 1 < s_.size()) {
+                close += 2;
+                continue;
+            }
+            if (s_[close] == '[')
+                ++depth;
+            else if (s_[close] == ']') {
+                if (--depth == 0) break;
+            }
             ++close;
         }
         if (close >= s_.size() || close + 1 >= s_.size() || s_[close + 1] != '(') return false;
@@ -1177,14 +1476,22 @@ private:
         int pd = 1;
         while (up < s_.size()) {
             char c = s_[up];
-            if (c == '\\' && up + 1 < s_.size()) { url += s_[up + 1]; up += 2; continue; }
-            if (c == '(') ++pd;
-            else if (c == ')') { if (--pd == 0) break; }
+            if (c == '\\' && up + 1 < s_.size()) {
+                url += s_[up + 1];
+                up += 2;
+                continue;
+            }
+            if (c == '(')
+                ++pd;
+            else if (c == ')') {
+                if (--pd == 0) break;
+            }
             url += c;
             ++up;
         }
         if (up >= s_.size() || s_[up] != ')') return false;
-        Token tk; tk.kind = Kind::Image;
+        Token tk;
+        tk.kind = Kind::Image;
         tk.text = s_.substr(j + 1, close - (j + 1));  // raw alt text
         tk.url = trim(url);
         toks_.push_back(std::move(tk));
@@ -1199,9 +1506,15 @@ private:
         size_t close = i + 1;
         int depth = 1;
         while (close < s_.size()) {
-            if (s_[close] == '\\' && close + 1 < s_.size()) { close += 2; continue; }
-            if (s_[close] == '[') ++depth;
-            else if (s_[close] == ']') { if (--depth == 0) break; }
+            if (s_[close] == '\\' && close + 1 < s_.size()) {
+                close += 2;
+                continue;
+            }
+            if (s_[close] == '[')
+                ++depth;
+            else if (s_[close] == ']') {
+                if (--depth == 0) break;
+            }
             ++close;
         }
         if (close >= s_.size() || close + 1 >= s_.size() || s_[close + 1] != '(') return false;
@@ -1210,14 +1523,22 @@ private:
         int pd = 1;
         while (up < s_.size()) {
             char c = s_[up];
-            if (c == '\\' && up + 1 < s_.size()) { url += s_[up + 1]; up += 2; continue; }
-            if (c == '(') ++pd;
-            else if (c == ')') { if (--pd == 0) break; }
+            if (c == '\\' && up + 1 < s_.size()) {
+                url += s_[up + 1];
+                up += 2;
+                continue;
+            }
+            if (c == '(')
+                ++pd;
+            else if (c == ')') {
+                if (--pd == 0) break;
+            }
             url += c;
             ++up;
         }
         if (up >= s_.size() || s_[up] != ')') return false;
-        Token tk; tk.kind = Kind::Link;
+        Token tk;
+        tk.kind = Kind::Link;
         tk.text = InlineRenderer(s_.substr(i + 1, close - (i + 1))).render();
         tk.url = trim(url);
         toks_.push_back(std::move(tk));
@@ -1233,7 +1554,10 @@ private:
         char before = prevAt(i);
         char after = charAt(i + run);
         bool spaceBefore = isSpace(before), spaceAfter = isSpace(after);
-        Token tk; tk.kind = Kind::Delim; tk.delim = d; tk.count = static_cast<int>(run);
+        Token tk;
+        tk.kind = Kind::Delim;
+        tk.delim = d;
+        tk.count = static_cast<int>(run);
         tk.canOpen = !spaceAfter;
         tk.canClose = !spaceBefore;
         if (d == '_') {
@@ -1259,11 +1583,17 @@ private:
                         Token& o = toks_[stack[k]];
                         if (o.delim == t.delim && o.canOpen && o.count > 0) {
                             int use = (t.count >= 2 && o.count >= 2) ? 2 : 1;
-                            if (use == 2) { o.openStrong++; t.closeStrong++; }
-                            else { o.openEm++; t.closeEm++; }
+                            if (use == 2) {
+                                o.openStrong++;
+                                t.closeStrong++;
+                            } else {
+                                o.openEm++;
+                                t.closeEm++;
+                            }
                             o.count -= use;
                             t.count -= use;
-                            if (o.count == 0) stack.resize(k);  // opener spent; drop it and any above
+                            if (o.count == 0)
+                                stack.resize(k);  // opener spent; drop it and any above
                             matched = true;
                             break;
                         }
@@ -1280,29 +1610,25 @@ private:
         std::string out;
         for (const Token& t : toks_) {
             switch (t.kind) {
-                case Kind::Text:
-                    out += t.text;
-                    break;
-                case Kind::Code:
-                    out += kCodeOn + t.text + kCodeOff;
-                    break;
-                case Kind::Link:
-                    out += "\033]8;;" + resolveLinkTarget(t.url) + "\033\\" + t.text + "\033]8;;\033\\";
-                    break;
-                case Kind::Image:
-                    // Inline image: show alt text (we can't fetch remote URLs inline).
-                    out += t.text;
-                    break;
-                case Kind::Delim: {
-                    // Closers emit their off-codes first, then any opens, then leftover literals.
-                    for (int k = 0; k < t.closeEm; ++k) out += kItalicOff;
-                    for (int k = 0; k < t.closeStrong; ++k) out += kBoldOff;
-                    for (int k = 0; k < t.openStrong; ++k) out += kBoldOn;
-                    for (int k = 0; k < t.openEm; ++k) out += kItalicOn;
-                    // Any delimiter characters not consumed by a pair stay as literal text.
-                    out.append(static_cast<size_t>(t.count), t.delim);
-                    break;
-                }
+            case Kind::Text: out += t.text; break;
+            case Kind::Code: out += kCodeOn + t.text + kCodeOff; break;
+            case Kind::Link:
+                out += "\033]8;;" + resolveLinkTarget(t.url) + "\033\\" + t.text + "\033]8;;\033\\";
+                break;
+            case Kind::Image:
+                // Inline image: show alt text (we can't fetch remote URLs inline).
+                out += t.text;
+                break;
+            case Kind::Delim: {
+                // Closers emit their off-codes first, then any opens, then leftover literals.
+                for (int k = 0; k < t.closeEm; ++k) out += kItalicOff;
+                for (int k = 0; k < t.closeStrong; ++k) out += kBoldOff;
+                for (int k = 0; k < t.openStrong; ++k) out += kBoldOn;
+                for (int k = 0; k < t.openEm; ++k) out += kItalicOn;
+                // Any delimiter characters not consumed by a pair stay as literal text.
+                out.append(static_cast<size_t>(t.count), t.delim);
+                break;
+            }
             }
         }
         return out;
@@ -1327,7 +1653,7 @@ std::string renderInline(const std::string& text) {
 
 // Supported image extensions (lowercase). timg handles all of these.
 bool isSupportedImageExt(const std::string& path) {
-    static const char* exts[] = { ".png", ".jpg", ".jpeg", ".gif", ".svg", nullptr };
+    static const char* exts[] = {".png", ".jpg", ".jpeg", ".gif", ".svg", nullptr};
     size_t dot = path.rfind('.');
     if (dot == std::string::npos) return false;
     std::string ext = path.substr(dot);
@@ -1360,20 +1686,27 @@ int pngWidth(const std::string& path) {
 }
 
 // Whitespace test usable on signed char without the locale surprises of std::isspace.
-inline bool isSpaceCh(char c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
+inline bool isSpaceCh(char c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
 
 // Scan a markdown image ![alt](src) starting at s[i]. On success, sets alt/src and advances i
 // past the closing ')'; returns true. i must point at '!'.
-static bool scanMdImageAt(const std::string& s, size_t& i,
-                           std::string& alt, std::string& src) {
+static bool scanMdImageAt(const std::string& s, size_t& i, std::string& alt, std::string& src) {
     size_t n = s.size();
     if (i + 4 >= n || s[i] != '!' || s[i + 1] != '[') return false;
     size_t close = i + 2;
     int depth = 1;
     while (close < n) {
-        if (s[close] == '\\' && close + 1 < n) { close += 2; continue; }
-        if (s[close] == '[') ++depth;
-        else if (s[close] == ']') { if (--depth == 0) break; }
+        if (s[close] == '\\' && close + 1 < n) {
+            close += 2;
+            continue;
+        }
+        if (s[close] == '[')
+            ++depth;
+        else if (s[close] == ']') {
+            if (--depth == 0) break;
+        }
         ++close;
     }
     if (close >= n || close + 1 >= n || s[close + 1] != '(') return false;
@@ -1383,9 +1716,16 @@ static bool scanMdImageAt(const std::string& s, size_t& i,
     int pd = 1;
     while (up < n) {
         char c = s[up];
-        if (c == '\\' && up + 1 < n) { url += s[up + 1]; up += 2; continue; }
-        if (c == '(') ++pd;
-        else if (c == ')') { if (--pd == 0) break; }
+        if (c == '\\' && up + 1 < n) {
+            url += s[up + 1];
+            up += 2;
+            continue;
+        }
+        if (c == '(')
+            ++pd;
+        else if (c == ')') {
+            if (--pd == 0) break;
+        }
         url += c;
         ++up;
     }
@@ -1413,9 +1753,16 @@ bool parseMdImage(const std::string& text, std::map<std::string, std::string>& a
             int pd = 1;
             while (up < n) {
                 char c = s[up];
-                if (c == '\\' && up + 1 < n) { href += s[up + 1]; up += 2; continue; }
-                if (c == '(') ++pd;
-                else if (c == ')') { if (--pd == 0) break; }
+                if (c == '\\' && up + 1 < n) {
+                    href += s[up + 1];
+                    up += 2;
+                    continue;
+                }
+                if (c == '(')
+                    ++pd;
+                else if (c == ')') {
+                    if (--pd == 0) break;
+                }
                 href += c;
                 ++up;
             }
@@ -1457,15 +1804,16 @@ bool parseImgTag(const std::string& text, std::map<std::string, std::string>& at
     i = 4;
     while (i < n) {
         while (i < n && isSpaceCh(s[i])) ++i;
-        if (i < n && s[i] == '/') ++i;          // tolerate a self-closing slash
+        if (i < n && s[i] == '/') ++i;  // tolerate a self-closing slash
         while (i < n && isSpaceCh(s[i])) ++i;
-        if (i >= n) return false;               // no closing '>'
-        if (s[i] == '>') return i == n - 1;     // the tag must end the string
+        if (i >= n) return false;            // no closing '>'
+        if (s[i] == '>') return i == n - 1;  // the tag must end the string
         // attribute name
         size_t ks = i;
-        while (i < n && (std::isalnum(static_cast<unsigned char>(s[i])) || s[i] == '-' || s[i] == '_'))
+        while (i < n &&
+               (std::isalnum(static_cast<unsigned char>(s[i])) || s[i] == '-' || s[i] == '_'))
             ++i;
-        if (i == ks) return false;              // expected a name
+        if (i == ks) return false;  // expected a name
         std::string key = s.substr(ks, i - ks);
         for (char& c : key) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
         while (i < n && isSpaceCh(s[i])) ++i;
@@ -1477,10 +1825,10 @@ bool parseImgTag(const std::string& text, std::map<std::string, std::string>& at
                 char q = s[i++];
                 size_t vs = i;
                 while (i < n && s[i] != q) ++i;
-                if (i >= n) return false;        // unterminated quote
+                if (i >= n) return false;  // unterminated quote
                 value = s.substr(vs, i - vs);
-                ++i;                             // consume closing quote
-            } else {                             // unquoted value up to whitespace or '>'
+                ++i;  // consume closing quote
+            } else {  // unquoted value up to whitespace or '>'
                 size_t vs = i;
                 while (i < n && !isSpaceCh(s[i]) && s[i] != '>') ++i;
                 value = s.substr(vs, i - vs);
@@ -1495,27 +1843,28 @@ bool parseImgTag(const std::string& text, std::map<std::string, std::string>& at
 // dimension with a deliberately loose bound that can never become the binding constraint, so the
 // requested dimension governs and the image keeps its own aspect ratio. We do this ourselves rather
 // than letting timg fill the blank from the terminal: timg >= 1.6.3 reads the terminal size via the
-// controlling tty's window-size ioctl, and when that is unavailable (stdout on a pipe with no usable
-// controlling tty) it refuses a partial -g with "Failed to read size from terminal" and emits no
-// output. Supplying a full box keeps mdcat working regardless of timg version or how it is invoked.
-// The loose bound is the terminal extent in that axis with a generous floor; mdcat reads the actual
-// painted size back from the sixel afterward, so over-specifying costs nothing.
+// controlling tty's window-size ioctl, and when that is unavailable (stdout on a pipe with no
+// usable controlling tty) it refuses a partial -g with "Failed to read size from terminal" and
+// emits no output. Supplying a full box keeps mdcat working regardless of timg version or how it is
+// invoked. The loose bound is the terminal extent in that axis with a generous floor; mdcat reads
+// the actual painted size back from the sixel afterward, so over-specifying costs nothing.
 std::string completeGeom(const std::string& geom) {
-    // A loose bound large enough never to clip: the terminal extent floored at 1000 cells so a small
-    // or undetectable terminal can't accidentally bind the result.
+    // A loose bound large enough never to clip: the terminal extent floored at 1000 cells so a
+    // small or undetectable terminal can't accidentally bind the result.
     int loose = std::max(1000, fullTerminalWidth());
     size_t x = geom.find('x');
-    // No box at all: timg still needs a size, and on a pipe with no usable controlling tty it cannot
-    // get one from the terminal. Bound the width to the available columns with a loose height; timg
-    // fits the image inside, so a smaller image keeps its intrinsic size and a larger one is scaled
-    // down to the column budget — the same effect timg's own terminal default would give.
+    // No box at all: timg still needs a size, and on a pipe with no usable controlling tty it
+    // cannot get one from the terminal. Bound the width to the available columns with a loose
+    // height; timg fits the image inside, so a smaller image keeps its intrinsic size and a larger
+    // one is scaled down to the column budget — the same effect timg's own terminal default would
+    // give.
     if (geom.empty() || x == std::string::npos)
         return std::to_string(fullTerminalWidth()) + "x" + std::to_string(loose);
     bool haveW = x > 0;
     bool haveH = x + 1 < geom.size();
-    if (haveW && haveH) return geom;                  // already a full "WxH": leave it
-    if (haveW) return geom + std::to_string(loose);   // "Wx" -> "WxLOOSE"
-    if (haveH) return std::to_string(loose) + geom;   // "xH" -> "LOOSExH"
+    if (haveW && haveH) return geom;                             // already a full "WxH": leave it
+    if (haveW) return geom + std::to_string(loose);              // "Wx" -> "WxLOOSE"
+    if (haveH) return std::to_string(loose) + geom;              // "xH" -> "LOOSExH"
     return std::to_string(loose) + "x" + std::to_string(loose);  // bare "x": both loose
 }
 
@@ -1533,39 +1882,45 @@ std::string completeGeom(const std::string& geom) {
 // read the painted pixel size out of the sixel to compute an exact cell footprint.
 std::string runTimg(const std::string& path, const std::string& geomIn) {
     std::string geom = completeGeom(geomIn);
-    // The -g box arrives in REAL terminal cells, but timg (run headless, stdin detached) sizes it with
-    // its own fixed 9x18 px cell, painting pixels that occupy more of the terminal's narrower cells than
-    // requested. Rescale each axis from real cells to timg cells so the painted pixels match the columns
-    // mdcat reserves. completeGeom always returns a full "WxH", so both fields are present.
+    // The -g box arrives in REAL terminal cells, but timg (run headless, stdin detached) sizes it
+    // with its own fixed 9x18 px cell, painting pixels that occupy more of the terminal's narrower
+    // cells than requested. Rescale each axis from real cells to timg cells so the painted pixels
+    // match the columns mdcat reserves. completeGeom always returns a full "WxH", so both fields
+    // are present.
     if (size_t x = geom.find('x'); x != std::string::npos) {
         CellMetrics cm = cellMetrics();
         int w = std::atoi(geom.substr(0, x).c_str());
         int h = std::atoi(geom.substr(x + 1).c_str());
         if (w > 0 && h > 0)
-            geom = std::to_string(cm.colsToTimgCols(w)) + "x" + std::to_string(cm.rowsToTimgRows(h));
+            geom =
+                std::to_string(cm.colsToTimgCols(w)) + "x" + std::to_string(cm.rowsToTimgRows(h));
     }
     std::ostringstream cmd;
     // -ps : sixel pixelation;  -g <geom> : fit inside the given character-cell box.  The path is
     // passed single-quoted with embedded single quotes escaped, so odd filenames stay safe.
     std::string quoted = "'";
     for (char c : path) {
-        if (c == '\'') quoted += "'\\''";
-        else quoted += c;
+        if (c == '\'')
+            quoted += "'\\''";
+        else
+            quoted += c;
     }
     quoted += "'";
-    // stdin from /dev/null: timg only writes its sixel/Kitty bytes to stdout (the pipe). With stdin left
-    // on the controlling tty, timg puts the terminal into raw mode (no ECHO/ICANON) to query it, then
-    // restores it on exit — but when several timg processes run concurrently (ADR 0003), their
-    // save/restore races and the last one restores a stale "echo off" state, leaving the user's terminal
-    // dead. Detaching stdin stops timg touching terminal modes at all; we already pass an explicit -g
-    // box and protocol, so it has nothing to auto-detect.
-    // -b <bg>: fill the height padding (timg rounds up to a 6px sixel band) and any alpha with the
-    // terminal's background colour instead of timg's default black, which would otherwise paint a dark
-    // line under a light image. Omitted when the terminal didn't answer OSC 11 (timg keeps its default).
+    // stdin from /dev/null: timg only writes its sixel/Kitty bytes to stdout (the pipe). With stdin
+    // left on the controlling tty, timg puts the terminal into raw mode (no ECHO/ICANON) to query
+    // it, then restores it on exit — but when several timg processes run concurrently (ADR 0003),
+    // their save/restore races and the last one restores a stale "echo off" state, leaving the
+    // user's terminal dead. Detaching stdin stops timg touching terminal modes at all; we already
+    // pass an explicit -g box and protocol, so it has nothing to auto-detect. -b <bg>: fill the
+    // height padding (timg rounds up to a 6px sixel band) and any alpha with the terminal's
+    // background colour instead of timg's default black, which would otherwise paint a dark line
+    // under a light image. Omitted when the terminal didn't answer OSC 11 (timg keeps its default).
     std::string bg = queryBackgroundColor();
     std::string bgOpt = bg.empty() ? std::string() : " -b '" + bg + "'";
-    if (!geom.empty()) cmd << "timg -ps" << bgOpt << " -g" << geom << " " << quoted << " </dev/null 2>/dev/null";
-    else               cmd << "timg -ps" << bgOpt << " " << quoted << " </dev/null 2>/dev/null";
+    if (!geom.empty())
+        cmd << "timg -ps" << bgOpt << " -g" << geom << " " << quoted << " </dev/null 2>/dev/null";
+    else
+        cmd << "timg -ps" << bgOpt << " " << quoted << " </dev/null 2>/dev/null";
     FILE* p = popen(cmd.str().c_str(), "r");
     if (!p) return std::string();
     std::string out;
@@ -1578,24 +1933,26 @@ std::string runTimg(const std::string& path, const std::string& geomIn) {
 }
 
 // Run timg to render `path` into the given -g cell box with the KITTY graphics protocol (-pk),
-// returning its stdout: a Kitty APC (ESC _ G a=T,...,q=2,f=100,m=...; <base64 PNG> ESC \), chunked for
-// large images. Unlike the sixel path, timg here DOWNSCALES the image to the -g box with proper
-// interpolation (so the terminal does no quality-losing scaling — VSCode's terminal in particular has
-// no anti-aliasing), and emits a well-formed APC: q=2 on every chunk, correct m= chunking. timg
-// requires a -g box when headless (piped), so completeGeom fills any missing dimension. Returns empty
-// on failure. The caller rewrites the image id to a unique value (see kittyRewriteId).
+// returning its stdout: a Kitty APC (ESC _ G a=T,...,q=2,f=100,m=...; <base64 PNG> ESC \), chunked
+// for large images. Unlike the sixel path, timg here DOWNSCALES the image to the -g box with proper
+// interpolation (so the terminal does no quality-losing scaling — VSCode's terminal in particular
+// has no anti-aliasing), and emits a well-formed APC: q=2 on every chunk, correct m= chunking. timg
+// requires a -g box when headless (piped), so completeGeom fills any missing dimension. Returns
+// empty on failure. The caller rewrites the image id to a unique value (see kittyRewriteId).
 std::string runTimgKitty(const std::string& path, const std::string& geomIn) {
     std::string geom = completeGeom(geomIn);
     if (geom.empty()) geom = "100x100";  // timg -pk needs a box headless; a loose default
     std::string quoted = "'";
     for (char c : path) {
-        if (c == '\'') quoted += "'\\''";
-        else quoted += c;
+        if (c == '\'')
+            quoted += "'\\''";
+        else
+            quoted += c;
     }
     quoted += "'";
     std::ostringstream cmd;
-    // stdin from /dev/null so concurrent timg processes never race on terminal raw-mode save/restore
-    // and leave the tty with echo disabled — see runTimg's note.
+    // stdin from /dev/null so concurrent timg processes never race on terminal raw-mode
+    // save/restore and leave the tty with echo disabled — see runTimg's note.
     cmd << "timg -pk -g" << geom << " " << quoted << " </dev/null 2>/dev/null";
     FILE* p = popen(cmd.str().c_str(), "r");
     if (!p) return std::string();
@@ -1605,17 +1962,18 @@ std::string runTimgKitty(const std::string& path, const std::string& geomIn) {
     while ((got = fread(buf, 1, sizeof buf, p)) > 0) out.append(buf, got);
     int rc = pclose(p);
     if (rc != 0) return std::string();
-    // timg wraps its Kitty output with its own cursor management — a leading "ESC[?25l" (hide cursor)
-    // and a trailing newline + "ESC[?25h" (show cursor). We strip these so the captured bytes are the
-    // bare Kitty APC sequence: mdcat positions and reserves space for the image itself (emitImageParagraph
-    // with DECSC/DECRC), and leaving timg's stray newline in would advance the cursor mid-band and
-    // corrupt the placement of tall, multi-chunk images.
+    // timg wraps its Kitty output with its own cursor management — a leading "ESC[?25l" (hide
+    // cursor) and a trailing newline + "ESC[?25h" (show cursor). We strip these so the captured
+    // bytes are the bare Kitty APC sequence: mdcat positions and reserves space for the image
+    // itself (emitImageParagraph with DECSC/DECRC), and leaving timg's stray newline in would
+    // advance the cursor mid-band and corrupt the placement of tall, multi-chunk images.
     auto strip = [&](const std::string& lead) {
         if (out.compare(0, lead.size(), lead) == 0) out.erase(0, lead.size());
     };
     strip("\033[?25l");
     auto stripTail = [&](const std::string& tail) {
-        if (out.size() >= tail.size() && out.compare(out.size() - tail.size(), tail.size(), tail) == 0)
+        if (out.size() >= tail.size() &&
+            out.compare(out.size() - tail.size(), tail.size(), tail) == 0)
             out.erase(out.size() - tail.size());
     };
     stripTail("\033[?25h");
@@ -1624,26 +1982,28 @@ std::string runTimgKitty(const std::string& path, const std::string& geomIn) {
 }
 
 // A per-run monotonic Kitty image id. timg assigns the SAME id to every render of a given file, so
-// two images in one document would collide — a later transmit replaces the earlier image and re-lays
-// its placement. Handing out a fresh id per image keeps them independent. Atomic so parallel image
-// workers (ADR 0003) can mint ids concurrently without colliding or racing on the counter.
+// two images in one document would collide — a later transmit replaces the earlier image and
+// re-lays its placement. Handing out a fresh id per image keeps them independent. Atomic so
+// parallel image workers (ADR 0003) can mint ids concurrently without colliding or racing on the
+// counter.
 uint32_t nextKittyId() {
     static std::atomic<uint32_t> id{1000};
     return ++id;
 }
 
-// Sentinel kittyId for renderImageBlock: "leave timg's default id; the id is stamped later, in document
-// order, on the writer thread" (ADR 0003 deferred slots). Distinct from 0 (mint now).
+// Sentinel kittyId for renderImageBlock: "leave timg's default id; the id is stamped later, in
+// document order, on the writer thread" (ADR 0003 deferred slots). Distinct from 0 (mint now).
 constexpr uint32_t kKittyIdDefer = 0xFFFFFFFFu;
 
-// Rewrite the i= value on the FIRST Kitty controls segment of `apc` to `id` (byte-exact, leaving the
-// base64 payload and all chunk continuations untouched). timg's output is otherwise already correct
-// (q=2 on every chunk, f=100, proper m= chunking), so this is the only edit mdcat needs to make.
+// Rewrite the i= value on the FIRST Kitty controls segment of `apc` to `id` (byte-exact, leaving
+// the base64 payload and all chunk continuations untouched). timg's output is otherwise already
+// correct (q=2 on every chunk, f=100, proper m= chunking), so this is the only edit mdcat needs to
+// make.
 std::string kittyRewriteId(const std::string& apc, uint32_t id) {
     size_t g = apc.find("\033_G");
     if (g == std::string::npos) return apc;
     size_t keyStart = g + 3;
-    size_t semi = apc.find(';', keyStart);          // controls run up to the first ';'
+    size_t semi = apc.find(';', keyStart);  // controls run up to the first ';'
     if (semi == std::string::npos) return apc;
     size_t ip = apc.find("i=", keyStart);
     if (ip == std::string::npos || ip > semi) return apc;
@@ -1653,30 +2013,35 @@ std::string kittyRewriteId(const std::string& apc, uint32_t id) {
     return apc.substr(0, numStart) + std::to_string(id) + apc.substr(numEnd);
 }
 
-// Renumber the i= id of every Kitty image in `bytes`, in order, with successive ids from nextKittyId().
-// Each image's FIRST chunk carries the controls run with i=; continuation chunks (m=) carry no i= and
-// are left alone, so exactly one fresh id is minted per image. Used by the writer thread (ADR 0003) to
-// stamp ids in document (slot) order, regardless of the order parallel workers produced the bytes —
-// keeping output byte-identical to the serial renderer, which minted ids in document order on one
-// thread. `bytes` may hold zero, one, or many images (a single deferred <img>, or a whole table row).
+// Renumber the i= id of every Kitty image in `bytes`, in order, with successive ids from
+// nextKittyId(). Each image's FIRST chunk carries the controls run with i=; continuation chunks
+// (m=) carry no i= and are left alone, so exactly one fresh id is minted per image. Used by the
+// writer thread (ADR 0003) to stamp ids in document (slot) order, regardless of the order parallel
+// workers produced the bytes — keeping output byte-identical to the serial renderer, which minted
+// ids in document order on one thread. `bytes` may hold zero, one, or many images (a single
+// deferred <img>, or a whole table row).
 std::string kittyRenumberAll(const std::string& bytes) {
     std::string out;
     out.reserve(bytes.size());
     size_t pos = 0;
     for (;;) {
         size_t g = bytes.find("\033_G", pos);
-        if (g == std::string::npos) { out.append(bytes, pos, std::string::npos); break; }
+        if (g == std::string::npos) {
+            out.append(bytes, pos, std::string::npos);
+            break;
+        }
         size_t semi = bytes.find(';', g + 3);
         size_t ip = bytes.find("i=", g + 3);
-        out.append(bytes, pos, g - pos);                         // bytes before this APC
+        out.append(bytes, pos, g - pos);  // bytes before this APC
         if (semi == std::string::npos || ip == std::string::npos || ip > semi) {
-            // No i= in this controls run: a continuation chunk (or not an image). Copy "\033_G" only
-            // and continue scanning just past it.
+            // No i= in this controls run: a continuation chunk (or not an image). Copy "\033_G"
+            // only and continue scanning just past it.
             out.append("\033_G");
             pos = g + 3;
             continue;
         }
-        // An image's first chunk: rewrite its i= to the next document-order id and copy through the ';'.
+        // An image's first chunk: rewrite its i= to the next document-order id and copy through the
+        // ';'.
         out.append(kittyRewriteId(bytes.substr(g, semi - g + 1), nextKittyId()));
         pos = semi + 1;
     }
@@ -1685,18 +2050,18 @@ std::string kittyRenumberAll(const std::string& bytes) {
 
 // Inject (or replace) the cell-footprint controls c=<cols>,r=<rows> on the FIRST Kitty controls
 // segment of `apc`, byte-exact. timg emits no c=/r=, so the terminal would otherwise derive the
-// footprint by dividing the PNG's pixel size by ITS OWN cell size — which differs from the ~9px cell
-// timg assumed when it sized the image (it has no terminal to query on a pipe). That mismatch makes a
-// width-bound table image paint wider than the column mdcat reserved, overlapping the next cell. With
-// c=/r= the terminal scales the image into EXACTLY that cell box, so the painted footprint always
-// equals mdcat's reservation. (iTerm requires BOTH c and r and honours them exactly — verified via
-// tools/probe-kitty-aspect.sh — so we always set both; aspect is preserved because cols and rows are
-// computed from the same painted pixels and the same real cell ratio.)
+// footprint by dividing the PNG's pixel size by ITS OWN cell size — which differs from the ~9px
+// cell timg assumed when it sized the image (it has no terminal to query on a pipe). That mismatch
+// makes a width-bound table image paint wider than the column mdcat reserved, overlapping the next
+// cell. With c=/r= the terminal scales the image into EXACTLY that cell box, so the painted
+// footprint always equals mdcat's reservation. (iTerm requires BOTH c and r and honours them
+// exactly — verified via tools/probe-kitty-aspect.sh — so we always set both; aspect is preserved
+// because cols and rows are computed from the same painted pixels and the same real cell ratio.)
 std::string kittyRewriteFootprint(const std::string& apc, int cols, int rows) {
     if (cols <= 0 || rows <= 0) return apc;
     size_t g = apc.find("\033_G");
     if (g == std::string::npos) return apc;
-    size_t semi = apc.find(';', g + 3);             // controls run up to the first ';'
+    size_t semi = apc.find(';', g + 3);  // controls run up to the first ';'
     if (semi == std::string::npos) return apc;
     // Strip any existing c=/r= keys from the controls run so we never duplicate them.
     std::string ctrls = apc.substr(g + 3, semi - (g + 3));
@@ -1704,7 +2069,8 @@ std::string kittyRewriteFootprint(const std::string& apc, int cols, int rows) {
     size_t i = 0;
     while (i < ctrls.size()) {
         size_t comma = ctrls.find(',', i);
-        std::string kv = ctrls.substr(i, comma == std::string::npos ? std::string::npos : comma - i);
+        std::string kv =
+            ctrls.substr(i, comma == std::string::npos ? std::string::npos : comma - i);
         if (kv.compare(0, 2, "c=") != 0 && kv.compare(0, 2, "r=") != 0) {
             if (!kept.empty()) kept += ',';
             kept += kv;
@@ -1716,27 +2082,28 @@ std::string kittyRewriteFootprint(const std::string& apc, int cols, int rows) {
     return apc.substr(0, g + 3) + kept + footprint + apc.substr(semi);
 }
 
-// Read a PNG's pixel width/height from the IHDR (big-endian uint32s at byte offsets 16 and 20, right
-// after the 8-byte signature + 4-byte length + "IHDR"). `png` is the raw PNG bytes. Returns false if
-// the buffer is too short or not a PNG.
+// Read a PNG's pixel width/height from the IHDR (big-endian uint32s at byte offsets 16 and 20,
+// right after the 8-byte signature + 4-byte length + "IHDR"). `png` is the raw PNG bytes. Returns
+// false if the buffer is too short or not a PNG.
 bool pngSize(const std::string& png, int& w, int& h) {
     if (png.size() < 24) return false;
     static const unsigned char sig[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
     for (int i = 0; i < 8; ++i)
         if (static_cast<unsigned char>(png[i]) != sig[i]) return false;
     auto u32 = [&](size_t o) {
-        return (static_cast<unsigned char>(png[o]) << 24) | (static_cast<unsigned char>(png[o + 1]) << 16) |
-               (static_cast<unsigned char>(png[o + 2]) << 8) | static_cast<unsigned char>(png[o + 3]);
+        return (static_cast<unsigned char>(png[o]) << 24) |
+            (static_cast<unsigned char>(png[o + 1]) << 16) |
+            (static_cast<unsigned char>(png[o + 2]) << 8) | static_cast<unsigned char>(png[o + 3]);
     };
     w = u32(16);
     h = u32(20);
     return w > 0 && h > 0;
 }
 
-// Decode the base64 PNG payload out of a Kitty APC (concatenating all chunks) and read its pixel size,
-// so the caller can compute the exact cell footprint timg's downscaled image will occupy. Returns
-// false if no PNG could be recovered. Only a small prefix is needed (the IHDR), but timg's first chunk
-// already contains it, so we decode just the first chunk's payload.
+// Decode the base64 PNG payload out of a Kitty APC (concatenating all chunks) and read its pixel
+// size, so the caller can compute the exact cell footprint timg's downscaled image will occupy.
+// Returns false if no PNG could be recovered. Only a small prefix is needed (the IHDR), but timg's
+// first chunk already contains it, so we decode just the first chunk's payload.
 bool kittyImageSize(const std::string& apc, int& pw, int& ph) {
     size_t g = apc.find("\033_G");
     if (g == std::string::npos) return false;
@@ -1746,7 +2113,8 @@ bool kittyImageSize(const std::string& apc, int& pw, int& ph) {
     if (end == std::string::npos) return false;
     std::string b64 = apc.substr(semi + 1, end - semi - 1);
     // Minimal base64 decode (standard alphabet, no whitespace in Kitty payloads).
-    static const std::string tbl = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    static const std::string tbl =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     std::string out;
     int val = 0, bits = -8;
     for (char c : b64) {
@@ -1755,7 +2123,10 @@ bool kittyImageSize(const std::string& apc, int& pw, int& ph) {
         if (pos == std::string::npos) continue;
         val = (val << 6) | static_cast<int>(pos);
         bits += 6;
-        if (bits >= 0) { out.push_back(static_cast<char>((val >> bits) & 0xFF)); bits -= 8; }
+        if (bits >= 0) {
+            out.push_back(static_cast<char>((val >> bits) & 0xFF));
+            bits -= 8;
+        }
         if (out.size() >= 24) break;  // enough for the IHDR
     }
     return pngSize(out, pw, ph);
@@ -1787,13 +2158,12 @@ bool sixelPixelSize(const std::string& sixel, int& pw, int& ph) {
 // A fixed pool of N = hardware-concurrency workers that run image-conversion tasks (timg / mmdc
 // subprocesses) off the render thread. Each task is a std::function returning void and captures its
 // own inputs/outputs, so the pool stays agnostic about ImageJob shape; callers submit() a packaged
-// task and wait on the returned future. For now (step 2) call sites submit and immediately .get(), so
-// behaviour and output are unchanged — later steps overlap the work.
+// task and wait on the returned future. For now (step 2) call sites submit and immediately .get(),
+// so behaviour and output are unchanged — later steps overlap the work.
 class ThreadPool {
 public:
     explicit ThreadPool(unsigned n) {
-        for (unsigned i = 0; i < n; ++i)
-            workers_.emplace_back([this] { workerLoop(); });
+        for (unsigned i = 0; i < n; ++i) workers_.emplace_back([this] { workerLoop(); });
     }
     ~ThreadPool() {
         {
@@ -1860,32 +2230,42 @@ ThreadPool& imagePool() {
 // row just below the image, so a sixel painted at the top of a reserved block lands within it. The
 // footprint is computed from the painted pixel size read back out of the sixel (which reflects
 // timg's aspect-preserving fit), divided by the real cell size — not from the requested -g box.
-// `kittyId` controls the Kitty image id stamped on a successful Kitty render: zero mints one now from
-// nextKittyId() (the table and synchronous paths, which run in encounter order); a nonzero value is
-// used verbatim; the sentinel kKittyIdDefer leaves timg's default id untouched, so a deferred slot
-// (ADR 0003) can stamp a document-order id on the writer thread after parallel — possibly out-of-order
-// — conversion completes, keeping output byte-identical to the serial renderer.
-bool renderImageBlock(const std::string& text, int availWidth, const std::string& fileDir,
-                      std::string& out, int& cellWidth, int& cellHeight,
-                      bool forceWidthBound = false, uint32_t kittyId = 0) {
+// `kittyId` controls the Kitty image id stamped on a successful Kitty render: zero mints one now
+// from nextKittyId() (the table and synchronous paths, which run in encounter order); a nonzero
+// value is used verbatim; the sentinel kKittyIdDefer leaves timg's default id untouched, so a
+// deferred slot (ADR 0003) can stamp a document-order id on the writer thread after parallel —
+// possibly out-of-order — conversion completes, keeping output byte-identical to the serial
+// renderer.
+bool renderImageBlock(const std::string& text,
+                      int availWidth,
+                      const std::string& fileDir,
+                      std::string& out,
+                      int& cellWidth,
+                      int& cellHeight,
+                      bool forceWidthBound = false,
+                      uint32_t kittyId = 0) {
     std::map<std::string, std::string> attrs;
     if (!parseImgTag(text, attrs) && !parseMdImage(text, attrs)) return false;
 
     auto srcIt = attrs.find("src");
 
-    // Fall back to a one-line text block when an image can't (or shouldn't) be drawn: the alt text if
-    // present, else the source filename, else the literal tag. Used both for error cases and for
+    // Fall back to a one-line text block when an image can't (or shouldn't) be drawn: the alt text
+    // if present, else the source filename, else the literal tag. Used both for error cases and for
     // terminals that cannot display graphics at all.
     auto fallback = [&](const std::string& reason) {
         (void)reason;
         auto altIt = attrs.find("alt");
         std::string label;
-        if (altIt != attrs.end() && !altIt->second.empty()) label = altIt->second;
-        else if (srcIt != attrs.end() && !srcIt->second.empty()) label = srcIt->second;
-        else label = text;
+        if (altIt != attrs.end() && !altIt->second.empty())
+            label = altIt->second;
+        else if (srcIt != attrs.end() && !srcIt->second.empty())
+            label = srcIt->second;
+        else
+            label = text;
         auto hrefIt = attrs.find("href");
         if (hrefIt != attrs.end() && !hrefIt->second.empty())
-            out = "\033]8;;" + resolveLinkTarget(hrefIt->second) + "\033\\" + renderInline(label) + "\033]8;;\033\\";
+            out = "\033]8;;" + resolveLinkTarget(hrefIt->second) + "\033\\" + renderInline(label) +
+                "\033]8;;\033\\";
         else
             out = renderInline(label);
         cellWidth = displayWidth(out);
@@ -1904,10 +2284,10 @@ bool renderImageBlock(const std::string& text, int availWidth, const std::string
 
     if (!readImageSize(src)) return fallback("not a supported image");
 
-    // Target pixel size: an explicit width/height overrides the intrinsic size. With only one of the
-    // two given, the other is derived to preserve the aspect ratio; with both, the ratio is free.
-    // When the intrinsic size is unknown (non-PNG formats return 0×0), only attribute dimensions are
-    // available; if neither is given we fall back to a width-bound geometry below.
+    // Target pixel size: an explicit width/height overrides the intrinsic size. With only one of
+    // the two given, the other is derived to preserve the aspect ratio; with both, the ratio is
+    // free. When the intrinsic size is unknown (non-PNG formats return 0×0), only attribute
+    // dimensions are available; if neither is given we fall back to a width-bound geometry below.
     auto attrInt = [&](const char* key, int& dst) {
         auto it = attrs.find(key);
         if (it == attrs.end()) return false;
@@ -1934,49 +2314,55 @@ bool renderImageBlock(const std::string& text, int availWidth, const std::string
     int hCells = cell.pxToRowsNominal(th);
     std::string geom;
     if (forceWidthBound && availWidth > 0)
-        geom = std::to_string(availWidth) + "x";          // caller demands an exact column width
+        geom = std::to_string(availWidth) + "x";  // caller demands an exact column width
     else if (availWidth > 0 && wCells > availWidth)
-        geom = std::to_string(availWidth) + "x";          // width-bound: intrinsic size too wide
+        geom = std::to_string(availWidth) + "x";  // width-bound: intrinsic size too wide
     else if (haveH && !haveW)
-        geom = "x" + std::to_string(hCells);              // height-bound: width follows aspect
+        geom = "x" + std::to_string(hCells);  // height-bound: width follows aspect
     else if (haveW || haveH)
         geom = std::to_string(wCells) + "x" + std::to_string(hCells);  // explicit box
     // else: geom stays empty — no -g, timg picks its own size
 
     std::string img;
     if (graphicsBackend() == GraphicsBackend::Kitty) {
-        // Kitty path: timg downscales into the -g box and emits a chunked Kitty APC; we only rewrite
-        // its image id to a unique value. The footprint is the painted pixel size (read from the
-        // embedded PNG's IHDR) converted with the precise area ratio, falling back to requested cells.
+        // Kitty path: timg downscales into the -g box and emits a chunked Kitty APC; we only
+        // rewrite its image id to a unique value. The footprint is the painted pixel size (read
+        // from the embedded PNG's IHDR) converted with the precise area ratio, falling back to
+        // requested cells.
         img = runTimgKitty(src, geom);
         if (img.empty()) return fallback("timg failed");
         if (kittyId != kKittyIdDefer) img = kittyRewriteId(img, kittyId ? kittyId : nextKittyId());
         int paintedW = 0, paintedH = 0;
         if (kittyImageSize(img, paintedW, paintedH)) {
-            // Width is the binding axis (it is what a table column reserves, and the axis the original
-            // overflow was on): the column count is the painted width in cells, but never more than the
-            // caller's cap — timg sizes the -g box with a fixed ~9px cell, so the painted pixels can map
-            // to a column or two more than reserved (the 38-vs-33 case in table layout). Capping here,
-            // then pinning c=/r= below, makes the terminal scale into exactly that box.
+            // Width is the binding axis (it is what a table column reserves, and the axis the
+            // original overflow was on): the column count is the painted width in cells, but never
+            // more than the caller's cap — timg sizes the -g box with a fixed ~9px cell, so the
+            // painted pixels can map to a column or two more than reserved (the 38-vs-33 case in
+            // table layout). Capping here, then pinning c=/r= below, makes the terminal scale into
+            // exactly that box.
             cellWidth = cell.pxToCols(paintedW);
             if (availWidth > 0 && cellWidth > availWidth) cellWidth = availWidth;
-            // Derive rows from the columns and the painted image's true aspect, rounded to NEAREST (not
-            // ceil): ceil inflates one axis and, when the other axis can't follow, visibly distorts a
-            // small image (a 3-column square would become c=3,r=2). Round-nearest keeps c:r as close to
-            // the source aspect as the cell grid allows. realCellW/H give the terminal's actual cell
-            // shape, so the c:r ratio matches the pixels the terminal will blit into.
+            // Derive rows from the columns and the painted image's true aspect, rounded to NEAREST
+            // (not ceil): ceil inflates one axis and, when the other axis can't follow, visibly
+            // distorts a small image (a 3-column square would become c=3,r=2). Round-nearest keeps
+            // c:r as close to the source aspect as the cell grid allows. realCellW/H give the
+            // terminal's actual cell shape, so the c:r ratio matches the pixels the terminal will
+            // blit into.
             double aspect = paintedW > 0 ? static_cast<double>(paintedH) / paintedW : 1.0;
-            double rExact = static_cast<double>(cellWidth) * cell.realCellW() * aspect / cell.realCellH();
+            double rExact =
+                static_cast<double>(cellWidth) * cell.realCellW() * aspect / cell.realCellH();
             cellHeight = std::max(1, static_cast<int>(rExact + 0.5));
         } else {
             cellWidth = wCells;
             cellHeight = hCells;
         }
-        // Pin the terminal's cell footprint to the one mdcat reserves, so the image never overflows its
-        // column or row band regardless of the local terminal's real cell size. See kittyRewriteFootprint.
+        // Pin the terminal's cell footprint to the one mdcat reserves, so the image never overflows
+        // its column or row band regardless of the local terminal's real cell size. See
+        // kittyRewriteFootprint.
         img = kittyRewriteFootprint(img, cellWidth, cellHeight);
     } else {
-        // Sixel path (unchanged): timg paints sixel; the footprint comes from the sixel raster header.
+        // Sixel path (unchanged): timg paints sixel; the footprint comes from the sixel raster
+        // header.
         img = runTimg(src, geom);
         if (img.empty()) return fallback("timg failed");
         int paintedW = 0, paintedH = 0;
@@ -2009,24 +2395,36 @@ bool renderImageBlock(const std::string& text, int availWidth, const std::string
 // (a diagram narrower than the page renders at its natural, often tiny, size on a HiDPI terminal),
 // we render once to measure the natural width, then re-render at a -s (scale) chosen to enlarge a
 // small diagram toward the column budget — this is what actually fixes "too small" on iTerm2.
-bool renderMermaidBlock(const std::vector<std::string>& lines, int availWidth, std::string& out,
-                        int& cellWidth, int& cellHeight, uint32_t kittyId = 0) {
+bool renderMermaidBlock(const std::vector<std::string>& lines,
+                        int availWidth,
+                        std::string& out,
+                        int& cellWidth,
+                        int& cellHeight,
+                        uint32_t kittyId = 0) {
     if (!mmdcAvailable()) return false;
 
     // Unique temp paths for the mermaid source and the rendered PNG. mkstemp creates the files; we
-    // only need their names (mmdc writes the PNG itself), so the descriptors are closed immediately.
+    // only need their names (mmdc writes the PNG itself), so the descriptors are closed
+    // immediately.
     char srcPath[] = "/tmp/mdcat-mermaid-XXXXXX";
     char pngPath[] = "/tmp/mdcat-mermaid-XXXXXX.png";
     int sfd = mkstemp(srcPath);
     if (sfd < 0) return false;
     int pfd = mkstemps(pngPath, 4);  // keep the ".png" suffix so it is a valid image extension
-    if (pfd < 0) { close(sfd); unlink(srcPath); return false; }
+    if (pfd < 0) {
+        close(sfd);
+        unlink(srcPath);
+        return false;
+    }
     close(pfd);
 
     // Write the diagram source to the temp file.
     {
         std::string body;
-        for (const auto& l : lines) { body += l; body += '\n'; }
+        for (const auto& l : lines) {
+            body += l;
+            body += '\n';
+        }
         ssize_t total = 0, len = static_cast<ssize_t>(body.size());
         while (total < len) {
             ssize_t w = write(sfd, body.data() + total, static_cast<size_t>(len - total));
@@ -2036,11 +2434,19 @@ bool renderMermaidBlock(const std::vector<std::string>& lines, int availWidth, s
         close(sfd);
     }
 
-    auto cleanup = [&] { unlink(srcPath); unlink(pngPath); };
+    auto cleanup = [&] {
+        unlink(srcPath);
+        unlink(pngPath);
+    };
 
     auto shquote = [](const char* p) {
         std::string q = "'";
-        for (const char* c = p; *c; ++c) { if (*c == '\'') q += "'\\''"; else q += *c; }
+        for (const char* c = p; *c; ++c) {
+            if (*c == '\'')
+                q += "'\\''";
+            else
+                q += *c;
+        }
         q += "'";
         return q;
     };
@@ -2065,7 +2471,7 @@ bool renderMermaidBlock(const std::vector<std::string>& lines, int availWidth, s
         // -q suppresses mmdc's progress chatter so it never pollutes the rendered output; stderr is
         // discarded as a further guard.
         std::string cmd = chromeEnv + "mmdc -q" + opts + " -i " + shquote(srcPath) + " -e png -o " +
-                          shquote(pngPath) + " </dev/null >/dev/null 2>&1";
+            shquote(pngPath) + " </dev/null >/dev/null 2>&1";
         return std::system(cmd.c_str()) == 0;
     };
 
@@ -2080,48 +2486,68 @@ bool renderMermaidBlock(const std::vector<std::string>& lines, int availWidth, s
     std::string bgOpt = bg.empty() ? std::string() : " -b '" + bg + "'";
     if (darkBackground()) bgOpt += " --theme dark";
 
-    // First render at scale 1 to learn the diagram's natural pixel width. mmdc's -w is only a maximum
-    // page width: a diagram whose layout is narrower than -w renders at its natural size, which on a
-    // HiDPI terminal is a tiny sixel. So if the natural width is well under the available width, pick
-    // a -s (Puppeteer scale) that enlarges it to roughly fill the column budget and re-render. Scale
-    // is capped at 2 so a small diagram is not blown up to fill most of the screen.
-    if (!runMmdc(widthOpt + bgOpt)) { cleanup(); return false; }
+    // First render at scale 1 to learn the diagram's natural pixel width. mmdc's -w is only a
+    // maximum page width: a diagram whose layout is narrower than -w renders at its natural size,
+    // which on a HiDPI terminal is a tiny sixel. So if the natural width is well under the
+    // available width, pick a -s (Puppeteer scale) that enlarges it to roughly fill the column
+    // budget and re-render. Scale is capped at 2 so a small diagram is not blown up to fill most of
+    // the screen.
+    if (!runMmdc(widthOpt + bgOpt)) {
+        cleanup();
+        return false;
+    }
     int naturalW = pngWidth(pngPath);
     if (availPx > 0 && naturalW > 0) {
         int scale = availPx / naturalW;
         if (scale > 2) scale = 2;
         if (scale >= 2) {
-            if (!runMmdc(widthOpt + bgOpt + " -s " + std::to_string(scale))) { cleanup(); return false; }
+            if (!runMmdc(widthOpt + bgOpt + " -s " + std::to_string(scale))) {
+                cleanup();
+                return false;
+            }
         }
     }
 
     // Hand the rendered PNG to the <img> pipeline as an absolute path (so gFileDir resolution is a
     // no-op), reusing all of its geometry and sixel-capture logic.
     std::string tag = "<img src=\"" + std::string(pngPath) + "\">";
-    // pngPath is absolute, so fileDir resolution is a no-op; pass empty. Forward kittyId so a deferred
-    // mermaid slot gets a document-order Kitty id (ADR 0003).
-    bool ok = renderImageBlock(tag, availWidth, /*fileDir=*/std::string(), out, cellWidth, cellHeight,
-                               /*forceWidthBound=*/false, kittyId);
+    // pngPath is absolute, so fileDir resolution is a no-op; pass empty. Forward kittyId so a
+    // deferred mermaid slot gets a document-order Kitty id (ADR 0003).
+    bool ok = renderImageBlock(tag,
+                               availWidth,
+                               /*fileDir=*/std::string(),
+                               out,
+                               cellWidth,
+                               cellHeight,
+                               /*forceWidthBound=*/false,
+                               kittyId);
     cleanup();
     return ok && !out.empty() && cellHeight > 0;
 }
 
 // Whether `s` is sixel image data rather than a text fallback: a sixel contains a DCS introducer
 // (ESC P), which rendered inline text never does (it uses only ESC[ for SGR and ESC] for OSC 8).
-bool isSixelImage(const std::string& s) { return s.find("\033P") != std::string::npos; }
+bool isSixelImage(const std::string& s) {
+    return s.find("\033P") != std::string::npos;
+}
 
 // Whether `s` is Kitty graphics image data: a Kitty APC begins ESC _ G.
-bool isKittyImage(const std::string& s) { return s.find("\033_G") != std::string::npos; }
+bool isKittyImage(const std::string& s) {
+    return s.find("\033_G") != std::string::npos;
+}
 
 // Whether `s` is an inline image (either protocol) rather than a one-line text fallback.
-bool isImageBlock(const std::string& s) { return isSixelImage(s) || isKittyImage(s); }
+bool isImageBlock(const std::string& s) {
+    return isSixelImage(s) || isKittyImage(s);
+}
 
-// Replay a captured image (sixel or Kitty APC) at the cursor's current position, then leave the cursor
-// exactly where it started. We bracket the bytes with DECSC/DECRC (ESC 7 / ESC 8): save the position,
-// paint, restore. This is terminal-independent — where an image leaves the cursor differs between
-// terminals (VSCode advances to the row below; iTerm does not), but the saved position is restored
-// either way — so callers can move deterministically afterward without depending on that behaviour.
-// Works for both protocols: neither moves the cursor predictably, so save/restore is the right tool.
+// Replay a captured image (sixel or Kitty APC) at the cursor's current position, then leave the
+// cursor exactly where it started. We bracket the bytes with DECSC/DECRC (ESC 7 / ESC 8): save the
+// position, paint, restore. This is terminal-independent — where an image leaves the cursor differs
+// between terminals (VSCode advances to the row below; iTerm does not), but the saved position is
+// restored either way — so callers can move deterministically afterward without depending on that
+// behaviour. Works for both protocols: neither moves the cursor predictably, so save/restore is the
+// right tool.
 void replaySixel(const std::string& image, std::ostream& out) {
     out << "\0337" << image << "\0338";
 }
@@ -2138,8 +2564,10 @@ std::string imageParagraphBytes(const std::string& image, int rows) {
     std::string s;
     s += std::string(static_cast<size_t>(rows), '\n');  // reserve the band (may scroll)
     s += "\033[" + std::to_string(rows) + 'A';          // back to the band's top row, column 1
-    s += "\0337"; s += image; s += "\0338";             // paint; cursor restored to band top
-    s += "\033[" + std::to_string(rows) + 'B' + '\r';   // down to the band bottom, column 1
+    s += "\0337";
+    s += image;
+    s += "\0338";                                      // paint; cursor restored to band top
+    s += "\033[" + std::to_string(rows) + 'B' + '\r';  // down to the band bottom, column 1
     return s;
 }
 
@@ -2147,10 +2575,11 @@ void emitImageParagraph(const std::string& image, int rows, std::ostream& out) {
     out << imageParagraphBytes(image, rows);
 }
 
-// The non-tty output sink, defined near main(). If `out` is backed by one, deferred image slots can be
-// reserved on it (ADR 0003); otherwise (tty buffer, or a recursive ostringstream) images render
-// synchronously inline. Forward-declared (with thin free-function wrappers, defined after the class)
-// so the deferred call sites here can detect the sink and reserve a slot without the complete type.
+// The non-tty output sink, defined near main(). If `out` is backed by one, deferred image slots can
+// be reserved on it (ADR 0003); otherwise (tty buffer, or a recursive ostringstream) images render
+// synchronously inline. Forward-declared (with thin free-function wrappers, defined after the
+// class) so the deferred call sites here can detect the sink and reserve a slot without the
+// complete type.
 class SlotSink;
 SlotSink* asSlotSink(std::ostream& out);
 void slotDeferImage(SlotSink* sink, std::future<std::string> fut);
@@ -2175,8 +2604,14 @@ size_t unitLength(const std::string& s, size_t i) {
     if (c == kEsc && i + 1 < s.size() && s[i + 1] == ']') {  // OSC: ESC ] ... BEL or ST
         size_t j = i + 2;
         while (j < s.size()) {
-            if (static_cast<unsigned char>(s[j]) == 0x07) { ++j; break; }
-            if (s[j] == kEsc && j + 1 < s.size() && s[j + 1] == '\\') { j += 2; break; }
+            if (static_cast<unsigned char>(s[j]) == 0x07) {
+                ++j;
+                break;
+            }
+            if (s[j] == kEsc && j + 1 < s.size() && s[j + 1] == '\\') {
+                j += 2;
+                break;
+            }
             ++j;
         }
         return j - i;
@@ -2189,13 +2624,16 @@ size_t unitLength(const std::string& s, size_t i) {
     if (inRange(cp, 0x1F1E6, 0x1F1FF) && j < s.size()) {
         uint32_t cp2;
         size_t adv2 = static_cast<size_t>(decodeUtf8(s, j, cp2));
-        if (inRange(cp2, 0x1F1E6, 0x1F1FF)) { cp = cp2; j += adv2; }
+        if (inRange(cp2, 0x1F1E6, 0x1F1FF)) {
+            cp = cp2;
+            j += adv2;
+        }
     }
     while (j < s.size()) {
         uint32_t next;
         size_t adv = static_cast<size_t>(decodeUtf8(s, j, next));
-        bool zwj = (cp == 0x200D);                 // previous unit ended in a zero-width joiner
-        if (codePointWidth(next) == 0 || zwj) {    // a zero-width follower, or the char after a ZWJ
+        bool zwj = (cp == 0x200D);               // previous unit ended in a zero-width joiner
+        if (codePointWidth(next) == 0 || zwj) {  // a zero-width follower, or the char after a ZWJ
             j += adv;
             cp = next;
             continue;
@@ -2206,25 +2644,27 @@ size_t unitLength(const std::string& s, size_t i) {
 }
 
 // Keep ANSI styling from bleeding across the line breaks that reflow (or table layout) introduces.
-// A code span carries a background colour (kCodeOn .. kCodeOff); if a span wraps, the line would end
-// with the background still on and paint gray to the right edge of the terminal. Walk the text line
-// by line, tracking whether a code span is open at each '\n': close it before the break and reopen
-// it after, so each line is self-contained and no background extends past its text.
+// A code span carries a background colour (kCodeOn .. kCodeOff); if a span wraps, the line would
+// end with the background still on and paint gray to the right edge of the terminal. Walk the text
+// line by line, tracking whether a code span is open at each '\n': close it before the break and
+// reopen it after, so each line is self-contained and no background extends past its text.
 std::string closeStylesAtLineBreaks(const std::string& s) {
     std::string out;
     out.reserve(s.size());
     bool inCode = false;
     for (size_t i = 0; i < s.size();) {
         if (s[i] == '\n') {
-            if (inCode) out += kCodeOff;      // close the span at end of line
+            if (inCode) out += kCodeOff;  // close the span at end of line
             out += '\n';
-            if (inCode) out += kCodeOn;        // reopen it at the start of the next line
+            if (inCode) out += kCodeOn;  // reopen it at the start of the next line
             ++i;
             continue;
         }
         size_t len = unitLength(s, i);
-        if (s.compare(i, kCodeOn.size(), kCodeOn) == 0) inCode = true;
-        else if (s.compare(i, kCodeOff.size(), kCodeOff) == 0) inCode = false;
+        if (s.compare(i, kCodeOn.size(), kCodeOn) == 0)
+            inCode = true;
+        else if (s.compare(i, kCodeOff.size(), kCodeOff) == 0)
+            inCode = false;
         out.append(s, i, len);
         i += len;
     }
@@ -2239,12 +2679,16 @@ std::string reflow(const std::string& s, int width) {
     if (width < 1) width = 1;
 
     // Split into whitespace-separated words; escapes travel with the word they are attached to. A
-    // '\n' (from a <br> hard break) is kept as a standalone "\n" word that forces a line break below.
+    // '\n' (from a <br> hard break) is kept as a standalone "\n" word that forces a line break
+    // below.
     std::vector<std::string> words;
     std::string cur;
     for (size_t i = 0; i < s.size();) {
         if (s[i] == ' ' || s[i] == '\n') {
-            if (!cur.empty()) { words.push_back(cur); cur.clear(); }
+            if (!cur.empty()) {
+                words.push_back(cur);
+                cur.clear();
+            }
             if (s[i] == '\n') words.push_back("\n");
             ++i;
         } else {
@@ -2256,8 +2700,8 @@ std::string reflow(const std::string& s, int width) {
     if (!cur.empty()) words.push_back(cur);
 
     std::string out;
-    int lineWidth = 0;          // display columns already on the current line
-    bool lineEmpty = true;      // nothing placed on the current line yet
+    int lineWidth = 0;      // display columns already on the current line
+    bool lineEmpty = true;  // nothing placed on the current line yet
     for (std::string w : words) {
         if (w == "\n") {  // forced hard break from a <br>
             out += '\n';
@@ -2267,11 +2711,15 @@ std::string reflow(const std::string& s, int width) {
         }
         // A word that cannot fit on a line by itself is hard-cut into width-sized pieces.
         while (displayWidth(w) > width) {
-            if (!lineEmpty) { out += '\n'; lineWidth = 0; lineEmpty = true; }
+            if (!lineEmpty) {
+                out += '\n';
+                lineWidth = 0;
+                lineEmpty = true;
+            }
             std::string piece;
             int pieceWidth = 0;
             size_t i = 0;
-            for (; i < w.size(); ) {
+            for (; i < w.size();) {
                 size_t len = unitLength(w, i);
                 int cw = displayWidth(w.substr(i, len));  // 0 for escape, 1 normal, 2 wide
                 if (pieceWidth + cw > width) break;
@@ -2280,7 +2728,8 @@ std::string reflow(const std::string& s, int width) {
                 i += len;
             }
             // A single unit wider than the whole line (a width-2 grapheme when width==1) fits in no
-            // piece. Place it anyway — overflowing one column beats looping forever (w never shrinks).
+            // piece. Place it anyway — overflowing one column beats looping forever (w never
+            // shrinks).
             if (i == 0) {
                 size_t len = unitLength(w, 0);
                 piece.append(w, 0, len);
@@ -2296,7 +2745,10 @@ std::string reflow(const std::string& s, int width) {
             lineWidth = 0;
             lineEmpty = true;
         }
-        if (!lineEmpty) { out += ' '; ++lineWidth; }
+        if (!lineEmpty) {
+            out += ' ';
+            ++lineWidth;
+        }
         out += w;
         lineWidth += ww;
         lineEmpty = false;
@@ -2322,24 +2774,33 @@ void emitParagraph(const std::vector<std::string>& lines, std::ostream& out) {
     int availW = terminalWidth();
     std::string fileDir = gFileDir;
     // Quick non-rendering test: is this paragraph an image tag at all? parseImgTag/parseMdImage are
-    // pure and cheap, so checking here avoids submitting a job for ordinary paragraphs. (A graphics-
-    // capable check is implicit — renderImageBlock falls back to text when graphics are unavailable.)
+    // pure and cheap, so checking here avoids submitting a job for ordinary paragraphs. (A
+    // graphics- capable check is implicit — renderImageBlock falls back to text when graphics are
+    // unavailable.)
     {
         std::map<std::string, std::string> probe;
         bool isImgTag = parseImgTag(imgText, probe) || parseMdImage(imgText, probe);
         if (isImgTag) {
-            // Deferred slot (non-tty): submit the conversion, reserve an ordered slot for its framed
-            // bytes, and return immediately so later blocks/images proceed in parallel. The worker
-            // produces the exact bytes this site would have written: framed image, or text fallback.
+            // Deferred slot (non-tty): submit the conversion, reserve an ordered slot for its
+            // framed bytes, and return immediately so later blocks/images proceed in parallel. The
+            // worker produces the exact bytes this site would have written: framed image, or text
+            // fallback.
             if (SlotSink* sink = asSlotSink(out)) {
                 // Defer the Kitty id: the worker leaves timg's default id and the writer stamps a
-                // document-order id when it drains this slot, so out-of-order completion stays serial-
-                // identical (see kKittyIdDefer and SlotSink::deferImage's stampKittyId).
+                // document-order id when it drains this slot, so out-of-order completion stays
+                // serial- identical (see kKittyIdDefer and SlotSink::deferImage's stampKittyId).
                 std::future<std::string> fut = imagePool().submit([imgText, availW, fileDir] {
                     std::string image;
                     int iw = 0, ih = 0;
-                    if (!renderImageBlock(imgText, availW, fileDir, image, iw, ih,
-                                          /*forceWidthBound=*/false, kKittyIdDefer) || image.empty())
+                    if (!renderImageBlock(imgText,
+                                          availW,
+                                          fileDir,
+                                          image,
+                                          iw,
+                                          ih,
+                                          /*forceWidthBound=*/false,
+                                          kKittyIdDefer) ||
+                        image.empty())
                         return std::string();
                     if (isImageBlock(image)) return imageParagraphBytes(image, ih);
                     return image + "\n";  // one-line text fallback
@@ -2347,15 +2808,19 @@ void emitParagraph(const std::vector<std::string>& lines, std::ostream& out) {
                 slotDeferImage(sink, std::move(fut));
                 return;
             }
-            // Synchronous path (tty buffer or recursive ostringstream): render now and write inline.
+            // Synchronous path (tty buffer or recursive ostringstream): render now and write
+            // inline.
             std::string image;
             int iw = 0, ih = 0;
-            if (imagePool().submit([&] {
-                    return renderImageBlock(imgText, availW, fileDir, image, iw, ih);
-                }).get()) {
+            if (imagePool()
+                    .submit(
+                        [&] { return renderImageBlock(imgText, availW, fileDir, image, iw, ih); })
+                    .get()) {
                 if (image.empty()) return;
-                if (isImageBlock(image)) emitImageParagraph(image, ih, out);
-                else                     out << image << '\n';   // one-line text fallback
+                if (isImageBlock(image))
+                    emitImageParagraph(image, ih, out);
+                else
+                    out << image << '\n';  // one-line text fallback
                 return;
             }
         }
@@ -2365,8 +2830,8 @@ void emitParagraph(const std::vector<std::string>& lines, std::ostream& out) {
     // independently within the available width.
     std::string trimmed = trim(joined);
     bool blockMath = trimmed.size() >= 4 && trimmed.compare(0, 2, "$$") == 0 &&
-                     trimmed.compare(trimmed.size() - 2, 2, "$$") == 0 &&
-                     trimmed.find("$$", 2) == trimmed.size() - 2;
+        trimmed.compare(trimmed.size() - 2, 2, "$$") == 0 &&
+        trimmed.find("$$", 2) == trimmed.size() - 2;
 
     std::string reflowed = reflow(renderInline(joined), terminalWidth());
     if (reflowed.empty()) return;
@@ -2395,7 +2860,8 @@ void emitThematicBreak(std::ostream& out) {
     out << horizontalLine(terminalWidth()) << '\n';
 }
 
-void emitCodeBlock(const std::vector<std::string>& lines, const std::string& lang,
+void emitCodeBlock(const std::vector<std::string>& lines,
+                   const std::string& lang,
                    std::ostream& out) {
     // Fenced code: print with the light-gray background used for inline code, padded to the
     // width of the widest line so the block reads as a solid panel.  Syntax highlighting is
@@ -2409,9 +2875,10 @@ void emitCodeBlock(const std::vector<std::string>& lines, const std::string& lan
     for (const auto& l : lines) maxw = std::max(maxw, displayWidth(l));
     // Clamp the panel width so a row (2-space margins + content) never exceeds the terminal width.
     // Code lines are emitted verbatim (never reflowed), so a line longer than this still overflows
-    // and wraps — that is unavoidable — but short lines must not be over-padded to the widest line's
-    // width, which would push them past the edge and make the pager wrap them into phantom rows with
-    // a broken background (gmore renders into a fixed-width grid; the terminal soft-wraps under cat).
+    // and wraps — that is unavoidable — but short lines must not be over-padded to the widest
+    // line's width, which would push them past the edge and make the pager wrap them into phantom
+    // rows with a broken background (gmore renders into a fixed-width grid; the terminal soft-wraps
+    // under cat).
     maxw = std::min(maxw, std::max(1, terminalWidth() - 4));
     for (const auto& l : highlighted) {
         out << kCodeOn << "  " << padTo(l, maxw) << "  " << kAttrOff << kCodeOff << '\n';
@@ -2423,9 +2890,12 @@ void emitCodeBlock(const std::vector<std::string>& lines, const std::string& lan
 bool isTableDelimiterRow(const std::string& line) {
     bool hasDash = false, hasPipe = false;
     for (char c : line) {
-        if (c == '-') hasDash = true;
-        else if (c == '|') hasPipe = true;
-        else if (c != ':' && c != ' ' && c != '\t') return false;
+        if (c == '-')
+            hasDash = true;
+        else if (c == '|')
+            hasPipe = true;
+        else if (c != ':' && c != ' ' && c != '\t')
+            return false;
     }
     return hasDash && hasPipe;
 }
@@ -2440,8 +2910,16 @@ std::vector<std::string> splitTableRow(const std::string& raw) {
     std::vector<std::string> cells;
     std::string cur;
     for (size_t i = b; i < e; ++i) {
-        if (row[i] == '\\' && i + 1 < e && row[i + 1] == '|') { cur += '|'; ++i; continue; }
-        if (row[i] == '|') { cells.push_back(trim(cur)); cur.clear(); continue; }
+        if (row[i] == '\\' && i + 1 < e && row[i + 1] == '|') {
+            cur += '|';
+            ++i;
+            continue;
+        }
+        if (row[i] == '|') {
+            cells.push_back(trim(cur));
+            cur.clear();
+            continue;
+        }
         cur += row[i];
     }
     cells.push_back(trim(cur));
@@ -2457,9 +2935,12 @@ std::vector<Align> parseTableAlignment(const std::string& delimiter) {
         std::string c = trim(cell);
         bool left = !c.empty() && c.front() == ':';
         bool right = !c.empty() && c.back() == ':';
-        if (left && right) aligns.push_back(Align::Center);
-        else if (right)    aligns.push_back(Align::Right);
-        else               aligns.push_back(Align::Left);
+        if (left && right)
+            aligns.push_back(Align::Center);
+        else if (right)
+            aligns.push_back(Align::Right);
+        else
+            aligns.push_back(Align::Left);
     }
     return aligns;
 }
@@ -2502,19 +2983,24 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
     // Render every cell, distinguishing image cells (a lone <img> for a local PNG that produced an
     // actual sixel) from text cells. An image cell holds raw sixel bytes that must never reach
     // displayWidth/reflow, so we record its column width and row height separately and carry the
-    // bytes through layout untouched. A non-image result (ordinary text, or an <img> fallback to its
-    // alt text/filename when graphics are unavailable) is treated as normal reflowable text.
+    // bytes through layout untouched. A non-image result (ordinary text, or an <img> fallback to
+    // its alt text/filename when graphics are unavailable) is treated as normal reflowable text.
     std::vector<std::vector<bool>> isImage(rows.size(), std::vector<bool>(ncols, false));
     std::vector<std::vector<int>> imgRows(rows.size(), std::vector<int>(ncols, 0));  // image height
-    std::vector<std::vector<int>> imgCellW(rows.size(), std::vector<int>(ncols, 0)); // image width
+    std::vector<std::vector<int>> imgCellW(rows.size(), std::vector<int>(ncols, 0));  // image width
     std::vector<std::vector<std::string>> imgText(rows.size(), std::vector<std::string>(ncols));
-    std::vector<int> imgWidth(ncols, 0);   // forced width of an image column, if any
-    // Batch-join (ADR 0003): submit every image-tag cell's conversion to the pool up front, then wait
-    // on the whole batch before laying out the table — the column-width algorithm needs every image's
-    // footprint, so the table can't be emitted until its own cells are measured, but the conversions
-    // run in parallel with each other (and overlap any earlier blocks' deferred images already queued).
-    // Per-cell results live in stable storage so each job writes its own slot without racing.
-    struct CellImg { std::string block; int iw = 0, ih = 0; bool ok = false; };
+    std::vector<int> imgWidth(ncols, 0);  // forced width of an image column, if any
+    // Batch-join (ADR 0003): submit every image-tag cell's conversion to the pool up front, then
+    // wait on the whole batch before laying out the table — the column-width algorithm needs every
+    // image's footprint, so the table can't be emitted until its own cells are measured, but the
+    // conversions run in parallel with each other (and overlap any earlier blocks' deferred images
+    // already queued). Per-cell results live in stable storage so each job writes its own slot
+    // without racing.
+    struct CellImg {
+        std::string block;
+        int iw = 0, ih = 0;
+        bool ok = false;
+    };
     std::vector<std::vector<CellImg>> cimg(rows.size(), std::vector<CellImg>(ncols));
     // future is move-only, so the row vectors can't be copy-filled; resize each instead.
     std::vector<std::vector<std::future<void>>> cfut(rows.size());
@@ -2530,8 +3016,14 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
             // Render at the full content budget so an explicit height is honoured at the image's
             // natural width; a column too narrow to hold it is handled by a re-render after layout.
             cfut[i][j] = imagePool().submit([cellText, budget, fileDir, r] {
-                r->ok = renderImageBlock(cellText, budget, fileDir, r->block, r->iw, r->ih,
-                                         /*forceWidthBound=*/false, kKittyIdDefer);
+                r->ok = renderImageBlock(cellText,
+                                         budget,
+                                         fileDir,
+                                         r->block,
+                                         r->iw,
+                                         r->ih,
+                                         /*forceWidthBound=*/false,
+                                         kKittyIdDefer);
             });
         }
     }
@@ -2540,39 +3032,43 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
             if (cfut[i][j].valid()) cfut[i][j].get();  // join this cell's conversion
             const CellImg& r = cimg[i][j];
             if (r.ok && isImageBlock(r.block)) {
-                // The Kitty id is left as timg's default (kKittyIdDefer); the writer renumbers every
-                // image in document order when it drains this table's slot.
+                // The Kitty id is left as timg's default (kKittyIdDefer); the writer renumbers
+                // every image in document order when it drains this table's slot.
                 rows[i][j] = r.block;
                 isImage[i][j] = true;
                 imgRows[i][j] = std::max(1, r.ih);
                 imgCellW[i][j] = r.iw;
                 imgWidth[j] = std::max(imgWidth[j], r.iw);
             } else if (r.ok && !r.block.empty() && r.ih == 1) {
-                rows[i][j] = r.block;        // <img> fallback text (alt/filename): reflow as text
+                rows[i][j] = r.block;  // <img> fallback text (alt/filename): reflow as text
             } else {
-                imgText[i][j].clear();       // not an image after all; drop the kept tag
+                imgText[i][j].clear();  // not an image after all; drop the kept tag
                 rows[i][j] = renderInline(rows[i][j]);
             }
         }
     }
 
     // Natural (unwrapped) width of each column = its widest rendered cell. Image cells contribute
-    // their recorded width rather than displayWidth (which can't measure a sixel block). A text cell
-    // may already hold its own line breaks (from a <br>), so measure its widest line, not the whole
-    // string (which would wrongly sum the lines and count the '\n').
+    // their recorded width rather than displayWidth (which can't measure a sixel block). A text
+    // cell may already hold its own line breaks (from a <br>), so measure its widest line, not the
+    // whole string (which would wrongly sum the lines and count the '\n').
     std::vector<int> natural(ncols, 0);
     for (size_t i = 0; i < rows.size(); ++i)
         for (size_t j = 0; j < ncols; ++j) {
-            if (isImage[i][j]) { natural[j] = std::max(natural[j], imgWidth[j]); continue; }
+            if (isImage[i][j]) {
+                natural[j] = std::max(natural[j], imgWidth[j]);
+                continue;
+            }
             for (auto& ln : splitOnNewlines(rows[i][j]))
                 natural[j] = std::max(natural[j], displayWidth(ln));
         }
 
-    // Decide a target width per column with max-min fair sharing of the content budget (which already
-    // excludes the two-space separators). A column whose natural width is at most its fair share keeps
-    // that natural width; the columns that want more split the leftover budget evenly. We iterate
-    // because fixing the columns that fit raises the share available to the rest — so e.g. one narrow
-    // column does not let the wide ones starve each other (the earlier left-to-right greedy did).
+    // Decide a target width per column with max-min fair sharing of the content budget (which
+    // already excludes the two-space separators). A column whose natural width is at most its fair
+    // share keeps that natural width; the columns that want more split the leftover budget evenly.
+    // We iterate because fixing the columns that fit raises the share available to the rest — so
+    // e.g. one narrow column does not let the wide ones starve each other (the earlier
+    // left-to-right greedy did).
     std::vector<int> target(ncols, 0);
     std::vector<bool> fixed(ncols, false);
     int remBudget = budget, remCols = static_cast<int>(ncols);
@@ -2581,21 +3077,21 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
         int fair = remBudget / remCols;
         for (size_t j = 0; j < ncols; ++j) {
             if (fixed[j] || natural[j] > fair) continue;
-            target[j] = natural[j];                 // fits within its share: keep natural width
+            target[j] = natural[j];  // fits within its share: keep natural width
             fixed[j] = true;
             remBudget -= natural[j];
             --remCols;
             changed = true;
         }
     }
-    if (remCols > 0) {                               // over-share columns split the rest evenly
+    if (remCols > 0) {  // over-share columns split the rest evenly
         int base = remBudget / remCols, extra = remBudget % remCols, k = 0;
         for (size_t j = 0; j < ncols; ++j)
             if (!fixed[j]) target[j] = base + (k++ < extra ? 1 : 0);  // remainder to earliest
     }
 
-    // Apply the targets. A text column is reflowed to its target and may end narrower still; an image
-    // column takes the smaller of its natural width and the target (it does not wrap), and is
+    // Apply the targets. A text column is reflowed to its target and may end narrower still; an
+    // image column takes the smaller of its natural width and the target (it does not wrap), and is
     // re-rendered below if that is narrower than the image it already produced.
     std::vector<int> widths(ncols, 0);
     for (size_t j = 0; j < ncols; ++j) {
@@ -2611,13 +3107,14 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
         }
     }
 
-    // An image whose painted width exceeds its allocated column (the table could not give it the room
-    // its requested height implied) is re-rendered WIDTH-BOUND to exactly that column width, so it
-    // never overflows into the next column or past the table. forceWidthBound is required because the
-    // image's true (real-cell) footprint can exceed the column even when the nominal-cell estimate
-    // does not, so renderImageBlock's own heuristic would otherwise keep it height-bound and too
-    // wide. This is the only case that runs timg twice, and only when columns are tight.
-    std::vector<int> allocWidth = widths;   // the budgeted width; tightening must not exceed it
+    // An image whose painted width exceeds its allocated column (the table could not give it the
+    // room its requested height implied) is re-rendered WIDTH-BOUND to exactly that column width,
+    // so it never overflows into the next column or past the table. forceWidthBound is required
+    // because the image's true (real-cell) footprint can exceed the column even when the
+    // nominal-cell estimate does not, so renderImageBlock's own heuristic would otherwise keep it
+    // height-bound and too wide. This is the only case that runs timg twice, and only when columns
+    // are tight.
+    std::vector<int> allocWidth = widths;  // the budgeted width; tightening must not exceed it
     // The forced width-bound re-renders are submitted as a follow-up batch and joined the same way
     // (ADR 0003), again with kKittyIdDefer + row-major id stamping for serial-identical output.
     std::vector<std::vector<CellImg>> rimg(rows.size(), std::vector<CellImg>(ncols));
@@ -2630,8 +3127,14 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
             int allocW = allocWidth[j];
             CellImg* r = &rimg[i][j];
             rfut[i][j] = imagePool().submit([cellText, allocW, fileDir, r] {
-                r->ok = renderImageBlock(cellText, allocW, fileDir, r->block, r->iw, r->ih,
-                                         /*forceWidthBound=*/true, kKittyIdDefer);
+                r->ok = renderImageBlock(cellText,
+                                         allocW,
+                                         fileDir,
+                                         r->block,
+                                         r->iw,
+                                         r->ih,
+                                         /*forceWidthBound=*/true,
+                                         kKittyIdDefer);
             });
         }
     }
@@ -2641,7 +3144,7 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
             rfut[i][j].get();
             CellImg& r = rimg[i][j];
             if (r.ok && isImageBlock(r.block)) {
-                rows[i][j] = r.block;        // id left deferred; writer renumbers in document order
+                rows[i][j] = r.block;  // id left deferred; writer renumbers in document order
                 imgRows[i][j] = std::max(1, r.ih);
                 imgCellW[i][j] = r.iw;
             }
@@ -2666,13 +3169,14 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
         if (w > 0) widths[j] = std::min(w, allocWidth[j]);
     }
 
-    // Re-pin each Kitty image's cell footprint (c=/r=) to the FINAL column width. The c=/r= baked in
-    // during rendering reflects that render's availWidth cap (the full budget on the first pass), not
-    // the width this column ends up with after fair-sharing and tightening — so without this an image
-    // can carry a c= wider than its column and overflow into the next cell. We rewrite c to the final
-    // width and scale r by the same ratio to keep the aspect ratio the render already chose. (Sixel
-    // images carry no c=/r=; kittyRewriteFootprint no-ops on a non-Kitty block, so the guard is just
-    // isImage.) imgRows/imgCellW are also corrected so the band reserves the right number of rows.
+    // Re-pin each Kitty image's cell footprint (c=/r=) to the FINAL column width. The c=/r= baked
+    // in during rendering reflects that render's availWidth cap (the full budget on the first
+    // pass), not the width this column ends up with after fair-sharing and tightening — so without
+    // this an image can carry a c= wider than its column and overflow into the next cell. We
+    // rewrite c to the final width and scale r by the same ratio to keep the aspect ratio the
+    // render already chose. (Sixel images carry no c=/r=; kittyRewriteFootprint no-ops on a
+    // non-Kitty block, so the guard is just isImage.) imgRows/imgCellW are also corrected so the
+    // band reserves the right number of rows.
     for (size_t j = 0; j < ncols; ++j) {
         if (imgWidth[j] <= 0) continue;
         for (size_t i = 0; i < rows.size(); ++i) {
@@ -2703,8 +3207,8 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
     std::vector<int> colOrigin(ncols, 1);
     for (size_t j = 1; j < ncols; ++j) colOrigin[j] = colOrigin[j - 1] + widths[j - 1] + 2;
 
-    // Render one table row. The row occupies a band as tall as the tallest cell — text line count or
-    // image row height, whichever is greater. Text is laid out first, top-aligned, one line at a
+    // Render one table row. The row occupies a band as tall as the tallest cell — text line count
+    // or image row height, whichever is greater. Text is laid out first, top-aligned, one line at a
     // time across the band; image cells contribute blank padding of their column width during this
     // pass (reserving their space). Then, in a second pass, each image's sixel is painted into its
     // reserved column with relative cursor moves: up to the band top, across to the cell's column,
@@ -2730,8 +3234,9 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
                 if (isImage[rowIdx][j]) {
                     line.append(static_cast<size_t>(widths[j]), ' ');
                 } else {
-                    std::string piece =
-                        static_cast<size_t>(k) < cellLines[j].size() ? cellLines[j][k] : std::string();
+                    std::string piece = static_cast<size_t>(k) < cellLines[j].size()
+                        ? cellLines[j][k]
+                        : std::string();
                     if (bold && !piece.empty()) piece = kBoldOn + piece + kBoldOff;
                     line += padAligned(piece, widths[j], aligns[j]);
                 }
@@ -2741,23 +3246,24 @@ void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {
         // Overlay pass: paint each image into its reserved space. The cursor starts at column 1 on
         // the row just below the band; every move is relative to that, so the band's earlier scroll
         // (if any) does not matter. Each sixel is bracketed by DECSC/DECRC (in replaySixel), so it
-        // restores the cursor to the band-top position regardless of how the terminal advances after
-        // a sixel — then we step deterministically back to the band bottom for the next image.
+        // restores the cursor to the band-top position regardless of how the terminal advances
+        // after a sixel — then we step deterministically back to the band bottom for the next
+        // image.
         for (size_t j = 0; j < ncols; ++j) {
             if (!isImage[rowIdx][j]) continue;
-            out << "\033[" << bandH << 'A';                  // up to the band top
-            out << "\033[" << colOrigin[j] << 'G';           // across to this cell's column
-            replaySixel(cells[j], out);                      // paint; cursor restored to band top
-            out << "\033[" << bandH << 'B' << '\r';          // down to the band bottom, column 1
+            out << "\033[" << bandH << 'A';          // up to the band top
+            out << "\033[" << colOrigin[j] << 'G';   // across to this cell's column
+            replaySixel(cells[j], out);              // paint; cursor restored to band top
+            out << "\033[" << bandH << 'B' << '\r';  // down to the band bottom, column 1
         }
     };
 
     for (size_t i = 0; i < rows.size(); ++i) {
         emitRow(i, /*bold=*/i == 0);
         if (i == 0)
-            out << hline << '\n';                                  // header underline
+            out << hline << '\n';  // header underline
         else if (i + 1 < rows.size())
-            out << kLightGray << hline << kReset << '\n';          // light-gray row separator
+            out << kLightGray << hline << kReset << '\n';  // light-gray row separator
     }
 }
 
@@ -2789,8 +3295,8 @@ bool isBlockQuote(const std::string& line) {
 std::string stripBlockQuote(const std::string& line) {
     size_t i = 0;
     while (i < line.size() && i < 3 && line[i] == ' ') ++i;
-    if (i < line.size() && line[i] == '>') ++i;      // the marker itself
-    if (i < line.size() && line[i] == ' ') ++i;       // one optional space of padding
+    if (i < line.size() && line[i] == '>') ++i;  // the marker itself
+    if (i < line.size() && line[i] == ' ') ++i;  // one optional space of padding
     return line.substr(i);
 }
 
@@ -2798,10 +3304,10 @@ std::string stripBlockQuote(const std::string& line) {
 // trailing spaces occupy on the first line — i.e. the column the item's content begins at, which is
 // also the indent every continuation line and nested block must reach to stay in the item.
 struct ListMarker {
-    bool ordered = false;       // true for "1." / "1)", false for a "-"/"+"/"*" bullet
-    char delim = 0;             // bullet char ('-','+','*') or ordered delimiter ('.'/')')
-    int start = 0;              // ordered list's starting number (the digits before the delimiter)
-    size_t markerWidth = 0;     // columns from line start to the item's content (the content indent)
+    bool ordered = false;    // true for "1." / "1)", false for a "-"/"+"/"*" bullet
+    char delim = 0;          // bullet char ('-','+','*') or ordered delimiter ('.'/')')
+    int start = 0;           // ordered list's starting number (the digits before the delimiter)
+    size_t markerWidth = 0;  // columns from line start to the item's content (the content indent)
 };
 
 // If `line` begins a list item, fill `m` and return true. A marker is up to three spaces of indent,
@@ -2836,8 +3342,10 @@ bool parseListMarker(const std::string& line, ListMarker& m) {
     size_t afterMarker = i;
     while (i < line.size() && line[i] == ' ') ++i;
     // An empty item, or one indented by many spaces, still uses a single space of content indent.
-    if (i >= line.size() || i - afterMarker == 0) m.markerWidth = afterMarker + 1;
-    else m.markerWidth = i;
+    if (i >= line.size() || i - afterMarker == 0)
+        m.markerWidth = afterMarker + 1;
+    else
+        m.markerWidth = i;
     return true;
 }
 
@@ -2848,9 +3356,9 @@ bool isListItem(const std::string& line) {
 }
 
 // Two list markers belong to the same list when they are the same type, and for bullets the same
-// bullet character, and for ordered lists the same delimiter ('.'/')'). A change of any of these (or
-// a blank line followed by a different type) starts a new list. (GFM also treats a change of bullet
-// character as a new list; we follow that.)
+// bullet character, and for ordered lists the same delimiter ('.'/')'). A change of any of these
+// (or a blank line followed by a different type) starts a new list. (GFM also treats a change of
+// bullet character as a new list; we follow that.)
 bool sameListType(const ListMarker& a, const ListMarker& b) {
     if (a.ordered != b.ordered) return false;
     return a.delim == b.delim;
@@ -2877,24 +3385,33 @@ bool isCodeFence(const std::string& t) {
 bool isIndentedCode(const std::string& line) {
     int cols = 0;
     for (char c : line) {
-        if (c == ' ') ++cols;
-        else if (c == '\t') cols += 4;
-        else break;
+        if (c == ' ')
+            ++cols;
+        else if (c == '\t')
+            cols += 4;
+        else
+            break;
         if (cols >= 4) return true;
     }
-    return false;  // ran out of leading whitespace before reaching column four (or the line is blank)
+    return false;  // ran out of leading whitespace before reaching column four (or the line is
+                   // blank)
 }
 
-// Remove the four-column indent that introduces an indented code block, leaving the rest verbatim. A
-// leading tab counts as four columns and is consumed whole; otherwise up to four leading spaces are
-// dropped. Content beyond the first four columns is preserved exactly.
+// Remove the four-column indent that introduces an indented code block, leaving the rest verbatim.
+// A leading tab counts as four columns and is consumed whole; otherwise up to four leading spaces
+// are dropped. Content beyond the first four columns is preserved exactly.
 std::string stripCodeIndent(const std::string& line) {
     size_t i = 0;
     int cols = 0;
     while (i < line.size() && cols < 4) {
-        if (line[i] == ' ') { ++cols; ++i; }
-        else if (line[i] == '\t') { cols += 4; ++i; }
-        else break;
+        if (line[i] == ' ') {
+            ++cols;
+            ++i;
+        } else if (line[i] == '\t') {
+            cols += 4;
+            ++i;
+        } else
+            break;
     }
     return line.substr(i);
 }
@@ -2902,11 +3419,12 @@ std::string stripCodeIndent(const std::string& line) {
 // True if the trimmed line is a thematic break: >= 3 of the same -, * or _ (spaces allowed).
 bool isThematicBreak(const std::string& t) {
     std::string compact;
-    for (char c : t) if (c != ' ' && c != '\t') compact += c;
+    for (char c : t)
+        if (c != ' ' && c != '\t') compact += c;
     if (compact.size() < 3) return false;
     return compact.find_first_not_of('-') == std::string::npos ||
-           compact.find_first_not_of('*') == std::string::npos ||
-           compact.find_first_not_of('_') == std::string::npos;
+        compact.find_first_not_of('*') == std::string::npos ||
+        compact.find_first_not_of('_') == std::string::npos;
 }
 
 // True if line `j` begins a new leaf block, so a paragraph in progress must stop before it.
@@ -2932,8 +3450,8 @@ std::string stripIndent(const std::string& line, size_t n) {
     return line.substr(i);
 }
 
-// Count the leading spaces of `line` (its indentation in columns; tabs are not expanded — the inputs
-// here use spaces, matching the rest of the parser).
+// Count the leading spaces of `line` (its indentation in columns; tabs are not expanded — the
+// inputs here use spaces, matching the rest of the parser).
 size_t leadingSpaces(const std::string& line) {
     size_t i = 0;
     while (i < line.size() && line[i] == ' ') ++i;
@@ -2941,53 +3459,61 @@ size_t leadingSpaces(const std::string& line) {
 }
 
 // One gathered list item: the content lines with the item's content indent already stripped, plus
-// whether a blank line appeared anywhere inside it (which, like a blank line between items, makes the
-// whole list loose — GFM 5.3).
+// whether a blank line appeared anywhere inside it (which, like a blank line between items, makes
+// the whole list loose — GFM 5.3).
 struct ListItem {
     std::vector<std::string> lines;
     bool hadBlank = false;
 };
 
-// If `s` begins with a GFM task-list checkbox — "[ ]", "[x]" or "[X]" followed by a space (or end of
-// the content) — set `checked` and strip the checkbox plus its trailing space, returning true. The
-// checkbox must be the very start of the item's content (GFM task-list extension).
+// If `s` begins with a GFM task-list checkbox — "[ ]", "[x]" or "[X]" followed by a space (or end
+// of the content) — set `checked` and strip the checkbox plus its trailing space, returning true.
+// The checkbox must be the very start of the item's content (GFM task-list extension).
 bool stripTaskCheckbox(std::string& s, bool& checked) {
     if (s.size() < 3 || s[0] != '[' || s[2] != ']') return false;
     char c = s[1];
-    if (c == ' ') checked = false;
-    else if (c == 'x' || c == 'X') checked = true;
-    else return false;
-    if (s.size() == 3) { s.clear(); return true; }      // checkbox is the whole content
-    if (s[3] != ' ') return false;                       // must be followed by whitespace
+    if (c == ' ')
+        checked = false;
+    else if (c == 'x' || c == 'X')
+        checked = true;
+    else
+        return false;
+    if (s.size() == 3) {
+        s.clear();
+        return true;
+    }  // checkbox is the whole content
+    if (s[3] != ' ') return false;  // must be followed by whitespace
     s.erase(0, 4);
     return true;
 }
 
 // Render a gathered list. Each item's content is a full block sequence rendered recursively (one
-// container level deeper) into a buffer; the buffer's first line is prefixed with the item marker and
-// the rest with equal-width padding so the body hangs under the marker. Bullets use a depth-varying
-// glyph (● ○ ▪︎, matching GitHub's disc/circle/square); ordered items keep their number with a '.'.
-// An item whose content opens with a task-list checkbox ("[ ]"/"[x]") swaps the marker for a ☐/☑
-// glyph (GFM task-list extension). gListDepth tracks bullet nesting for the glyph; gIndent is raised
-// by the marker width so inner content reflows within the narrower column. A loose list prints a
-// blank line between items.
-void emitList(const std::vector<ListItem>& items, const ListMarker& marker, bool loose,
+// container level deeper) into a buffer; the buffer's first line is prefixed with the item marker
+// and the rest with equal-width padding so the body hangs under the marker. Bullets use a
+// depth-varying glyph (● ○ ▪︎, matching GitHub's disc/circle/square); ordered items keep their
+// number with a '.'. An item whose content opens with a task-list checkbox ("[ ]"/"[x]") swaps the
+// marker for a ☐/☑ glyph (GFM task-list extension). gListDepth tracks bullet nesting for the glyph;
+// gIndent is raised by the marker width so inner content reflows within the narrower column. A
+// loose list prints a blank line between items.
+void emitList(const std::vector<ListItem>& items,
+              const ListMarker& marker,
+              bool loose,
               std::ostream& out) {
     static const std::vector<std::string> kBullets = {"●", "○", "▪︎"};
     // Each list level indents its content by four columns (matching most Markdown viewers), so the
-    // marker is padded out to at least four columns. A longer ordered marker (e.g. "10. ") keeps its
-    // natural width.
+    // marker is padded out to at least four columns. A longer ordered marker (e.g. "10. ") keeps
+    // its natural width.
     const int kListIndent = 4;
-    // The outermost list block is set off from surrounding text by a two-space left lead; nested lists
-    // already step in through their parent item's marker, so they add no further lead.
+    // The outermost list block is set off from surrounding text by a two-space left lead; nested
+    // lists already step in through their parent item's marker, so they add no further lead.
     const std::string lead = (gListNesting == 0) ? "  " : "";
     gIndent += static_cast<int>(lead.size());
     ++gListNesting;
     for (size_t idx = 0; idx < items.size(); ++idx) {
         if (idx && loose) out << '\n';
 
-        // A task-list item: strip the leading checkbox from its content and remember its state so the
-        // marker becomes a checkbox glyph below.
+        // A task-list item: strip the leading checkbox from its content and remember its state so
+        // the marker becomes a checkbox glyph below.
         std::vector<std::string> itemLines = items[idx].lines;
         bool isTask = false, checked = false;
         if (!itemLines.empty() && stripTaskCheckbox(itemLines[0], checked)) isTask = true;
@@ -3043,26 +3569,34 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
     size_t n = lines.size();
     bool emitted = false;  // has any block been printed yet?
     // A tight list item suppresses the blank line between its own top-level blocks (its lead
-    // paragraph and a nested list). Snapshot the flag and clear it immediately, so this applies only
-    // to this render's top level — blocks rendered deeper, and recursive renders, separate normally.
+    // paragraph and a nested list). Snapshot the flag and clear it immediately, so this applies
+    // only to this render's top level — blocks rendered deeper, and recursive renders, separate
+    // normally.
     bool tight = gTightItem;
     gTightItem = false;
     // Print a blank line before every block except the first, so blocks are visually separated
     // without a leading or trailing blank line in the output. A tight item skips that blank.
-    auto separate = [&] { if (emitted && !tight) out << '\n'; emitted = true; };
+    auto separate = [&] {
+        if (emitted && !tight) out << '\n';
+        emitted = true;
+    };
     for (size_t i = 0; i < n;) {
         const std::string& line = lines[i];
         std::string t = trim(line);
 
-        if (t.empty()) { ++i; continue; }  // blank lines separate blocks
+        if (t.empty()) {
+            ++i;
+            continue;
+        }  // blank lines separate blocks
 
         // Stream incrementally: flush the output sink before starting the next block, so each block
-        // (and any subprocess-rendered image it contains) reaches the terminal as soon as it is ready
-        // rather than the whole document being withheld until the slowest image finishes. The previous
-        // block is fully written by now and the cursor sits at a line boundary, so a flush here never
-        // splits a Kitty APC chunk mid-stream. At the top level `out` is the SlotSink, whose flush
-        // commits the finished block as an ordered slot for the writer thread; in recursive renders it
-        // is a local ostringstream and the flush is a no-op. A possibly-empty first flush is harmless.
+        // (and any subprocess-rendered image it contains) reaches the terminal as soon as it is
+        // ready rather than the whole document being withheld until the slowest image finishes. The
+        // previous block is fully written by now and the cursor sits at a line boundary, so a flush
+        // here never splits a Kitty APC chunk mid-stream. At the top level `out` is the SlotSink,
+        // whose flush commits the finished block as an ordered slot for the writer thread; in
+        // recursive renders it is a local ostringstream and the flush is a no-op. A possibly-empty
+        // first flush is harmless.
         if (emitted) out.flush();
 
         // ATX heading: 1-6 '#' followed by a space (or end of line).
@@ -3093,32 +3627,37 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
                 std::string tj = trim(lines[j]);
                 size_t r = 0;
                 while (r < tj.size() && tj[r] == fence) ++r;
-                if (r >= run && tj.find_first_not_of(fence) == std::string::npos) break;  // closing fence
+                if (r >= run && tj.find_first_not_of(fence) == std::string::npos)
+                    break;  // closing fence
                 body.push_back(lines[j]);
             }
             // A ```mermaid block renders as a diagram via the mermaid CLI when it (and a graphics
             // terminal) are available; otherwise it falls through to being shown as ordinary code.
             std::string mlang = lang;
-            for (char& c : mlang) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            for (char& c : mlang)
+                c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
             int mAvailW = terminalWidth();
             if (mlang == "mermaid") {
                 // The conversion produces the final bytes: the framed diagram on success, else the
-                // ordinary code block (the fallback). Computing both in the worker lets the whole block
-                // be a single deferred slot (ADR 0003). emitCodeBlock is pure here (top-level gIndent==0,
-                // terminalWidth memoized), so it is safe to run off-thread into a local buffer.
+                // ordinary code block (the fallback). Computing both in the worker lets the whole
+                // block be a single deferred slot (ADR 0003). emitCodeBlock is pure here (top-level
+                // gIndent==0, terminalWidth memoized), so it is safe to run off-thread into a local
+                // buffer.
                 auto convert = [body, lang, mAvailW](uint32_t kid) {
                     std::string mimg;
                     int miw = 0, mih = 0;
-                    if (renderMermaidBlock(body, mAvailW, mimg, miw, mih, kid) && isImageBlock(mimg))
+                    if (renderMermaidBlock(body, mAvailW, mimg, miw, mih, kid) &&
+                        isImageBlock(mimg))
                         return imageParagraphBytes(mimg, mih);
                     std::ostringstream cb;
                     emitCodeBlock(body, lang, cb);
                     return cb.str();
                 };
                 if (SlotSink* sink = asSlotSink(out)) {
-                    // Defer the Kitty id (kKittyIdDefer): the writer assigns a document-order id when it
-                    // drains the slot, so out-of-order completion stays serial-identical.
-                    slotDeferImage(sink, imagePool().submit([convert] { return convert(kKittyIdDefer); }));
+                    // Defer the Kitty id (kKittyIdDefer): the writer assigns a document-order id
+                    // when it drains the slot, so out-of-order completion stays serial-identical.
+                    slotDeferImage(
+                        sink, imagePool().submit([convert] { return convert(kKittyIdDefer); }));
                 } else {
                     out << imagePool().submit([convert] { return convert(0); }).get();
                 }
@@ -3149,7 +3688,7 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
                 if (isBlockQuote(lines[j])) {
                     inner.push_back(stripBlockQuote(lines[j]));
                 } else if (!trim(lines[j]).empty() && !startsBlock(lines, j)) {
-                    inner.push_back(lines[j]);   // lazy paragraph continuation
+                    inner.push_back(lines[j]);  // lazy paragraph continuation
                 } else {
                     break;
                 }
@@ -3159,12 +3698,13 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
             continue;
         }
 
-        // List: a run of items sharing a marker type (GFM 5.3). Reached only after the thematic-break
-        // check above, so a line like "- - -" or "***" is a rule, not a one-item list. Each item is
-        // gathered as the content lines belonging to it (its content indent stripped); a line at the
-        // list's own indent that opens a same-type marker starts the next item; one that opens a
-        // different-type marker, a non-indented block start, or follows a blank line at a lower indent
-        // ends the list. The list is loose if any blank line falls between items or inside an item.
+        // List: a run of items sharing a marker type (GFM 5.3). Reached only after the
+        // thematic-break check above, so a line like "- - -" or "***" is a rule, not a one-item
+        // list. Each item is gathered as the content lines belonging to it (its content indent
+        // stripped); a line at the list's own indent that opens a same-type marker starts the next
+        // item; one that opens a different-type marker, a non-indented block start, or follows a
+        // blank line at a lower indent ends the list. The list is loose if any blank line falls
+        // between items or inside an item.
         if (isListItem(line)) {
             separate();
             ListMarker listMarker;
@@ -3176,16 +3716,22 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
             while (j < n) {
                 ListMarker m;
                 // A new item: a marker line at this list's indent level and matching type.
-                if (parseListMarker(lines[j], m) && leadingSpaces(lines[j]) < listMarker.markerWidth) {
-                    if (!sameListType(m, listMarker)) break;  // different marker type: a separate list
+                if (parseListMarker(lines[j], m) &&
+                    leadingSpaces(lines[j]) < listMarker.markerWidth) {
+                    if (!sameListType(m, listMarker))
+                        break;  // different marker type: a separate list
                     ListItem item;
                     // The first line keeps everything after the marker (drop the marker itself, not
                     // just leading spaces — there are none before it at this point).
                     item.lines.push_back(lines[j].substr(std::min(m.markerWidth, lines[j].size())));
                     size_t k = j + 1;
-                    bool pendingBlank = false;  // a blank line seen but not yet committed to the item
+                    bool pendingBlank =
+                        false;  // a blank line seen but not yet committed to the item
                     for (; k < n; ++k) {
-                        if (trim(lines[k]).empty()) { pendingBlank = true; continue; }
+                        if (trim(lines[k]).empty()) {
+                            pendingBlank = true;
+                            continue;
+                        }
                         size_t ind = leadingSpaces(lines[k]);
                         if (ind >= m.markerWidth) {
                             // Indented to (or past) the content column: part of this item's body. A
@@ -3197,16 +3743,17 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
                             }
                             item.lines.push_back(stripIndent(lines[k], m.markerWidth));
                         } else if (!pendingBlank && !startsBlock(lines, k)) {
-                            // Lazy continuation: an unindented paragraph line directly following the
-                            // item's text (no blank between) still belongs to its paragraph.
+                            // Lazy continuation: an unindented paragraph line directly following
+                            // the item's text (no blank between) still belongs to its paragraph.
                             item.lines.push_back(lines[k]);
                         } else {
-                            break;  // unindented block start, marker, or post-blank line: item ends.
+                            break;  // unindented block start, marker, or post-blank line: item
+                                    // ends.
                         }
                     }
                     if (item.hadBlank) loose = true;
-                    // A blank line separating this item from a following same-type item at the list's
-                    // own indent makes the whole list loose (GFM 5.3).
+                    // A blank line separating this item from a following same-type item at the
+                    // list's own indent makes the whole list loose (GFM 5.3).
                     if (pendingBlank && k < n) {
                         ListMarker next;
                         if (parseListMarker(lines[k], next) &&
@@ -3229,8 +3776,8 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
         if (line.find('|') != std::string::npos && i + 1 < n && isTableDelimiterRow(lines[i + 1])) {
             separate();
             std::vector<std::string> rows;
-            rows.push_back(line);              // header
-            rows.push_back(lines[i + 1]);      // delimiter
+            rows.push_back(line);          // header
+            rows.push_back(lines[i + 1]);  // delimiter
             size_t j = i + 2;
             for (; j < n; ++j) {
                 if (trim(lines[j]).empty() || lines[j].find('|') == std::string::npos) break;
@@ -3245,21 +3792,25 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
         // Reached only at a fresh block position — an indented line right after a paragraph line is
         // gathered as that paragraph's lazy continuation instead, because isIndentedCode is
         // deliberately NOT part of startsBlock(), so a code block cannot interrupt a paragraph.
-        // Interior blank lines are kept; trailing blank lines are dropped. The four-column indent is
-        // stripped from each line and the rest emitted exactly, reusing the fenced-code panel style.
+        // Interior blank lines are kept; trailing blank lines are dropped. The four-column indent
+        // is stripped from each line and the rest emitted exactly, reusing the fenced-code panel
+        // style.
         if (isIndentedCode(line)) {
             separate();
             std::vector<std::string> body;
             size_t j = i;
             for (; j < n; ++j) {
-                if (trim(lines[j]).empty()) { body.push_back(std::string()); continue; }
+                if (trim(lines[j]).empty()) {
+                    body.push_back(std::string());
+                    continue;
+                }
                 if (!isIndentedCode(lines[j])) break;
                 body.push_back(stripCodeIndent(lines[j]));
             }
             while (!body.empty() && body.back().empty()) body.pop_back();  // drop trailing blanks
             emitCodeBlock(body, "", out);
-            // Resume right after the lines that became code; any trailing blank lines we gathered but
-            // popped are left for the main loop, which treats blank lines as block separators.
+            // Resume right after the lines that became code; any trailing blank lines we gathered
+            // but popped are left for the main loop, which treats blank lines as block separators.
             i += body.size();
             continue;
         }
@@ -3292,14 +3843,14 @@ std::vector<std::string> splitLines(std::istream& in) {
 
 // An ordered slot list with a dedicated writer thread (ADR 0003), used as the non-tty output sink.
 // render() writes text into it exactly like an ostream; at each block boundary (sync()) the
-// accumulated text is committed as one ordered slot. A deferred image instead reserves a *future* slot
-// (deferImage) and returns immediately, so the render thread keeps converting later images while this
-// one is still in flight.
+// accumulated text is committed as one ordered slot. A deferred image instead reserves a *future*
+// slot (deferImage) and returns immediately, so the render thread keeps converting later images
+// while this one is still in flight.
 //
-// A single block's bytes still reach the wire contiguously — a text slot is written in one writeAll,
-// and an image's framed bytes arrive as one slot — so a Kitty APC chunk is never split by a
-// buffer-boundary write (a consumer that sees a chunk arrive in pieces with a gap can give up and dump
-// the partial base64 as text).
+// A single block's bytes still reach the wire contiguously — a text slot is written in one
+// writeAll, and an image's framed bytes arrive as one slot — so a Kitty APC chunk is never split by
+// a buffer-boundary write (a consumer that sees a chunk arrive in pieces with a gap can give up and
+// dump the partial base64 as text).
 //
 // The writer thread walks slots strictly front-to-back: for a ready slot it writes the bytes; for a
 // future slot it blocks on the future, then writes. Because the writer is its own thread, a stalled
@@ -3307,37 +3858,38 @@ std::vector<std::string> splitLines(std::istream& in) {
 // document order (the writer never reorders), so the bytes are identical to the serial renderer's
 // output; only timing changes.
 //
-// All Kitty image ids are assigned HERE, on the writer thread, in slot (= document) order: workers and
-// tables render with kKittyIdDefer (leaving timg's default id), and writerLoop runs kittyRenumberAll on
-// every slot's bytes. That is the one place ids are minted, so parallel, out-of-order conversion still
-// yields the exact id sequence the single-threaded serial renderer produced. (Text slots contain no
-// APC, so renumbering them is a cheap no-op.)
+// All Kitty image ids are assigned HERE, on the writer thread, in slot (= document) order: workers
+// and tables render with kKittyIdDefer (leaving timg's default id), and writerLoop runs
+// kittyRenumberAll on every slot's bytes. That is the one place ids are minted, so parallel,
+// out-of-order conversion still yields the exact id sequence the single-threaded serial renderer
+// produced. (Text slots contain no APC, so renumbering them is a cheap no-op.)
 class SlotSink : public std::streambuf {
 public:
-    // maxPending bounds the lookahead window: the producer (render thread) blocks before adding a slot
-    // once this many slots are queued-but-unwritten, so a near-bottom giant image can't make workers
-    // buffer the whole rest of the document in RAM ahead of a stalled writer (ADR 0003 backpressure).
-    // 2*N (pool size) keeps every worker busy without unbounded buffering.
+    // maxPending bounds the lookahead window: the producer (render thread) blocks before adding a
+    // slot once this many slots are queued-but-unwritten, so a near-bottom giant image can't make
+    // workers buffer the whole rest of the document in RAM ahead of a stalled writer (ADR 0003
+    // backpressure). 2*N (pool size) keeps every worker busy without unbounded buffering.
     explicit SlotSink(int fd)
         : fd_(fd),
           maxPending_(2 * std::max(1u, std::thread::hardware_concurrency())),
           writer_([this] { writerLoop(); }) {}
-    // Buffer mode (fd_ == -1): the writer appends each drained slot to buffer_ instead of write()ing to
-    // a descriptor. The pager path (ADR 0003 step 6) uses this to get parallel image conversion via the
-    // deferred-slot machinery while still assembling the whole document into one buffer for gmore. No
-    // backpressure cap is needed — there is no stalling consumer, the buffer is the consumer — so the
-    // window is left unbounded so the producer never blocks.
+    // Buffer mode (fd_ == -1): the writer appends each drained slot to buffer_ instead of
+    // write()ing to a descriptor. The pager path (ADR 0003 step 6) uses this to get parallel image
+    // conversion via the deferred-slot machinery while still assembling the whole document into one
+    // buffer for gmore. No backpressure cap is needed — there is no stalling consumer, the buffer
+    // is the consumer — so the window is left unbounded so the producer never blocks.
     SlotSink()
         : fd_(-1),
           maxPending_(std::numeric_limits<size_t>::max()),
           writer_([this] { writerLoop(); }) {}
     ~SlotSink() override { finish(); }
 
-    // Buffer-mode result: the fully assembled, Kitty-renumbered document bytes. Call after finish().
+    // Buffer-mode result: the fully assembled, Kitty-renumbered document bytes. Call after
+    // finish().
     std::string takeBuffer() { return std::move(buffer_); }
 
-    // Commit any buffered text, then append `fut` as the next ordered slot. Returns without waiting on
-    // the conversion, but may block briefly for backpressure if the lookahead window is full.
+    // Commit any buffered text, then append `fut` as the next ordered slot. Returns without waiting
+    // on the conversion, but may block briefly for backpressure if the lookahead window is full.
     void deferImage(std::future<std::string> fut) {
         commitText();
         appendSlot(Slot(std::move(fut)));
@@ -3365,8 +3917,8 @@ protected:
         text_.append(s, static_cast<size_t>(n));
         return n;
     }
-    // render() flushes at every top-level block boundary; commit the accumulated text as one slot so it
-    // is ordered ahead of whatever the next block produces (text or a deferred image).
+    // render() flushes at every top-level block boundary; commit the accumulated text as one slot
+    // so it is ordered ahead of whatever the next block produces (text or a deferred image).
     int sync() override {
         commitText();
         return 0;
@@ -3375,8 +3927,8 @@ protected:
 private:
     struct Slot {
         bool ready;
-        std::string bytes;            // valid when ready
-        std::future<std::string> fut; // valid when !ready
+        std::string bytes;             // valid when ready
+        std::future<std::string> fut;  // valid when !ready
         explicit Slot(std::string b) : ready(true), bytes(std::move(b)) {}
         explicit Slot(std::future<std::string> f) : ready(false), fut(std::move(f)) {}
     };
@@ -3387,8 +3939,9 @@ private:
         text_.clear();
     }
 
-    // Append a slot, blocking first if the unwritten-slot window is full so the producer can't race far
-    // ahead of the writer (ADR 0003 backpressure). The writer signals drained_ each time it pops a slot.
+    // Append a slot, blocking first if the unwritten-slot window is full so the producer can't race
+    // far ahead of the writer (ADR 0003 backpressure). The writer signals drained_ each time it
+    // pops a slot.
     void appendSlot(Slot&& s) {
         std::unique_lock<std::mutex> lk(mu_);
         drained_.wait(lk, [this] { return slots_.size() < maxPending_; });
@@ -3401,7 +3954,10 @@ private:
         size_t off = 0;
         while (off < b.size()) {
             ssize_t n = write(fd_, b.data() + off, b.size() - off);
-            if (n <= 0) { if (errno == EINTR) continue; return; }
+            if (n <= 0) {
+                if (errno == EINTR) continue;
+                return;
+            }
             off += static_cast<size_t>(n);
         }
     }
@@ -3410,26 +3966,31 @@ private:
         for (;;) {
             std::unique_lock<std::mutex> lk(mu_);
             cv_.wait(lk, [this] { return closed_ || !slots_.empty(); });
-            if (slots_.empty()) { if (closed_) return; continue; }
-            // Move the front slot out; release the lock before any blocking write/get so the producer
-            // can keep appending and image workers can keep filling later future slots.
+            if (slots_.empty()) {
+                if (closed_) return;
+                continue;
+            }
+            // Move the front slot out; release the lock before any blocking write/get so the
+            // producer can keep appending and image workers can keep filling later future slots.
             Slot front = std::move(slots_.front());
             slots_.pop_front();
             lk.unlock();
             drained_.notify_one();  // a slot freed: a producer blocked on backpressure may proceed
-            // Assign Kitty ids in slot order (document order): every image in this slot's bytes gets the
-            // next id. Text slots have no APC, so this is a no-op for them.
+            // Assign Kitty ids in slot order (document order): every image in this slot's bytes
+            // gets the next id. Text slots have no APC, so this is a no-op for them.
             std::string bytes = front.ready ? std::move(front.bytes) : front.fut.get();
             std::string renumbered = kittyRenumberAll(bytes);
-            if (fd_ < 0) buffer_ += renumbered;  // buffer mode: assemble in RAM for the pager
-            else writeAll(renumbered);
+            if (fd_ < 0)
+                buffer_ += renumbered;  // buffer mode: assemble in RAM for the pager
+            else
+                writeAll(renumbered);
         }
     }
 
-    int fd_;                           // output descriptor, or -1 in buffer mode
-    std::string buffer_;               // buffer mode (fd_ < 0): assembled document, read via takeBuffer()
-    size_t maxPending_;                // backpressure cap on unwritten slots
-    std::string text_;                 // current (render-thread) text buffer, pre-commit
+    int fd_;              // output descriptor, or -1 in buffer mode
+    std::string buffer_;  // buffer mode (fd_ < 0): assembled document, read via takeBuffer()
+    size_t maxPending_;   // backpressure cap on unwritten slots
+    std::string text_;    // current (render-thread) text buffer, pre-commit
     std::deque<Slot> slots_;
     std::mutex mu_;
     std::condition_variable cv_;       // writer waits for work
@@ -3439,15 +4000,19 @@ private:
     std::thread writer_;
 };
 
-SlotSink* asSlotSink(std::ostream& out) { return dynamic_cast<SlotSink*>(out.rdbuf()); }
-void slotDeferImage(SlotSink* sink, std::future<std::string> fut) { sink->deferImage(std::move(fut)); }
+SlotSink* asSlotSink(std::ostream& out) {
+    return dynamic_cast<SlotSink*>(out.rdbuf());
+}
+void slotDeferImage(SlotSink* sink, std::future<std::string> fut) {
+    sink->deferImage(std::move(fut));
+}
 
 }  // namespace
 
 int main(int argc, char** argv) {
     // Collect the file operands, parsing options first. Supported: --width N / -w N / --width=N to
-    // force the render width (overriding $COLUMNS and the terminal size), and -- to end options so a
-    // filename may begin with a dash. Option parsing stops at the first non-option operand.
+    // force the render width (overriding $COLUMNS and the terminal size), and -- to end options so
+    // a filename may begin with a dash. Option parsing stops at the first non-option operand.
     std::vector<std::string> files;
     auto usage = [&] {
         std::cerr << "usage: mdcat [--width N] [--img[=kitty|sixel|none]] [--] [file ...]\n";
@@ -3456,29 +4021,39 @@ int main(int argc, char** argv) {
     auto parseBackend = [](const std::string& s) -> int {
         if (s == "kitty") return static_cast<int>(GraphicsBackend::Kitty);
         if (s == "sixel") return static_cast<int>(GraphicsBackend::Sixel);
-        if (s == "none")  return static_cast<int>(GraphicsBackend::None);
+        if (s == "none") return static_cast<int>(GraphicsBackend::None);
         return -2;
     };
 
     int a = 1;
     for (; a < argc; ++a) {
         std::string arg = argv[a];
-        if (arg == "--") { ++a; break; }
+        if (arg == "--") {
+            ++a;
+            break;
+        }
         if (arg.size() < 2 || arg[0] != '-') break;  // first operand: stop option parsing
 
-        if (arg == "--img") {                         // force image output even when piped
+        if (arg == "--img") {  // force image output even when piped
             gForceGraphics = true;
             // Optional protocol argument: only consume the next token if it names a backend,
             // so `--img file.md` still treats file.md as the operand.
             if (a + 1 < argc) {
                 int b = parseBackend(argv[a + 1]);
-                if (b >= 0) { gForcedBackend = b; ++a; }
+                if (b >= 0) {
+                    gForcedBackend = b;
+                    ++a;
+                }
             }
             continue;
         }
-        if (arg.rfind("--img=", 0) == 0) {            // inline protocol: --img=kitty|sixel|none
+        if (arg.rfind("--img=", 0) == 0) {  // inline protocol: --img=kitty|sixel|none
             int b = parseBackend(arg.substr(6));
-            if (b < 0) { std::cerr << "mdcat: invalid --img protocol: " << arg.substr(6) << "\n"; usage(); return 2; }
+            if (b < 0) {
+                std::cerr << "mdcat: invalid --img protocol: " << arg.substr(6) << "\n";
+                usage();
+                return 2;
+            }
             gForceGraphics = true;
             gForcedBackend = b;
             continue;
@@ -3486,11 +4061,14 @@ int main(int argc, char** argv) {
 
         std::string val;
         bool haveVal = false;
-        if (arg == "-w" || arg == "--width") {        // value is the next argument
-            if (a + 1 >= argc) { std::cerr << "mdcat: " << arg << " requires a value\n"; return 2; }
+        if (arg == "-w" || arg == "--width") {  // value is the next argument
+            if (a + 1 >= argc) {
+                std::cerr << "mdcat: " << arg << " requires a value\n";
+                return 2;
+            }
             val = argv[++a];
             haveVal = true;
-        } else if (arg.rfind("--width=", 0) == 0) {   // value is inline after '='
+        } else if (arg.rfind("--width=", 0) == 0) {  // value is inline after '='
             val = arg.substr(8);
             haveVal = true;
         } else {
@@ -3500,7 +4078,10 @@ int main(int argc, char** argv) {
         }
         if (haveVal) {
             int w = std::atoi(val.c_str());
-            if (w <= 0) { std::cerr << "mdcat: invalid width: " << val << "\n"; return 2; }
+            if (w <= 0) {
+                std::cerr << "mdcat: invalid width: " << val << "\n";
+                return 2;
+            }
             gWidthOverride = w;
         }
     }
@@ -3533,7 +4114,8 @@ int main(int argc, char** argv) {
     initTheme();
 
     // On a TTY, page through gmore by default. The render thread streams bytes into a pipe while
-    // gmore parses from the read end and can paint the first page before the full document is ready.
+    // gmore parses from the read end and can paint the first page before the full document is
+    // ready.
     bool usePager = isatty(STDOUT_FILENO);
     if (usePager) {
         int pfd[2];
@@ -3574,17 +4156,17 @@ int main(int argc, char** argv) {
     }
 
     // Non-tty: stream blocks out as they are rendered. Each file is rendered independently and the
-    // results concatenated — the last block of one file can never merge with the first of the next —
-    // which makes rendering distribute over the argument list (`mdcat a b` == `mdcat a` then
+    // results concatenated — the last block of one file can never merge with the first of the next
+    // — which makes rendering distribute over the argument list (`mdcat a b` == `mdcat a` then
     // `mdcat b`), as checked by tests/property-concat.sh.
-    // SlotSink reserves an ordered slot per block and drains them on a dedicated writer thread, so a
-    // deferred image (standalone <img>, mermaid) returns immediately while its conversion runs on the
-    // pool and a stalled write() blocks only the writer (ADR 0003). Output stays in document order and
-    // byte-identical to the old serial StreamingSink; only timing changes.
+    // SlotSink reserves an ordered slot per block and drains them on a dedicated writer thread, so
+    // a deferred image (standalone <img>, mermaid) returns immediately while its conversion runs on
+    // the pool and a stalled write() blocks only the writer (ADR 0003). Output stays in document
+    // order and byte-identical to the old serial StreamingSink; only timing changes.
     SlotSink sink(STDOUT_FILENO);
     std::ostream out(&sink);
     if (renderAll(out) != 0) return 1;
-    out.flush();      // commit the final block's text as a slot
-    sink.finish();    // flush trailing text, drain all slots, join the writer thread
+    out.flush();    // commit the final block's text as a slot
+    sink.finish();  // flush trailing text, drain all slots, join the writer thread
     return 0;
 }

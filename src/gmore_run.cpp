@@ -23,27 +23,28 @@
 namespace gmore {
 
 struct Search {
-    std::string pattern;     // last pattern (empty = no search yet)
-    bool forward = true;     // direction of the last `/` (n repeats it, N reverses)
+    std::string pattern;  // last pattern (empty = no search yet)
+    bool forward = true;  // direction of the last `/` (n repeats it, N reverses)
     std::regex re;
     bool valid = false;
-    std::string error;       // set when compile fails, for the prompt
+    std::string error;  // set when compile fails, for the prompt
     // Position of the CURRENT match (the one n/N step from and the brighter highlight
     // tracks), as a (row, start-column) pair; {-1,-1} = none yet. A column, not just a
     // row, so n/N visit EVERY match — including several on one line. Kept apart from
     // viewTop because a match near the end clamps viewTop below its row.
     long curRow = -1;
-    int  curCol = -1;
+    int curCol = -1;
 
     static bool hasUpper(const std::string& s) {
-        for (unsigned char ch : s) if (std::isupper(ch)) return true;
+        for (unsigned char ch : s)
+            if (std::isupper(ch)) return true;
         return false;
     }
 
     // Compile `pat` as the active pattern searched in direction `fwd`. Returns
     // false (and sets error) if the regex is malformed; the prior pattern is kept.
     bool compile(const std::string& pat, bool fwd) {
-        if (pat.empty()) return valid;   // empty /  re-uses the last pattern
+        if (pat.empty()) return valid;  // empty /  re-uses the last pattern
         auto flags = std::regex::ECMAScript;
         if (!hasUpper(pat)) flags |= std::regex::icase;
         try {
@@ -52,13 +53,21 @@ struct Search {
             error = std::string("Invalid regex: ") + e.what();
             return false;
         }
-        pattern = pat; forward = fwd; valid = true; error.clear();
-        curRow = -1; curCol = -1;   // a new pattern searches from the current view
+        pattern = pat;
+        forward = fwd;
+        valid = true;
+        error.clear();
+        curRow = -1;
+        curCol = -1;  // a new pattern searches from the current view
         return true;
     }
 
     // A located match: its row and the cell column it starts at.
-    struct Pos { long row; int col; bool found; };
+    struct Pos {
+        long row;
+        int col;
+        bool found;
+    };
 
     // The next match from (fromRow, fromCol) scanning in `dir` (+1/-1), considering
     // EVERY match on every row (so several hits on one line are distinct stops), and
@@ -69,7 +78,7 @@ struct Search {
     template <class GetSpans>
     Pos findPos(long fromRow, int fromCol, int dir, long total, GetSpans getSpans) const {
         if (!valid || total == 0) return {-1, -1, false};
-        for (long i = 0; i <= total; ++i) {     // <= total: revisit fromRow last (other cols)
+        for (long i = 0; i <= total; ++i) {  // <= total: revisit fromRow last (other cols)
             long r = ((fromRow + dir * i) % total + total) % total;
             auto spans = getSpans((size_t)r);
             if (spans.empty()) continue;
@@ -91,15 +100,26 @@ struct Search {
 static int gTtyFd = -1;
 static struct termios gSaved;
 static bool gRaw = false;
-static inline void restoreTty() { if (gRaw && gTtyFd >= 0) { tcsetattr(gTtyFd, TCSANOW, &gSaved); gRaw = false; } }
-static inline void onSignal(int sig) { restoreTty(); signal(sig, SIG_DFL); raise(sig); }
+static inline void restoreTty() {
+    if (gRaw && gTtyFd >= 0) {
+        tcsetattr(gTtyFd, TCSANOW, &gSaved);
+        gRaw = false;
+    }
+}
+static inline void onSignal(int sig) {
+    restoreTty();
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
 static inline bool enterRaw() {
     if (tcgetattr(gTtyFd, &gSaved) != 0) return false;
     struct termios raw = gSaved;
     raw.c_lflag &= ~(ICANON | ECHO);
-    raw.c_cc[VMIN] = 1; raw.c_cc[VTIME] = 0;
+    raw.c_cc[VMIN] = 1;
+    raw.c_cc[VTIME] = 0;
     if (tcsetattr(gTtyFd, TCSANOW, &raw) != 0) return false;
-    gRaw = true; return true;
+    gRaw = true;
+    return true;
 }
 
 static inline int envInt(const char* name, int def) {
@@ -116,7 +136,11 @@ static inline bool getWinsize(struct winsize& w) {
     for (int fd : {STDOUT_FILENO, STDERR_FILENO, STDIN_FILENO})
         if (ioctl(fd, TIOCGWINSZ, &w) == 0 && w.ws_row > 0) return true;
     int t = open("/dev/tty", O_RDONLY | O_NOCTTY);
-    if (t >= 0) { bool ok = ioctl(t, TIOCGWINSZ, &w) == 0 && w.ws_row > 0; close(t); if (ok) return true; }
+    if (t >= 0) {
+        bool ok = ioctl(t, TIOCGWINSZ, &w) == 0 && w.ws_row > 0;
+        close(t);
+        if (ok) return true;
+    }
     return false;
 }
 
@@ -128,8 +152,11 @@ static inline bool getWinsize(struct winsize& w) {
 static inline std::string queryCsiT(const char* arg) {
     int fd = open("/dev/tty", O_RDWR | O_NOCTTY);
     if (fd < 0) return std::string();
-    struct termios saved {};
-    if (tcgetattr(fd, &saved) != 0) { close(fd); return std::string(); }
+    struct termios saved{};
+    if (tcgetattr(fd, &saved) != 0) {
+        close(fd);
+        return std::string();
+    }
     struct termios raw = saved;
     raw.c_lflag &= ~static_cast<tcflag_t>(ICANON | ECHO);
     raw.c_cc[VMIN] = 0;
@@ -159,7 +186,9 @@ static inline std::string queryCsiT(const char* arg) {
 // TIOCGWINSZ; without a real cell size gmore's row-reservation and scroll-clip math
 // (rows*cellH) would be wrong, scaling with font size — e.g. a 21px cell vs the 16
 // default mis-clips a scrolled image by ~5px/row. Returns {0,0} if neither answers.
-struct CellSize { int w, h; };
+struct CellSize {
+    int w, h;
+};
 static inline CellSize queryCellSize() {
     // Method A: direct cell size.
     int h = 0, w = 0;
@@ -167,10 +196,9 @@ static inline CellSize queryCellSize() {
         return {w, h};
     // Method B: derive from text-area px / text-area cells.
     int ah = 0, aw = 0, rows = 0, cols = 0;
-    bool gotPx   = std::sscanf(queryCsiT("14").c_str(), "\033[4;%d;%dt", &ah, &aw) == 2;
+    bool gotPx = std::sscanf(queryCsiT("14").c_str(), "\033[4;%d;%dt", &ah, &aw) == 2;
     bool gotCell = std::sscanf(queryCsiT("18").c_str(), "\033[8;%d;%dt", &rows, &cols) == 2;
-    if (gotPx && gotCell && aw > 0 && ah > 0 && cols > 0 && rows > 0)
-        return {aw / cols, ah / rows};
+    if (gotPx && gotCell && aw > 0 && ah > 0 && cols > 0 && rows > 0) return {aw / cols, ah / rows};
     return {0, 0};
 }
 
@@ -207,11 +235,13 @@ struct Nav {
     size_t bottomLine() const { return std::min(viewTop + (size_t)pageH, total); }
 
     void down(size_t n) { viewTop = std::min(maxTop(), viewTop + n); }
-    void up(size_t n)   { viewTop = n <= viewTop ? viewTop - n : 0; }
+    void up(size_t n) { viewTop = n <= viewTop ? viewTop - n : 0; }
     // Put 1-based line `ln` at the top of the view, clamped to [0, maxTop].
     void gotoLine(size_t ln) { viewTop = std::min(maxTop(), ln ? ln - 1 : 0); }
     // d/u step: the sticky scrollSize if set, else half a page (at least 1).
-    size_t scrollStep() const { return scrollSize ? scrollSize : (size_t)(pageH > 1 ? pageH / 2 : 1); }
+    size_t scrollStep() const {
+        return scrollSize ? scrollSize : (size_t)(pageH > 1 ? pageH / 2 : 1);
+    }
 
     // Apply a command key with repeat count `count` (0 = "not given"; commands
     // pick their own default). Returns the action run() must take. Keeps the
@@ -222,22 +252,35 @@ struct Nav {
         bool fwd = (c == ' ' || c == 'f' || c == 'j' || c == '\r' || c == '\n');
         if (atEnd() && fwd) return c == ' ' ? QUIT : NONE;
         switch (c) {
-            case ' ': case 'f': down(n > 0 ? (size_t)n : (size_t)pageH); return REPAINT;
-            case 'b':           up(n > 0 ? (size_t)n : (size_t)pageH);   return REPAINT;
-            case '\r': case '\n': case 'j': down(n > 0 ? (size_t)n : 1); return REPAINT;
-            case 'k': case 'y': up(n > 0 ? (size_t)n : 1);               return REPAINT;
-            // g/G: go to line N (1-based); default g=first line, G=last line.
-            case 'g': gotoLine(n > 0 ? (size_t)n : 1);              return REPAINT;
-            case 'G': gotoLine(n > 0 ? (size_t)n : total);         return REPAINT;
-            // d/^D, u/^U: scroll half a screen; a count sets the step and sticks,
-            // like more(1). Default step is half the page height (min 1).
-            case 'd': case 0x04: if (n > 0) scrollSize = (size_t)n; down(scrollStep()); return REPAINT;
-            case 'u': case 0x15: if (n > 0) scrollSize = (size_t)n; up(scrollStep());   return REPAINT;
-            // =/^G: report position (line number + percent) without moving.
-            case '=': case 0x07: return MESSAGE;
-            // ^L: clear and repaint the current screen without moving.
-            case 0x0C: return REDRAW;
-            default: return NONE;
+        case ' ':
+        case 'f': down(n > 0 ? (size_t)n : (size_t)pageH); return REPAINT;
+        case 'b': up(n > 0 ? (size_t)n : (size_t)pageH); return REPAINT;
+        case '\r':
+        case '\n':
+        case 'j': down(n > 0 ? (size_t)n : 1); return REPAINT;
+        case 'k':
+        case 'y': up(n > 0 ? (size_t)n : 1); return REPAINT;
+        // g/G: go to line N (1-based); default g=first line, G=last line.
+        case 'g': gotoLine(n > 0 ? (size_t)n : 1); return REPAINT;
+        case 'G': gotoLine(n > 0 ? (size_t)n : total); return REPAINT;
+        // d/^D, u/^U: scroll half a screen; a count sets the step and sticks,
+        // like more(1). Default step is half the page height (min 1).
+        case 'd':
+        case 0x04:
+            if (n > 0) scrollSize = (size_t)n;
+            down(scrollStep());
+            return REPAINT;
+        case 'u':
+        case 0x15:
+            if (n > 0) scrollSize = (size_t)n;
+            up(scrollStep());
+            return REPAINT;
+        // =/^G: report position (line number + percent) without moving.
+        case '=':
+        case 0x07: return MESSAGE;
+        // ^L: clear and repaint the current screen without moving.
+        case 0x0C: return REDRAW;
+        default: return NONE;
         }
     }
 };
@@ -248,8 +291,7 @@ struct Nav {
 // Returns 0 on success. When stdout is not a tty and neither dump nor imginfo
 // mode is requested, passes the data through verbatim (pager-as-cat).
 // ---------------------------------------------------------------------------
-int run(std::string data, bool dump, bool dumpImages, bool imginfo,
-    bool navTrace, int streamFd) {
+int run(std::string data, bool dump, bool dumpImages, bool imginfo, bool navTrace, int streamFd) {
     internAttr(Attr{});  // id 0 = default
 
     // Terminal geometry. Env wins (for --dump/tests); then the kernel's TIOCGWINSZ
@@ -267,7 +309,10 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
     }
     if (!cellW || !cellH) {
         CellSize cs = queryCellSize();
-        if (cs.w > 0 && cs.h > 0) { if (!cellW) cellW = cs.w; if (!cellH) cellH = cs.h; }
+        if (cs.w > 0 && cs.h > 0) {
+            if (!cellW) cellW = cs.w;
+            if (!cellH) cellH = cs.h;
+        }
     }
     if (!H) H = 24;
     if (!W) W = 80;
@@ -290,10 +335,10 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
         char buf[65536];
         for (;;) {
             ssize_t n = read(streamFd, buf, sizeof buf);
-            if (n == 0) return true;                                       // EOF
+            if (n == 0) return true;  // EOF
             if (n < 0) {
                 if (errno == EINTR) continue;
-                return true;                                               // treat read error as EOF
+                return true;  // treat read error as EOF
             }
             em.feed(buf, (size_t)n);
             return false;
@@ -306,7 +351,8 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
         return false;
     };
     auto feedAll = [&]() {
-        while (!feedOneChunk()) {}
+        while (!feedOneChunk()) {
+        }
         return true;
     };
     if (streamFd >= 0) {
@@ -328,7 +374,14 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
             const Image& I = em.images()[k];
             int cols = I.footCols > 0 ? I.footCols : (I.Ph + cellW - 1) / cellW;
             int rws = I.heightCells(cellH);
-            std::printf("image %zu @%zu,%d %dx%dpx %dx%dcells\n", k + 1, I.row, I.col, I.Ph, I.Pv, cols, rws);
+            std::printf("image %zu @%zu,%d %dx%dpx %dx%dcells\n",
+                        k + 1,
+                        I.row,
+                        I.col,
+                        I.Ph,
+                        I.Pv,
+                        cols,
+                        rws);
             // ASCII raster only for sixels: Kitty images keep no decoded px raster
             // (they're transmitted verbatim), so I.px is empty — indexing it would crash.
             if (!I.isKitty() && I.Ph <= 40 && I.Pv <= 40) {  // small enough to show as ASCII
@@ -346,14 +399,22 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
     // vTop/vBot give the visible row window so an image paints one sixel clipped to it
     // (vBot==0 => no clip: paint the whole image at its anchor, used by --dump-images).
     auto emitRow = [&](size_t r, size_t vTop = 0, size_t vBot = 0) {
-        std::string s; em.renderRow(r, s, true, vTop, vBot); fwrite(s.data(), 1, s.size(), stdout); };
+        std::string s;
+        em.renderRow(r, s, true, vTop, vBot);
+        fwrite(s.data(), 1, s.size(), stdout);
+    };
     auto emitRowText = [&](size_t r) {
-        std::string s; em.renderRow(r, s, false, 0, 0, /*withLinks=*/false);
-        fwrite(s.data(), 1, s.size(), stdout); };
+        std::string s;
+        em.renderRow(r, s, false, 0, 0, /*withLinks=*/false);
+        fwrite(s.data(), 1, s.size(), stdout);
+    };
 
     if (dump) {
         for (size_t r = 0; r < total; ++r) {
-            if (dumpImages) emitRow(r); else emitRowText(r);
+            if (dumpImages)
+                emitRow(r);
+            else
+                emitRowText(r);
             std::fputc('\n', stdout);
         }
         return 0;
@@ -374,26 +435,36 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
         Search search;
         const char* note = "";
         auto doSearch = [&](int dir) {
-            if (!search.valid) { note = " notfound"; return; }
+            if (!search.valid) {
+                note = " notfound";
+                return;
+            }
             long fromRow = search.curRow >= 0 ? search.curRow : (long)t.viewTop;
-            int  fromCol = search.curRow >= 0 ? search.curCol : (dir > 0 ? -1 : INT_MAX);
-            Search::Pos p = search.findPos(fromRow, fromCol, dir, (long)total,
-                                           [&](size_t r) { return em.matchSpans(r, search.re); });
-            if (!p.found) { note = " notfound"; return; }
-            search.curRow = p.row; search.curCol = p.col;
+            int fromCol = search.curRow >= 0 ? search.curCol : (dir > 0 ? -1 : INT_MAX);
+            Search::Pos p = search.findPos(fromRow, fromCol, dir, (long)total, [&](size_t r) {
+                return em.matchSpans(r, search.re);
+            });
+            if (!p.found) {
+                note = " notfound";
+                return;
+            }
+            search.curRow = p.row;
+            search.curCol = p.col;
             t.gotoLine((size_t)p.row + 1);
         };
         const char* keys = std::getenv("GMORE_KEYS");
         long count = 0;
         for (const char* p = keys; p && *p; ++p) {
             unsigned char c = (unsigned char)*p;
-            if (c == '/' || c == '?') {                  // read pattern up to newline
+            if (c == '/' || c == '?') {  // read pattern up to newline
                 std::string pat;
                 while (*++p && *p != '\n') pat.push_back(*p);
                 bool fwd = (c == '/');
-                if (search.compile(pat, fwd)) doSearch(fwd ? +1 : -1);
-                else note = " badre";
-                if (!*p) break;                          // newline consumed by ++p above
+                if (search.compile(pat, fwd))
+                    doSearch(fwd ? +1 : -1);
+                else
+                    note = " badre";
+                if (!*p) break;  // newline consumed by ++p above
                 continue;
             }
             if (c == 'n' || c == 'N') {
@@ -411,8 +482,12 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
             if (a == Nav::QUIT) break;
         }
         std::printf("top=%zu bottom=%zu total=%zu pct=%d%% %s%s\n",
-                    t.viewTop, std::min(t.viewTop + (size_t)t.pageH, t.total),
-                    t.total, t.percent(), t.atEnd() ? "END" : "more", note);
+                    t.viewTop,
+                    std::min(t.viewTop + (size_t)t.pageH, t.total),
+                    t.total,
+                    t.percent(),
+                    t.atEnd() ? "END" : "more",
+                    note);
         return 0;
     }
 
@@ -450,7 +525,10 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
         h.spans = em.matchSpans(absRow, search.re);
         if ((long)absRow == search.curRow)
             for (size_t k = 0; k < h.spans.size(); ++k)
-                if (h.spans[k].first == search.curCol) { h.current = (int)k; break; }
+                if (h.spans[k].first == search.curCol) {
+                    h.current = (int)k;
+                    break;
+                }
         return h;
     };
 
@@ -464,7 +542,12 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
             size_t r = first + (size_t)i;
             if (r < total) {
                 Highlight hl = rowHighlight(r);
-                em.renderRow(r, s, /*withImages=*/false, 0, 0, /*withLinks=*/true,
+                em.renderRow(r,
+                             s,
+                             /*withImages=*/false,
+                             0,
+                             0,
+                             /*withLinks=*/true,
                              hl.empty() ? nullptr : &hl);
             }
             s += '\n';
@@ -512,8 +595,8 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
     const bool dbg = std::getenv("GMORE_DEBUG") != nullptr;
     auto trace = [&](const char* what) {
         if (!dbg) return;
-        std::fprintf(stderr, "[gmore] %-10s viewTop=%zu pageH=%d total=%zu\n",
-                     what, viewTop, pageH, total);
+        std::fprintf(
+            stderr, "[gmore] %-10s viewTop=%zu pageH=%d total=%zu\n", what, viewTop, pageH, total);
     };
     // For an image-bearing absolute row, report which screen line it's being
     // painted on and the image's anchor row — a mismatch is the drift bug.
@@ -523,8 +606,13 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
             const Image& I = em.images()[k];
             size_t imgEnd = I.row + (size_t)((I.Pv + cellH - 1) / cellH);
             if (absRow >= I.row && absRow < imgEnd)
-                std::fprintf(stderr, "[gmore]   row=%zu -> screenLine=%d  img%zu anchorRow=%zu strip=%zu\n",
-                             absRow, screenLine, k, I.row, absRow - I.row);
+                std::fprintf(stderr,
+                             "[gmore]   row=%zu -> screenLine=%d  img%zu anchorRow=%zu strip=%zu\n",
+                             absRow,
+                             screenLine,
+                             k,
+                             I.row,
+                             absRow - I.row);
         }
     };
 
@@ -532,10 +620,14 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
     // row in place of --More-- until the next keystroke, then cleared.
     std::string message;
     auto showPrompt = [&] {
-        if (!message.empty()) std::fprintf(stdout, "\033[7m%s\033[27m", message.c_str());
-        else if (!inputEof) std::fputs("\033[7m--More--\033[27m", stdout);
-        else if (nav.atEnd()) std::fputs("\033[7m(END)\033[27m", stdout);
-        else std::fprintf(stdout, "\033[7m--More--(%d%%)\033[27m", nav.percent());
+        if (!message.empty())
+            std::fprintf(stdout, "\033[7m%s\033[27m", message.c_str());
+        else if (!inputEof)
+            std::fputs("\033[7m--More--\033[27m", stdout);
+        else if (nav.atEnd())
+            std::fputs("\033[7m(END)\033[27m", stdout);
+        else
+            std::fprintf(stdout, "\033[7m--More--(%d%%)\033[27m", nav.percent());
         std::fflush(stdout);
     };
     auto clearPrompt = [&] { std::fputs("\r\033[K", stdout); };
@@ -562,7 +654,7 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
             "  q, Q           quit",
             "",
         };
-        std::fputs("\033c", stdout);                      // RIS: clear like repaint()
+        std::fputs("\033c", stdout);  // RIS: clear like repaint()
         for (const char* l : lines) std::fprintf(stdout, "%s\r\n", l);
         std::fputs("\033[7mPress any key to continue\033[27m", stdout);
         std::fflush(stdout);
@@ -573,7 +665,7 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
     // the terminal mid-paint and clip the image's top — see paintImages).
     size_t initEnd = std::min(total, (size_t)pageH);
     trace("init");
-    reserveRows((size_t)pageH);   // make room below so no sixel forces a mid-paint scroll
+    reserveRows((size_t)pageH);  // make room below so no sixel forces a mid-paint scroll
     for (size_t r = 0; r < initEnd; ++r) traceRow(r, (int)r);
     paintWindow(0, (int)initEnd, initEnd);
     viewTop = initEnd < (size_t)pageH ? 0 : initEnd - (size_t)pageH;
@@ -594,7 +686,7 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
     auto repaint = [&] {
         size_t vBot = std::min(total, viewTop + (size_t)pageH);
         std::fputs("\033c", stdout);
-        em.forgetKittyTransmissions();   // RIS dropped the terminal's Kitty images; re-send them
+        em.forgetKittyTransmissions();  // RIS dropped the terminal's Kitty images; re-send them
         for (int i = 0; i < pageH; ++i) traceRow(viewTop + (size_t)i, i);
         paintWindow(viewTop, pageH, vBot);
     };
@@ -614,8 +706,8 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
     // to repaint() for any non-contiguous or backward move. A clean text/forward page is
     // the common case and now leaves history intact.
     auto advance = [&](size_t prevTop) {
-        size_t delta = viewTop - prevTop;             // caller guarantees viewTop > prevTop
-        size_t firstNew = prevTop + (size_t)pageH;    // first row not previously visible
+        size_t delta = viewTop - prevTop;           // caller guarantees viewTop > prevTop
+        size_t firstNew = prevTop + (size_t)pageH;  // first row not previously visible
         size_t vBot = std::min(total, viewTop + (size_t)pageH);
         for (size_t i = 0; i < delta; ++i) traceRow(firstNew + i, pageH - (int)delta + (int)i);
         paintWindow(firstNew, (int)delta, vBot);
@@ -632,8 +724,10 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
     // screen has no row in common with the new one, so its sixels would linger (the
     // reported bug). Those must full-repaint via RIS, which wipes the screen.
     auto paintMove = [&](size_t prevTop) {
-        if (viewTop > prevTop && viewTop - prevTop <= (size_t)pageH) advance(prevTop);
-        else if (viewTop != prevTop) repaint();
+        if (viewTop > prevTop && viewTop - prevTop <= (size_t)pageH)
+            advance(prevTop);
+        else if (viewTop != prevTop)
+            repaint();
         // viewTop == prevTop: clamped at an edge, nothing moved — leave the screen.
     };
 
@@ -664,7 +758,8 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
         bool corpusWideRequest = (c == '/' || c == '?' || c == 'n' || c == 'N' || c == 'G');
         if (!corpusWideRequest && (!forwardRequest || !nav.atEnd())) return;
         // We can paint the first page early, but once the user asks for movement/search beyond the
-        // currently available tail, finish ingesting so pagination and multi-image rows are coherent.
+        // currently available tail, finish ingesting so pagination and multi-image rows are
+        // coherent.
         inputEof = feedAll();
         total = em.contentRows();
         nav.total = total;
@@ -686,16 +781,21 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
             unsigned char c;
             if (!nextKey(c)) return false;
             if (c == '\r' || c == '\n') return true;
-            if (c == 0x1b) return false;                 // ESC cancels
-            if (c == 0x7f || c == 0x08) {                // backspace
+            if (c == 0x1b) return false;   // ESC cancels
+            if (c == 0x7f || c == 0x08) {  // backspace
                 if (!out.empty()) {
                     // Drop a whole UTF-8 char (its trailing continuation bytes too).
-                    do { out.pop_back(); } while (!out.empty() && (out.back() & 0xc0) == 0x80);
+                    do {
+                        out.pop_back();
+                    } while (!out.empty() && (out.back() & 0xc0) == 0x80);
                     draw();
                 }
                 continue;
             }
-            if (c >= 0x20 || c >= 0x80) { out.push_back((char)c); draw(); }
+            if (c >= 0x20 || c >= 0x80) {
+                out.push_back((char)c);
+                draw();
+            }
         }
     };
 
@@ -705,24 +805,32 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
     // highlight moves even when the view itself doesn't, e.g. a later match on the
     // same row). Steps from the current match's exact (row,col); see findPos.
     auto runSearch = [&](int dir) -> bool {
-        if (!search.valid) { message = "No previous search"; return false; }
+        if (!search.valid) {
+            message = "No previous search";
+            return false;
+        }
         // Step from the current match's exact (row,col) so n/N visit every match,
         // including several on one line. With no prior match, seed from viewTop's edge
         // (col -1 forward = before the first; INT_MAX backward = after the last) so the
         // first hit is the nearest match from the current view.
         long fromRow = search.curRow >= 0 ? search.curRow : (long)viewTop;
-        int  fromCol = search.curRow >= 0 ? search.curCol : (dir > 0 ? -1 : INT_MAX);
-        Search::Pos p = search.findPos(fromRow, fromCol, dir, (long)total,
-                                       [&](size_t r) { return em.matchSpans(r, search.re); });
-        if (!p.found) { message = "Pattern not found"; return false; }
-        search.curRow = p.row; search.curCol = p.col;
+        int fromCol = search.curRow >= 0 ? search.curCol : (dir > 0 ? -1 : INT_MAX);
+        Search::Pos p = search.findPos(fromRow, fromCol, dir, (long)total, [&](size_t r) {
+            return em.matchSpans(r, search.re);
+        });
+        if (!p.found) {
+            message = "Pattern not found";
+            return false;
+        }
+        search.curRow = p.row;
+        search.curCol = p.col;
         nav.gotoLine((size_t)p.row + 1);
-        return true;   // a match was found; caller repaints (the current highlight moved
-                       // even when the view itself didn't — e.g. next match on the same row)
+        return true;  // a match was found; caller repaints (the current highlight moved
+                      // even when the view itself didn't — e.g. next match on the same row)
     };
 
     long count = 0;
-    bool counting = false;   // mid-count: don't reprint the prompt between digits
+    bool counting = false;  // mid-count: don't reprint the prompt between digits
     for (;;) {
         if (!counting) showPrompt();
         unsigned char c;
@@ -736,10 +844,14 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
             bool ok = readLine(c, pat);
             clearPrompt();
             message.clear();
-            count = 0; counting = false;
-            if (!ok) continue;                            // cancelled — leave the view
+            count = 0;
+            counting = false;
+            if (!ok) continue;  // cancelled — leave the view
             bool fwd = (c == '/');
-            if (!search.compile(pat, fwd)) { message = search.error; continue; }
+            if (!search.compile(pat, fwd)) {
+                message = search.error;
+                continue;
+            }
             runSearch(fwd ? +1 : -1);
             // Always full-repaint after a search: the highlight must be applied across
             // the WHOLE visible window (including matches already on screen), which the
@@ -750,19 +862,23 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
         if (c == 'n' || c == 'N') {
             clearPrompt();
             message.clear();
-            count = 0; counting = false;
+            count = 0;
+            counting = false;
             // n repeats in the search's direction; N reverses it.
             int dir = search.forward ? +1 : -1;
             if (c == 'N') dir = -dir;
-            if (runSearch(dir)) repaint();   // repaint to (re)highlight the visible window
+            if (runSearch(dir)) repaint();  // repaint to (re)highlight the visible window
             continue;
         }
         if (c == 'h') {
             clearPrompt();
             showHelp();
-            unsigned char k; nextKey(k);                  // any key dismisses
+            unsigned char k;
+            nextKey(k);  // any key dismisses
             repaint();
-            count = 0; counting = false; message.clear();
+            count = 0;
+            counting = false;
+            message.clear();
             continue;
         }
         if (c >= '0' && c <= '9') {
@@ -787,11 +903,14 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo,
             // paintMove for why a non-overlapping forward move can't use advance().
             paintMove(prevTop);
         }
-        if (a == Nav::REDRAW) { trace("redraw"); repaint(); }
+        if (a == Nav::REDRAW) {
+            trace("redraw");
+            repaint();
+        }
         if (a == Nav::MESSAGE) {
             char buf[64];
-            std::snprintf(buf, sizeof buf, "line %zu/%zu (%d%%)",
-                          nav.bottomLine(), nav.total, nav.percent());
+            std::snprintf(
+                buf, sizeof buf, "line %zu/%zu (%d%%)", nav.bottomLine(), nav.total, nav.percent());
             message = buf;
         }
     }

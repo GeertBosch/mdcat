@@ -30,10 +30,10 @@ $(B)/gmore_run.o: $(S)/gmore_run.cpp $(S)/gmore_run.h $(S)/gmore_emulator.h $(S)
 $(B)/highlight.o: $(S)/highlight.cpp $(S)/highlight.h | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
 
-$(B)/mdcat: $(S)/mdcat.cpp $(S)/highlight.h $(S)/gmore.h $(GMORE_OBJS) $(B)/highlight.o | $(B)
+$(B)/mdcat: $(S)/mdcat.cpp $(S)/highlight.h $(S)/gmore_run.h $(GMORE_OBJS) $(B)/highlight.o | $(B)
 	$(CXX) $(CXXFLAGS) $(PTHREAD) -I$(S) -o $@ $(S)/mdcat.cpp $(B)/highlight.o $(GMORE_OBJS)
 
-$(B)/gmore: $(S)/gmore.cpp $(S)/gmore.h $(GMORE_OBJS) | $(B)
+$(B)/gmore: $(S)/gmore.cpp $(S)/gmore_run.h $(GMORE_OBJS) | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -o $@ $(S)/gmore.cpp $(GMORE_OBJS)
 
 # Convenience symlinks in the project root so tests can run ./mdcat and ./gmore
@@ -60,7 +60,27 @@ TESTS := \
 	tests/gmore-repaint.sh \
 	tests/gmore-links.sh
 
-check: mdcat gmore
+CLANG_FORMAT ?= clang-format
+FMT_SRCS := \
+	$(S)/gmore_attrs.cpp \
+	$(S)/gmore_attrs.h \
+	$(S)/gmore_emulator.cpp \
+	$(S)/gmore_emulator.h \
+	$(S)/gmore_run.cpp \
+	$(S)/gmore_run.h \
+	$(S)/gmore_types.h \
+	$(S)/highlight.cpp \
+	$(S)/highlight.h \
+	$(S)/mdcat.cpp \
+	$(S)/gmore.cpp
+
+format:
+	$(CLANG_FORMAT) -i $(FMT_SRCS)
+
+format-check:
+	$(CLANG_FORMAT) --dry-run --Werror $(FMT_SRCS)
+
+check: format-check mdcat gmore
 	@fail=0; \
 	for t in $(TESTS); do \
 		name=$$(basename $$t .sh); \
@@ -83,12 +103,21 @@ SRCS := \
 	$(S)/gmore.cpp
 
 ABS := $(abspath .)
+CLANGD_TARGET := $(shell $(CXX) -print-target-triple 2>/dev/null)
+CLANGD_SYSROOT := $(shell xcrun --show-sdk-path 2>/dev/null)
+CLANGD_DB_FLAGS :=
+ifneq ($(strip $(CLANGD_TARGET)),)
+CLANGD_DB_FLAGS += -target $(CLANGD_TARGET)
+endif
+ifneq ($(strip $(CLANGD_SYSROOT)),)
+CLANGD_DB_FLAGS += -isysroot $(CLANGD_SYSROOT)
+endif
 
 compile_commands.json: Makefile
 	@printf '[\n' > $@
 	@first=1; \
 	for f in $(SRCS); do \
-		flags="$(CXXFLAGS) -I$(ABS)/$(S)"; \
+		flags="$(CXXFLAGS) $(CLANGD_DB_FLAGS) -I$(ABS)/$(S)"; \
 		case $$f in *mdcat*) flags="$$flags $(PTHREAD)";; esac; \
 		[ $$first -eq 0 ] && printf ',\n' >> $@; \
 		printf '  { "directory": "%s", "file": "%s/%s", "command": "$(CXX) %s -c %s/%s" }' \
@@ -115,4 +144,4 @@ install-git-pager:
 	git config --global core.pager gmore
 	@echo "Set git's global core.pager to gmore."
 
-.PHONY: all check clean install uninstall install-git-pager compile_commands.json
+.PHONY: all check clean install uninstall install-git-pager compile_commands.json format format-check

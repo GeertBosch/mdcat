@@ -8,20 +8,25 @@
 
 namespace gmore {
 
-// ---------------------------------------------------------------------------
-// Attributes (interned). Colour encoding: 0 = default; tag in the high byte —
-// PAL|idx for a 256-palette index, TRUE|rgb for 24-bit. linkId 0 = no link.
-// ---------------------------------------------------------------------------
+/**
+ * Attributes (interned). Colour encoding: 0 = default; tag in the high byte:
+ * PAL|idx for a 256-palette index, TRUE|rgb for 24-bit. linkId 0 means no link.
+ */
 constexpr uint32_t PAL = 0x01000000u, TRUE = 0x02000000u;
-inline uint32_t pal(int i) { return PAL | (i & 0xFF); }
-inline uint32_t tru(int r, int g, int b) { return TRUE | ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b & 0xFF); }
+inline uint32_t pal(int i) {
+    return PAL | (i & 0xFF);
+}
+inline uint32_t tru(int r, int g, int b) {
+    return TRUE | ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b & 0xFF);
+}
 
 enum { A_BOLD = 1, A_DIM = 2, A_ITALIC = 4, A_UNDER = 8, A_INVERSE = 16 };
 
 struct Attr {
     uint32_t fg = 0, bg = 0;
     uint16_t flags = 0;
-    uint32_t link = 0;  // OSC 8 linkId (0 = no link)
+    /** OSC 8 linkId (0 = no link). */
+    uint32_t link = 0;
     bool operator==(const Attr& o) const {
         return fg == o.fg && bg == o.bg && flags == o.flags && link == o.link;
     }
@@ -42,36 +47,48 @@ struct AttrHash {
     }
 };
 
-// Search-match highlight for one rendered row: cell-column spans [startCol,endCol)
-// to paint with a blue BACKGROUND (foreground left unchanged, like VSCode's find
-// highlight).
+/**
+ * Search-match highlight for one rendered row: cell-column spans [startCol,endCol)
+ * to paint with a blue background (foreground left unchanged, like VSCode's find
+ * highlight).
+ */
 struct Highlight {
-    std::vector<std::pair<int, int>> spans;  // sorted, non-overlapping, in cell columns
-    int current = -1;                        // index into spans of the active match, or -1
-    static constexpr const char* OTHER = "\033[48;5;153m";  // light steel blue
-    static constexpr const char* CUR = "\033[48;5;75m";    // medium sky blue (#5fafff)
+    /** Sorted, non-overlapping spans in cell columns. */
+    std::vector<std::pair<int, int>> spans;
+    /** Index into spans of the active match, or -1. */
+    int current = -1;
+    /** Light steel blue. */
+    static constexpr const char* OTHER = "\033[48;5;153m";
+    /** Medium sky blue (#5fafff). */
+    static constexpr const char* CUR = "\033[48;5;75m";
     bool empty() const { return spans.empty(); }
-    // Which highlight (if any) cell `col` falls in: 0 = none, 1 = other, 2 = current.
+    /** Which highlight (if any) cell col falls in: 0 = none, 1 = other, 2 = current. */
     int at(int col) const {
         for (size_t k = 0; k < spans.size(); ++k)
-            if (col >= spans[k].first && col < spans[k].second)
-                return (int)k == current ? 2 : 1;
+            if (col >= spans[k].first && col < spans[k].second) return (int)k == current ? 2 : 1;
         return 0;
     }
 };
 
 struct Cell {
     char32_t cp = U' ';
-    uint16_t attr = 0;   // index into gAttrs (0 = default)
-    uint8_t width = 1;   // display columns: 1 (normal), 2 (wide/fullwidth), 0 (wide continuation)
-    uint8_t flags = 0;
-    // Trailing zero-width code points (combining marks, variation selectors, ZWJ-joined parts) that
-    // belong to this cell's grapheme cluster.
+    /** Index into gAttrs (0 = default). */
+    uint16_t attr = 0;
+    /** Display columns: 1 (normal), 2 (wide/fullwidth), 0 (wide continuation). */
+    uint8_t width = 1;
+    // uint8_t flags = 0;
+    /**
+     * Trailing zero-width code points (combining marks, variation selectors,
+     * ZWJ-joined parts) that belong to this cell's grapheme cluster.
+     */
     std::u32string combine;
 };
 
-// Column width of a code point, mirrored from mdcat.cpp's codePointWidth so the pager measures text
-// exactly as the renderer laid it out. 0 = zero-width (combining/joiner/VS), 2 = wide, else 1.
+/**
+ * Column width of a code point, mirrored from mdcat.cpp's codePointWidth so the pager
+ * measures text exactly as the renderer laid it out. 0 = zero-width (combining/joiner/VS),
+ * 2 = wide, else 1.
+ */
 inline int cellWidthOf(char32_t cp) {
     auto in = [&](char32_t lo, char32_t hi) { return cp >= lo && cp <= hi; };
     if (cp == 0) return 0;
@@ -107,13 +124,17 @@ inline void appendUtf8(std::string& out, char32_t cp) {
 }
 
 struct Image {
-    size_t row = 0;       // absolute grid row of the image's top
-    int col = 0;          // column of the image's left edge
-    int Ph = 0, Pv = 0;   // painted pixel size
+    /** Absolute grid row of the image's top. */
+    size_t row = 0;
+    /** Column of the image's left edge. */
+    int col = 0;
+    /** Painted pixel size. */
+    int Ph = 0, Pv = 0;
     std::vector<uint32_t> px;
     std::string sixel;
     std::string kitty;
-    uint32_t kid = 0;     // Kitty image id (parsed from the APC's i=)
+    /** Kitty image id (parsed from the APC's i=). */
+    uint32_t kid = 0;
     int footCols = 0, footRows = 0;
 
     bool isKitty() const { return !kitty.empty(); }

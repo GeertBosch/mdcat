@@ -20,8 +20,6 @@
 // --dump-images renders text + re-encoded sixel strips (for render testing).
 // --imginfo prints decoded image metadata + ASCII rasters.
 
-#include "gmore.h"
-
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -31,8 +29,12 @@
 #include <cstring>
 #include <string>
 
+#include "gmore_run.h"
+
 static std::string readAll(int fd) {
-    std::string s; char buf[65536]; ssize_t n;
+    std::string s;
+    char buf[65536];
+    ssize_t n;
     while ((n = read(fd, buf, sizeof buf)) > 0) s.append(buf, static_cast<size_t>(n));
     return s;
 }
@@ -62,12 +64,19 @@ int main(int argc, char** argv) {
     bool dump = false, dumpImages = false, imginfo = false, navTrace = false;
     const char* path = nullptr;
     for (int i = 1; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--dump") == 0) dump = true;
-        else if (std::strcmp(argv[i], "--dump-images") == 0) { dump = true; dumpImages = true; }
-        else if (std::strcmp(argv[i], "--imginfo") == 0) imginfo = true;
-        else if (std::strcmp(argv[i], "--nav-trace") == 0) navTrace = true;
-        else if (std::strcmp(argv[i], "-") == 0) path = nullptr;
-        else path = argv[i];
+        if (std::strcmp(argv[i], "--dump") == 0)
+            dump = true;
+        else if (std::strcmp(argv[i], "--dump-images") == 0) {
+            dump = true;
+            dumpImages = true;
+        } else if (std::strcmp(argv[i], "--imginfo") == 0)
+            imginfo = true;
+        else if (std::strcmp(argv[i], "--nav-trace") == 0)
+            navTrace = true;
+        else if (std::strcmp(argv[i], "-") == 0)
+            path = nullptr;
+        else
+            path = argv[i];
     }
 
     // Fast passthrough: when stdout is not a terminal, gmore behaves like cat and
@@ -76,7 +85,10 @@ int main(int argc, char** argv) {
         if (!isatty(STDOUT_FILENO)) {
             if (path) {
                 int fd = open(path, O_RDONLY);
-                if (fd < 0) { std::perror(path); return 1; }
+                if (fd < 0) {
+                    std::perror(path);
+                    return 1;
+                }
                 int rc = streamCopy(fd, STDOUT_FILENO);
                 close(fd);
                 return rc;
@@ -91,8 +103,12 @@ int main(int argc, char** argv) {
     std::string data;
     if (path) {
         int fd = open(path, O_RDONLY);
-        if (fd < 0) { std::perror(path); return 1; }
-        data = readAll(fd); close(fd);
+        if (fd < 0) {
+            std::perror(path);
+            return 1;
+        }
+        data = readAll(fd);
+        close(fd);
     } else {
         data = readAll(STDIN_FILENO);
     }
