@@ -63,6 +63,27 @@ back to its alt text, or the filename if no alt is given.
 
 Image paths are resolved relative to the markdown file's directory.
 
+#### Remote images and the trust list
+
+An image whose `src` is a remote URL (like the CI badge at the top of this file)
+is fetched and rendered too — but only from **trusted hosts**, and only over
+**https**. Viewing a Markdown file should never quietly pull from an arbitrary
+server, so the trust list is built from two sources, with no built-in defaults:
+
+1. **Your git remotes.** Hosts you already push/pull to are trusted: mdcat reads
+   the git remotes of the repository containing the file being rendered (both
+   the `git@host:…` SSH form and the `https://host/…` URL form). That is why
+   this README's `github.com` badge renders for anyone who has cloned the repo.
+2. **A user config file** at `$XDG_CONFIG_HOME/mdcat/trusted-hosts` (or
+   `~/.config/mdcat/trusted-hosts`): one host per line, `#` for comments. A bare
+   `example.com` trusts exactly that host; a leading-dot or `*.` entry
+   (`.example.com` / `*.example.com`) also trusts its subdomains.
+
+Anything not on the list — an untrusted host, plain `http`, a URL with embedded
+credentials — falls back to the alt text, exactly like a non-graphics terminal.
+mdcat does the fetch itself with `curl` (https-only, redirect-following, with a
+timeout and a size cap), then hands the bytes to the normal image pipeline.
+
 > Why two protocols, and why a fractional cell breaks naive scaling? See
 > [cells, pixels, and the 6-vs-14 problem](docs/TERMINAL-GRAPHICS.md#2-cells-pixels-and-the-6-vs-14-problem)
 > in the field guide. Keeping images aligned inside a **table** has its own war
