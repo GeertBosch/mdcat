@@ -54,6 +54,7 @@ TESTS := \
 	tests/property-math.sh \
 	tests/unicode-width.sh \
 	tests/mdcat-kitty.sh \
+	tests/mdcat-remote-image.sh \
 	tests/gmore-emulator.sh \
 	tests/gmore-sixel.sh \
 	tests/gmore-nav.sh \
