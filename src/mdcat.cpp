@@ -2297,6 +2297,29 @@ std::string kittyRewriteFootprint(const std::string& apc, int cols, int rows) {
     return apc.substr(0, g + 3) + kept + footprint + apc.substr(semi);
 }
 
+// Replace q=2 (respond on error only) with q=1 (never respond) in every Kitty APC control
+// section in `bytes`. Used when output goes to a pipe: terminals that don't fully implement q=2
+// still send "OK" responses, which pile up in the pty input buffer and appear as garbage in the
+// shell after the command exits. q=1 is the universal suppression flag.
+std::string kittyQ1(const std::string& bytes) {
+    std::string out = bytes;
+    size_t pos = 0;
+    while (pos < out.size()) {
+        size_t g = out.find("\033_G", pos);
+        if (g == std::string::npos) break;
+        size_t ctrlStart = g + 3;
+        size_t semi = out.find(';', ctrlStart);
+        size_t st = out.find("\033\\", ctrlStart);
+        size_t ctrlEnd = std::min(semi != std::string::npos ? semi : out.size(),
+                                  st != std::string::npos ? st : out.size());
+        size_t q = out.find("q=2", ctrlStart);
+        if (q != std::string::npos && q < ctrlEnd)
+            out[q + 2] = '1';
+        pos = ctrlStart;
+    }
+    return out;
+}
+
 // Read a PNG's pixel width/height from the IHDR (big-endian uint32s at byte offsets 16 and 20,
 // right after the 8-byte signature + 4-byte length + "IHDR"). `png` is the raw PNG bytes. Returns
 // false if the buffer is too short or not a PNG.
@@ -4224,6 +4247,11 @@ private:
             // gets the next id. Text slots have no APC, so this is a no-op for them.
             std::string bytes = front.ready ? std::move(front.bytes) : front.fut.get();
             std::string renumbered = kittyRenumberAll(bytes);
+            // When writing to a pipe (not directly to the terminal), downgrade q=2 to q=1
+            // (never respond). Terminals that don't honour q=2 send "OK" responses that
+            // pile up in the pty input buffer and appear as garbage in the shell prompt.
+            if (fd_ >= 0 && !isatty(fd_))
+                renumbered = kittyQ1(renumbered);
             if (fd_ < 0)
                 buffer_ += renumbered;  // buffer mode: assemble in RAM for the pager
             else
