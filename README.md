@@ -1,5 +1,7 @@
 # mdcat
 
+[![CI](https://github.com/GeertBosch/mdcat/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/GeertBosch/mdcat/actions/workflows/ci.yml)
+
 A terminal Markdown renderer with inline images, tables, and hyperlinks.
 Companion pager `gmore` handles sixel and Kitty graphics natively, so images
 keep working over SSH.
