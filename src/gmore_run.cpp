@@ -152,7 +152,7 @@ static inline bool getWinsize(struct winsize& w) {
 static inline std::string queryCsiT(const char* arg) {
     int fd = open("/dev/tty", O_RDWR | O_NOCTTY);
     if (fd < 0) return std::string();
-    struct termios saved{};
+    struct termios saved = {};
     if (tcgetattr(fd, &saved) != 0) {
         close(fd);
         return std::string();

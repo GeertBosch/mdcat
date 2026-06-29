@@ -21,5 +21,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Set up pinned clang-format
+        run: make setup-clang-format
+
       - name: Build and test
         run: make check

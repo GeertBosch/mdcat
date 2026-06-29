@@ -227,7 +227,7 @@ enum class ProbeResult { Unknown, Unsupported, Sixel, Kitty };
 ProbeResult probeGraphics() {
     int fd = open("/dev/tty", O_RDWR | O_NOCTTY);
     if (fd < 0) return ProbeResult::Unknown;
-    struct termios saved{};
+    struct termios saved = {};
     if (tcgetattr(fd, &saved) != 0) {
         close(fd);
         return ProbeResult::Unknown;
@@ -419,7 +419,7 @@ struct TwoInts {
 TwoInts queryWindowOp(const char* op) {
     int fd = open("/dev/tty", O_RDWR | O_NOCTTY);
     if (fd < 0) return {0, 0};
-    struct termios saved{};
+    struct termios saved = {};
     if (tcgetattr(fd, &saved) != 0) {
         close(fd);
         return {0, 0};
@@ -466,7 +466,7 @@ std::string queryBackgroundColor() {
             return env[0] ? std::string(env) : std::string();
         int fd = open("/dev/tty", O_RDWR | O_NOCTTY);
         if (fd < 0) return std::string();
-        struct termios saved{};
+        struct termios saved = {};
         if (tcgetattr(fd, &saved) != 0) {
             close(fd);
             return std::string();

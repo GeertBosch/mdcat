@@ -62,6 +62,15 @@ TESTS := \
 	tests/gmore-links.sh
 
 CLANG_FORMAT ?= clang-format
+CLANG_FORMAT_REQUIRED_MAJOR ?= 20
+CLANG_FORMAT_PIP_SPEC ?= clang-format==20.1.8
+CLANG_FORMAT_VENV ?= .tooling/venv
+CLANG_FORMAT_PINNED := $(CLANG_FORMAT_VENV)/bin/clang-format
+
+ifneq ($(wildcard $(CLANG_FORMAT_PINNED)),)
+CLANG_FORMAT := $(CLANG_FORMAT_PINNED)
+endif
+
 FMT_SRCS := \
 	$(S)/gmore_attrs.cpp \
 	$(S)/gmore_attrs.h \
@@ -75,10 +84,27 @@ FMT_SRCS := \
 	$(S)/mdcat.cpp \
 	$(S)/gmore.cpp
 
-format:
+setup-clang-format:
+	python3 -m venv $(CLANG_FORMAT_VENV)
+	$(CLANG_FORMAT_VENV)/bin/python -m pip install --upgrade pip
+	$(CLANG_FORMAT_VENV)/bin/python -m pip install $(CLANG_FORMAT_PIP_SPEC)
+
+format-tool-check:
+	@major=`$(CLANG_FORMAT) --version 2>/dev/null | sed -E 's/.*version ([0-9]+).*/\1/'`; \
+	if [ -z "$$major" ]; then \
+		echo "clang-format not found at $(CLANG_FORMAT). Run 'make setup-clang-format' or set CLANG_FORMAT."; \
+		exit 1; \
+	fi; \
+	if [ "$$major" != "$(CLANG_FORMAT_REQUIRED_MAJOR)" ]; then \
+		echo "clang-format major $$major does not match required $(CLANG_FORMAT_REQUIRED_MAJOR)."; \
+		echo "Use 'make setup-clang-format' for the pinned formatter, or set CLANG_FORMAT explicitly."; \
+		exit 1; \
+	fi
+
+format: format-tool-check
 	$(CLANG_FORMAT) -i $(FMT_SRCS)
 
-format-check:
+format-check: format-tool-check
 	$(CLANG_FORMAT) --dry-run --Werror $(FMT_SRCS)
 
 check: format-check mdcat gmore
@@ -145,4 +171,4 @@ install-git-pager:
 	git config --global core.pager gmore
 	@echo "Set git's global core.pager to gmore."
 
-.PHONY: all check clean install uninstall install-git-pager compile_commands.json format format-check
+.PHONY: all check clean install uninstall install-git-pager compile_commands.json format format-check setup-clang-format format-tool-check
