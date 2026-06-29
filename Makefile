@@ -11,7 +11,7 @@ BINDIR ?= $(PREFIX)/bin
 S := src
 B := build
 
-all: $(B)/mdcat $(B)/gmore
+all: $(B)/mdcat $(B)/gmore mdcat gmore
 
 $(B):
 	mkdir -p $(B)
@@ -36,12 +36,13 @@ $(B)/mdcat: $(S)/mdcat.cpp $(S)/highlight.h $(S)/gmore_run.h $(GMORE_OBJS) $(B)/
 $(B)/gmore: $(S)/gmore.cpp $(S)/gmore_run.h $(GMORE_OBJS) | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -o $@ $(S)/gmore.cpp $(GMORE_OBJS)
 
-# Convenience symlinks in the project root so tests can run ./mdcat and ./gmore
+# Hard links in the project root so tests (and ad-hoc use) can run ./mdcat and ./gmore.
+# Hard links rather than symlinks so the root copies remain valid even if build/ is removed.
 mdcat: $(B)/mdcat
-	ln -sf $(B)/mdcat $@
+	ln -f $(B)/mdcat $@
 
 gmore: $(B)/gmore
-	ln -sf $(B)/gmore $@
+	ln -f $(B)/gmore $@
 
 TESTS := \
 	tests/property-concat.sh \
@@ -128,7 +129,7 @@ compile_commands.json: Makefile
 	@echo "wrote compile_commands.json"
 
 clean:
-	rm -rf $(B) mdcat gmore
+	rm -rf $(B)
 
 install: $(B)/mdcat $(B)/gmore
 	mkdir -p $(DESTDIR)$(BINDIR)
