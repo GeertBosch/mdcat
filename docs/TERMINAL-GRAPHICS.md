@@ -325,9 +325,18 @@ we don't re-walk them.
   at a line boundary between blocks, no chunk is ever split. (The tty/pager path
   still buffers the entire document: gmore scrolls over the complete text.) Probes
   that `cat` a complete stream *cannot* reproduce the original split-chunk bug.
-- **`q=2` on every Kitty command.** Without `q=1`/`q=2`, the terminal replies
-  `ESC_G…;OK ESC\` to each graphics command and the `OK` echoes onscreen as stray
-  escapes. Set `q=2` on **every** transmit *and* placement APC.
+- **`q=1` on every Kitty command — and don't trust timg to set it.** Without a
+  quiet flag the terminal replies `ESC_G…;OK ESC\` to each graphics command and the
+  `OK` echoes onscreen as stray escapes; over SSH the replies pile up in the remote
+  pty and spill onto the shell prompt after the command exits. **timg's Kitty header
+  is not uniform across versions:** macOS timg 1.6.3 emits `a=T,i=<n>,q=2,f=100,m=0`
+  (id + quiet flag present), but Debian's timg 1.4.3 emits a bare `a=T,f=100,m=0` —
+  **no `i=` and no `q=`**, so the terminal defaults to image id 0 *and* q=0 (always
+  reply). The leaked replies read `ESC_Gi=0;OK ESC\` — id 0 is the tell. So mdcat
+  must *insert* `i=` (a unique per-image id; without it every image collides on 0)
+  and `q=1`, not merely rewrite them: `kittyRewriteId` and `kittyQ1` both insert when
+  the key is absent, and first chunks are detected by the action key `a=` (not `i=`,
+  which older timg omits). gmore's own placements set `q=2` directly.
 - **RIS forgets Kitty images.** `ESC c` resets the terminal's image memory, so any
   transmit-once cache must be cleared whenever RIS is emitted, or placements
   reference an id the terminal no longer has → nothing drawn.

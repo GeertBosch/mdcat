@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "mmdc": "^0.0.1"
+  },
+  "allowScripts": {
+    "mmdc@0.0.1": true,
+    "puppeteer@24.43.1": true
+  }
+}

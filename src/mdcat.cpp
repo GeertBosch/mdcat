@@ -2148,12 +2148,14 @@ std::string runTimg(const std::string& path, const std::string& geomIn) {
 }
 
 // Run timg to render `path` into the given -g cell box with the KITTY graphics protocol (-pk),
-// returning its stdout: a Kitty APC (ESC _ G a=T,...,q=2,f=100,m=...; <base64 PNG> ESC \), chunked
+// returning its stdout: a Kitty APC (ESC _ G a=T,...,f=100,m=...; <base64 PNG> ESC \), chunked
 // for large images. Unlike the sixel path, timg here DOWNSCALES the image to the -g box with proper
 // interpolation (so the terminal does no quality-losing scaling — VSCode's terminal in particular
-// has no anti-aliasing), and emits a well-formed APC: q=2 on every chunk, correct m= chunking. timg
-// requires a -g box when headless (piped), so completeGeom fills any missing dimension. Returns
-// empty on failure. The caller rewrites the image id to a unique value (see kittyRewriteId).
+// has no anti-aliasing), with correct m= chunking. The exact header keys vary by timg version:
+// newer timg (1.6.3) sets i= and q=2, but older timg (Debian 1.4.3) emits neither, so the caller
+// must INSERT a unique i= and a q=1 rather than assume they are present (see kittyRewriteId /
+// kittyQ1). timg requires a -g box when headless (piped), so completeGeom fills any missing
+// dimension. Returns empty on failure.
 std::string runTimgKitty(const std::string& path, const std::string& geomIn) {
     std::string geom = completeGeom(geomIn);
     if (geom.empty()) geom = "100x100";  // timg -pk needs a box headless; a loose default
@@ -2210,10 +2212,12 @@ uint32_t nextKittyId() {
 // document order, on the writer thread" (ADR 0003 deferred slots). Distinct from 0 (mint now).
 constexpr uint32_t kKittyIdDefer = 0xFFFFFFFFu;
 
-// Rewrite the i= value on the FIRST Kitty controls segment of `apc` to `id` (byte-exact, leaving
-// the base64 payload and all chunk continuations untouched). timg's output is otherwise already
-// correct (q=2 on every chunk, f=100, proper m= chunking), so this is the only edit mdcat needs to
-// make.
+// Set the i= id on the FIRST Kitty controls segment of `apc` to `id` (byte-exact, leaving the
+// base64 payload and all chunk continuations untouched). An existing i= value is rewritten;
+// when timg omitted it (older timg — Debian's 1.4.3 emits a bare `a=T,f=100,m=0` with neither
+// i= nor q=), i=<id> is INSERTED right after `a=T`. Without an id the terminal assigns the image
+// the default id 0, so every image in a document would collide on 0 (a later transmit replaces
+// the earlier image) — and its OK reply reports `i=0`. Inserting a unique id fixes both.
 std::string kittyRewriteId(const std::string& apc, uint32_t id) {
     size_t g = apc.find("\033_G");
     if (g == std::string::npos) return apc;
@@ -2221,16 +2225,30 @@ std::string kittyRewriteId(const std::string& apc, uint32_t id) {
     size_t semi = apc.find(';', keyStart);  // controls run up to the first ';'
     if (semi == std::string::npos) return apc;
     size_t ip = apc.find("i=", keyStart);
-    if (ip == std::string::npos || ip > semi) return apc;
-    size_t numStart = ip + 2;
-    size_t numEnd = numStart;
-    while (numEnd < semi && std::isdigit((unsigned char)apc[numEnd])) ++numEnd;
-    return apc.substr(0, numStart) + std::to_string(id) + apc.substr(numEnd);
+    if (ip != std::string::npos && ip < semi) {  // rewrite an existing i=
+        size_t numStart = ip + 2;
+        size_t numEnd = numStart;
+        while (numEnd < semi && std::isdigit((unsigned char)apc[numEnd])) ++numEnd;
+        return apc.substr(0, numStart) + std::to_string(id) + apc.substr(numEnd);
+    }
+    // No i= present: insert it at the head of the controls run (controls always start with a=T
+    // on a real first chunk, so a leading "i=<id>," is well-formed).
+    return apc.substr(0, keyStart) + "i=" + std::to_string(id) + "," + apc.substr(keyStart);
+}
+
+// Whether the Kitty controls run in [ctrlStart, ctrlEnd) is an image's FIRST chunk — i.e. it
+// carries the action key `a=` (a=T transmit+display, a=t transmit-only). Continuation chunks
+// carry only `m=` (and, with some timg builds, `q=`), so `a=` is the reliable first-chunk marker.
+// Keying off `a=` rather than `i=` matters because older timg emits no i= at all (see
+// kittyRewriteId).
+static bool kittyIsFirstChunk(const std::string& s, size_t ctrlStart, size_t ctrlEnd) {
+    size_t a = s.find("a=", ctrlStart);
+    return a != std::string::npos && a < ctrlEnd;
 }
 
 // Renumber the i= id of every Kitty image in `bytes`, in order, with successive ids from
-// nextKittyId(). Each image's FIRST chunk carries the controls run with i=; continuation chunks
-// (m=) carry no i= and are left alone, so exactly one fresh id is minted per image. Used by the
+// nextKittyId(). Each image's FIRST chunk carries the action key (a=T); continuation chunks (m=)
+// carry no a= and are left alone, so exactly one fresh id is minted per image. Used by the
 // writer thread (ADR 0003) to stamp ids in document (slot) order, regardless of the order parallel
 // workers produced the bytes — keeping output byte-identical to the serial renderer, which minted
 // ids in document order on one thread. `bytes` may hold zero, one, or many images (a single
@@ -2246,17 +2264,16 @@ std::string kittyRenumberAll(const std::string& bytes) {
             break;
         }
         size_t semi = bytes.find(';', g + 3);
-        size_t ip = bytes.find("i=", g + 3);
         out.append(bytes, pos, g - pos);  // bytes before this APC
-        if (semi == std::string::npos || ip == std::string::npos || ip > semi) {
-            // No i= in this controls run: a continuation chunk (or not an image). Copy "\033_G"
-            // only and continue scanning just past it.
+        if (semi == std::string::npos || !kittyIsFirstChunk(bytes, g + 3, semi)) {
+            // No action key in this controls run: a continuation chunk (or not an image). Copy
+            // "\033_G" only and continue scanning just past it.
             out.append("\033_G");
             pos = g + 3;
             continue;
         }
-        // An image's first chunk: rewrite its i= to the next document-order id and copy through the
-        // ';'.
+        // An image's first chunk: set its i= to the next document-order id (inserting i= when
+        // timg emitted none) and copy through the ';'.
         out.append(kittyRewriteId(bytes.substr(g, semi - g + 1), nextKittyId()));
         pos = semi + 1;
     }
@@ -2297,25 +2314,43 @@ std::string kittyRewriteFootprint(const std::string& apc, int cols, int rows) {
     return apc.substr(0, g + 3) + kept + footprint + apc.substr(semi);
 }
 
-// Replace q=2 (respond on error only) with q=1 (never respond) in every Kitty APC control
-// section in `bytes`. Used when output goes to a pipe: terminals that don't fully implement q=2
-// still send "OK" responses, which pile up in the pty input buffer and appear as garbage in the
-// shell after the command exits. q=1 is the universal suppression flag.
+// Ensure every Kitty APC in `bytes` suppresses the terminal's "OK" reply with q=1 (never
+// respond). For each control section: rewrite an existing q=<n> to q=1, and on an image's first
+// chunk that carries NO q= at all, insert one. The missing-q= case is the important one — older
+// timg (Debian's 1.4.3) emits a bare `a=T,...` with no quiet flag, so the terminal defaults to
+// q=0 (always reply) and sends `ESC_Gi=0;OK ESC\` back. Over SSH those replies pile up in the
+// remote pty's input buffer and spill onto the shell prompt as garbage after mdcat exits.
+// Applied only when output is a pipe (the terminal, not mdcat, would otherwise consume the reply).
 std::string kittyQ1(const std::string& bytes) {
-    std::string out = bytes;
+    std::string out;
+    out.reserve(bytes.size() + 16);
     size_t pos = 0;
-    while (pos < out.size()) {
-        size_t g = out.find("\033_G", pos);
-        if (g == std::string::npos) break;
-        size_t ctrlStart = g + 3;
-        size_t semi = out.find(';', ctrlStart);
-        size_t st = out.find("\033\\", ctrlStart);
-        size_t ctrlEnd = std::min(semi != std::string::npos ? semi : out.size(),
-                                  st != std::string::npos ? st : out.size());
-        size_t q = out.find("q=2", ctrlStart);
-        if (q != std::string::npos && q < ctrlEnd)
-            out[q + 2] = '1';
-        pos = ctrlStart;
+    for (;;) {
+        size_t found = bytes.find("\033_G", pos);
+        if (found == std::string::npos) {
+            out.append(bytes, pos, std::string::npos);
+            break;
+        }
+        out.append(bytes, pos, found - pos);  // bytes before this APC
+        size_t ctrlStart = found + 3;
+        size_t semi = bytes.find(';', ctrlStart);
+        size_t st = bytes.find("\033\\", ctrlStart);
+        size_t ctrlEnd = std::min(semi != std::string::npos ? semi : bytes.size(),
+                                  st != std::string::npos ? st : bytes.size());
+        size_t q = bytes.find("q=", ctrlStart);
+        if (q != std::string::npos && q + 2 < ctrlEnd) {
+            // Existing q=<n>: copy through it, force the value to 1, skip the old digit.
+            out.append(bytes, found, (q + 2) - found);
+            out += '1';
+            pos = q + 3;  // past "q=" + one value digit
+        } else if (kittyIsFirstChunk(bytes, ctrlStart, ctrlEnd)) {
+            // First chunk with no q=: insert q=1 at the head of the controls run.
+            out.append("\033_Gq=1,");
+            pos = ctrlStart;
+        } else {
+            out.append("\033_G");  // continuation chunk: nothing to do
+            pos = ctrlStart;
+        }
     }
     return out;
 }
@@ -4250,8 +4285,7 @@ private:
             // When writing to a pipe (not directly to the terminal), downgrade q=2 to q=1
             // (never respond). Terminals that don't honour q=2 send "OK" responses that
             // pile up in the pty input buffer and appear as garbage in the shell prompt.
-            if (fd_ >= 0 && !isatty(fd_))
-                renumbered = kittyQ1(renumbered);
+            if (fd_ >= 0 && !isatty(fd_)) renumbered = kittyQ1(renumbered);
             if (fd_ < 0)
                 buffer_ += renumbered;  // buffer mode: assemble in RAM for the pager
             else

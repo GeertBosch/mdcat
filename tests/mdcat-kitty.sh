@@ -6,8 +6,10 @@
 #
 # Invariants checked, from a two-image document:
 #   - each <img> becomes a Kitty APC transmission (ESC _ G ... ESC \);
-#   - every command carries q=2 (so the terminal's ;OK reply stays silent and
-#     can't leak onscreen);
+#   - every transmission's first chunk carries q=1 (so the terminal's ;OK reply
+#     stays silent and can't leak onscreen — over SSH it would spill onto the shell
+#     prompt). mdcat INSERTS q=1 when timg omits it: Debian's timg 1.4.3 emits a
+#     bare `a=T,...` with no q= (→ q=0, always reply), unlike macOS timg 1.6.3;
 #   - the two images get DISTINCT image ids (a reused i= would make the second
 #     a=T re-lay the first placement and corrupt it — see ADR 0002);
 #   - no stray cursor-management codes leak (timg's own ESC[?25l / ESC[?25h are
@@ -91,11 +93,11 @@ PY
     fi
 }
 
-# Kitty: two images -> two APC transmissions, each with q=2, distinct ids, no leaks.
+# Kitty: two images -> two APC transmissions, each with q=1, distinct ids, no leaks.
 pycheck "kitty: two APC transmissions" kitty \
     '(n_apc == 2, f"expected 2 APCs, got {n_apc}")'
-pycheck "kitty: every command q=2" kitty \
-    '(all(b"q=2" in c for c in ctrls), "an APC is missing q=2")'
+pycheck "kitty: every first chunk q=1" kitty \
+    '(all(b"q=1" in c for c in ctrls if b"a=" in c), "a first chunk is missing q=1")'
 pycheck "kitty: distinct image ids" kitty \
     '(len(set(firstids)) == 2 and len(firstids) == 2, f"expected 2 distinct ids, got {firstids}")'
 pycheck "kitty: no cursor-code leak" kitty \
