@@ -102,10 +102,12 @@ std::string kLightGray = "\033[38;5;250m";  // table row separators; lightened o
 const std::string kQuoteBar = "\033[38;5;244m▎\033[0m ";  // the left rule drawn before quoted lines
 // Grouping parentheses that renderMath adds around \sqrt / \frac arguments (our Unicode transliter-
 // ation can't draw an extended radical or a stacked fraction, so braces become parens instead).
-// Ghosted almost into the background so the grouping reads as faint structure, not content: gray
-// 254 (one step from white, near the paper) on a light theme, gray 235 (near black) on a dark theme
-// (both set in initTheme). The SGR "dim" attribute (\033[2m) is layered on top so terminals that
-// honour it fade the glyph further. Empty until initTheme runs (plain parens if never).
+// Faint so the grouping reads as structure, not content, but still legible — the parens carry the
+// grouping, so they must not vanish. Light theme: gray 254 (near the white paper) + SGR dim, which
+// has plenty of room to fade against a bright background. Dark theme: gray 242 with NO dim (set in
+// initTheme). A near-background gray 235 + dim disappeared entirely on a dark terminal (iTerm), so
+// the dark path uses a legible mid-gray and drops the dim that compounded the problem. Empty until
+// initTheme runs (plain parens if never).
 std::string kMathGroupOn = "\033[2;38;5;254m";    // ghosted grouping parens (light-theme default)
 const std::string kMathGroupOff = "\033[22;39m";  // undo dim + restore default fg (keeps other SGR)
 
@@ -782,7 +784,8 @@ void initTheme() {
         kCodeOn = "\033[48;5;236;38;5;252m";  // dark-gray bg, light-gray fg
         kLightGray = "\033[38;5;240m";        // a dimmer separator that reads on a dark background
         kMathGroupOn =
-            "\033[2;38;5;235m";  // ghosted dark-gray grouping parens on a dark background
+            "\033[38;5;242m";  // faint but legible grouping parens on a dark background (no dim:
+                               // dim + a near-black gray made them vanish on iTerm)
         setHighlightTheme(true);
     } else {
         setHighlightTheme(false);  // kCodeOn/kLightGray keep their light-theme defaults
