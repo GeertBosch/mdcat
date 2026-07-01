@@ -2448,9 +2448,12 @@ public:
     }
 
     // Enqueue `fn` and return a future for its result. The task runs on some worker thread.
+    // R is deduced with decltype rather than std::invoke_result/result_of: result_of was removed
+    // in C++20, and some libc++ builds gate invoke_result behind -std=c++20, so decltype is the
+    // portable spelling that works across the toolchains this project is built with.
     template <class F>
-    std::future<typename std::invoke_result<F>::type> submit(F&& fn) {
-        using R = typename std::invoke_result<F>::type;
+    auto submit(F&& fn) -> std::future<decltype(fn())> {
+        using R = decltype(fn());
         auto task = std::make_shared<std::packaged_task<R()>>(std::forward<F>(fn));
         std::future<R> fut = task->get_future();
         {
