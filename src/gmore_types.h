@@ -123,6 +123,141 @@ inline void appendUtf8(std::string& out, char32_t cp) {
     }
 }
 
+/**
+ * Map a Unicode code point to its "base" ASCII equivalent for font-independent
+ * search: math italic/bold letters → A-Z/a-z; super/subscript digits and
+ * punctuation → their ASCII originals; letterlike math symbols (ℝ, ℤ, ℎ …) →
+ * their plain-letter equivalents.  Returns `cp` unchanged when no mapping
+ * applies.
+ *
+ * The covered math-alphabet ranges are those used by mdcat's LaTeX renderer
+ * (italic default, bold \mathbf, double-struck \mathbb) plus the most common
+ * additional Mathematical-Alphanumeric-Symbols blocks so that font variants
+ * from any source are normalised the same way.
+ */
+inline char32_t foldFontVariant(char32_t cp) {
+    // Mathematical Bold A-Z (U+1D400-U+1D419) and a-z (U+1D41A-U+1D433)
+    if (cp >= 0x1D400 && cp <= 0x1D433) {
+        unsigned idx = cp - 0x1D400;
+        return idx < 26 ? (char32_t)(U'A' + idx) : (char32_t)(U'a' + (idx - 26));
+    }
+    // Mathematical Italic A-Z (U+1D434-U+1D44D) and a-z (U+1D44E-U+1D467)
+    // U+1D455 is unassigned (italic h is U+210E, handled below).
+    if (cp >= 0x1D434 && cp <= 0x1D467) {
+        unsigned idx = cp - 0x1D434;
+        return idx < 26 ? (char32_t)(U'A' + idx) : (char32_t)(U'a' + (idx - 26));
+    }
+    // Mathematical Bold Italic A-Z (U+1D468-U+1D481) and a-z (U+1D482-U+1D49B)
+    if (cp >= 0x1D468 && cp <= 0x1D49B) {
+        unsigned idx = cp - 0x1D468;
+        return idx < 26 ? (char32_t)(U'A' + idx) : (char32_t)(U'a' + (idx - 26));
+    }
+    // Mathematical Double-Struck A-Z (U+1D538-U+1D551) and a-z (U+1D552-U+1D56B)
+    // Some uppercase slots are unassigned (those letters live in Letterlike Symbols below).
+    if (cp >= 0x1D538 && cp <= 0x1D56B) {
+        unsigned idx = cp - 0x1D538;
+        return idx < 26 ? (char32_t)(U'A' + idx) : (char32_t)(U'a' + (idx - 26));
+    }
+    // Mathematical Sans-Serif A-Z (U+1D5A0-U+1D5B9) and a-z (U+1D5BA-U+1D5D3)
+    if (cp >= 0x1D5A0 && cp <= 0x1D5D3) {
+        unsigned idx = cp - 0x1D5A0;
+        return idx < 26 ? (char32_t)(U'A' + idx) : (char32_t)(U'a' + (idx - 26));
+    }
+    // Mathematical Monospace A-Z (U+1D670-U+1D689) and a-z (U+1D68A-U+1D6A3)
+    if (cp >= 0x1D670 && cp <= 0x1D6A3) {
+        unsigned idx = cp - 0x1D670;
+        return idx < 26 ? (char32_t)(U'A' + idx) : (char32_t)(U'a' + (idx - 26));
+    }
+    // Letterlike symbols used as math letter variants
+    switch (cp) {
+    case 0x210E: return U'h';  // ℎ Planck constant (math italic h)
+    case 0x2102: return U'C';  // ℂ double-struck C
+    case 0x210D: return U'H';  // ℍ double-struck H
+    case 0x2115: return U'N';  // ℕ double-struck N
+    case 0x2119: return U'P';  // ℙ double-struck P
+    case 0x211A: return U'Q';  // ℚ double-struck Q
+    case 0x211D: return U'R';  // ℝ double-struck R
+    case 0x2124:
+        return U'Z';  // ℤ double-struck Z
+    // Superscript digits and operators
+    case 0x2070: return U'0';  // ⁰
+    case 0x00B9: return U'1';  // ¹
+    case 0x00B2: return U'2';  // ²
+    case 0x00B3: return U'3';  // ³
+    case 0x2074: return U'4';  // ⁴
+    case 0x2075: return U'5';  // ⁵
+    case 0x2076: return U'6';  // ⁶
+    case 0x2077: return U'7';  // ⁷
+    case 0x2078: return U'8';  // ⁸
+    case 0x2079: return U'9';  // ⁹
+    case 0x207A: return U'+';  // ⁺
+    case 0x207B: return U'-';  // ⁻
+    case 0x207C: return U'=';  // ⁼
+    case 0x207D: return U'(';  // ⁽
+    case 0x207E: return U')';  // ⁾
+    case 0x207F: return U'n';  // ⁿ
+    case 0x2071: return U'i';  // ⁱ
+    case 0x00B7:
+        return U'.';  // · middle dot (superscript '.' in mdcat)
+    // Subscript digits and operators
+    case 0x2080: return U'0';  // ₀
+    case 0x2081: return U'1';  // ₁
+    case 0x2082: return U'2';  // ₂
+    case 0x2083: return U'3';  // ₃
+    case 0x2084: return U'4';  // ₄
+    case 0x2085: return U'5';  // ₅
+    case 0x2086: return U'6';  // ₆
+    case 0x2087: return U'7';  // ₇
+    case 0x2088: return U'8';  // ₈
+    case 0x2089: return U'9';  // ₉
+    case 0x208A: return U'+';  // ₊
+    case 0x208B: return U'-';  // ₋
+    case 0x208C: return U'=';  // ₌
+    case 0x208D: return U'(';  // ₍
+    case 0x208E: return U')';  // ₎
+    }
+    return cp;
+}
+
+/**
+ * Return a copy of the UTF-8 string `s` with every code point replaced by its
+ * foldFontVariant() equivalent.  Used to normalise search patterns and grid
+ * row text so that, e.g., a search for plain 'a' matches math-italic '𝑎'.
+ */
+inline std::string foldText(const std::string& s) {
+    std::string out;
+    out.reserve(s.size());
+    size_t i = 0;
+    while (i < s.size()) {
+        auto b0 = static_cast<unsigned char>(s[i++]);
+        char32_t cp;
+        if (b0 < 0x80) {
+            cp = b0;
+        } else if (b0 < 0xC2 || b0 >= 0xF8) {
+            out += static_cast<char>(b0);  // invalid lead byte — pass through
+            continue;
+        } else {
+            int n = (b0 < 0xE0) ? 2 : (b0 < 0xF0) ? 3 : 4;
+            cp = b0 & static_cast<unsigned char>(0x3F >> (n - 1));
+            for (int k = 1; k < n; ++k) {
+                if (i >= s.size()) {
+                    cp = 0xFFFDu;
+                    break;
+                }
+                auto b = static_cast<unsigned char>(s[i++]);
+                if ((b & 0xC0) != 0x80) {
+                    cp = 0xFFFDu;
+                    --i;
+                    break;
+                }
+                cp = (cp << 6) | (b & 0x3Fu);
+            }
+        }
+        appendUtf8(out, foldFontVariant(cp));
+    }
+    return out;
+}
+
 struct Image {
     /** Absolute grid row of the image's top. */
     size_t row = 0;

@@ -351,6 +351,13 @@ letter. `n`/`N` wrap around the end of the file. Matches are highlighted with a
 blue background — a brighter blue for the current match, a lighter one for the
 others on screen — leaving the text's own colour intact.
 
+Search is also *font-independent*: mdcat renders LaTeX math in Unicode math
+alphabets (italic `𝑎`, bold `𝐯`, …) and super/subscript forms (`²`, `₂`, …),
+so typing plain `a`, `v`, `2` finds those variants automatically. Searching for
+the styled character itself (e.g. `𝑎`) also works — the pattern is normalised
+the same way. Blackboard-bold letters (`ℝ`, `ℤ`, `ℎ`) map to their plain
+counterparts (`R`, `Z`, `h`) too.
+
 ## Requirements
 
 - A C++17 compiler (clang or g++)

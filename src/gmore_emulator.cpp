@@ -986,7 +986,12 @@ struct Emulator::Impl {
     // non-null it is filled so cellAt[byteOffset] = the cell index that contributed
     // the byte at that offset (one entry per byte, plus a terminating entry) — used
     // to map a regex match's byte range back to cell columns for highlighting.
-    std::string rowText(size_t absRow, std::vector<int>* cellAt = nullptr) const {
+    // `fold=true` replaces every code point with foldFontVariant(cp) so the
+    // returned text (and its cellAt mapping) use the normalised ASCII form.
+    // Used by matchSpans for font-independent regex search.
+    std::string rowText(size_t absRow,
+                        std::vector<int>* cellAt = nullptr,
+                        bool fold = false) const {
         std::string out;
         if (cellAt) cellAt->clear();
         if (absRow >= rows.size()) return out;
@@ -997,7 +1002,7 @@ struct Emulator::Impl {
         for (int i = 0; i <= last; ++i) {
             if (L[i].width == 0 && L[i].cp == 0) continue;
             size_t before = out.size();
-            appendUtf8(out, L[i].cp);
+            appendUtf8(out, fold ? foldFontVariant(L[i].cp) : L[i].cp);
             for (char32_t comb : L[i].combine) appendUtf8(out, comb);
             if (cellAt)
                 cellAt->resize(out.size(), i);  // bytes [before,out.size()) belong to cell i
@@ -1012,10 +1017,12 @@ struct Emulator::Impl {
     // Byte ranges from the regex are mapped through the cellAt table so spans land
     // on whole cells (wide chars / combining marks included). Empty matches are
     // skipped (an empty span would highlight nothing and could loop).
+    // The row text is folded (foldFontVariant) before matching so that font
+    // variants like math-italic '𝑎' are found by a plain 'a' pattern.
     std::vector<std::pair<int, int>> matchSpans(size_t absRow, const std::regex& re) const {
         std::vector<std::pair<int, int>> spans;
         std::vector<int> cellAt;
-        std::string text = rowText(absRow, &cellAt);
+        std::string text = rowText(absRow, &cellAt, /*fold=*/true);
         if (text.empty()) return spans;
         auto begin = std::sregex_iterator(text.begin(), text.end(), re);
         for (auto it = begin; it != std::sregex_iterator(); ++it) {

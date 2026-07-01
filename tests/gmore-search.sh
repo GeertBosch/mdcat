@@ -194,6 +194,72 @@ scheck '^xx '  "/HIT${nl}nn"    'ooC' "step 3rd same line"
 scheck 'solo'  "/HIT${nl}nnn"   'C'   "step wraps to solo"
 scheck 'solo'  "/HIT${nl}N"     'C'   "step N wraps back to solo"
 
+# --- Font-independent (math-variant) matching ------------------------------------
+# gmore normalises the row text and the search pattern through foldFontVariant so
+# that math-italic '𝑎' (U+1D44E), math-bold '𝐯' (U+1D42F), subscript '₂'
+# (U+2082), superscript '²' (U+00B2), the Planck constant 'ℎ' (U+210E), and
+# blackboard-bold 'ℝ' (U+211D) are found by their plain ASCII equivalents.
+#
+# The test file is 20 rows with filler "xxxx" rows (no ASCII a/v/2/h/R); the math
+# variants appear on specific rows so the nav-trace position is predictable:
+#   row 1 (0-indexed): 𝑎𝑏𝑐       (math italic a, b, c)
+#   row 3            : 𝐯𝐰         (math bold v, w)
+#   row 4            : x₂x        (subscript 2)
+#   row 5            : x²x        (superscript 2)
+#   row 6            : ℎ          (Planck constant, italic h)
+#   row 7            : ℝℤ         (blackboard-bold R, Z)
+cat > "$tmp/math" <<'EOF'
+xxxx
+𝑎𝑏𝑐
+xxxx
+𝐯𝐰
+x₂x
+x²x
+ℎ
+ℝℤ
+xxxx
+xxxx
+xxxx
+xxxx
+xxxx
+xxxx
+xxxx
+xxxx
+xxxx
+xxxx
+xxxx
+xxxx
+EOF
+
+# mcheck LABEL KEYS EXPECTED — like check but reads $tmp/math (LINES=6, pageH=5).
+mcheck() {
+    label=$1; keys=$2; expected=$3
+    act=$(GMORE_KEYS="$keys" LINES=6 COLUMNS=40 "$gmore" --nav-trace "$tmp/math" 2>"$tmp/err")
+    if [ "$act" = "$expected" ]; then
+        n=$((n + 1))
+    else
+        echo "gmore-search: FAIL [$label] keys='$keys'" >&2
+        echo "  expected: $expected" >&2
+        echo "  actual:   $act" >&2
+        [ -s "$tmp/err" ] && { echo "  stderr:" >&2; sed 's/^/    /' "$tmp/err" >&2; }
+        fails=$((fails + 1))
+    fi
+}
+
+# Plain 'a' finds math-italic 𝑎 (row 1 → top 1).
+mcheck "fold italic a"    "/a$nl"    'top=1 bottom=6 total=20 pct=30% more'
+# The italic letter 𝑎 itself as the pattern also matches (pattern is folded too).
+mcheck "fold italic a-pat" "/𝑎$nl"  'top=1 bottom=6 total=20 pct=30% more'
+# 'v' finds math-bold 𝐯 (row 3 → top 3).
+mcheck "fold bold v"      "/v$nl"    'top=3 bottom=8 total=20 pct=40% more'
+# '2' finds subscript ₂ (row 4 → top 4); n advances to superscript ² (row 5 → top 5).
+mcheck "fold subscript 2" "/2$nl"    'top=4 bottom=9 total=20 pct=45% more'
+mcheck "fold super 2 n"   "/2${nl}n" 'top=5 bottom=10 total=20 pct=50% more'
+# 'h' finds Planck constant ℎ (row 6 → top 6).
+mcheck "fold planck h"    "/h$nl"    'top=6 bottom=11 total=20 pct=55% more'
+# 'R' (uppercase → case-sensitive) finds blackboard-bold ℝ (row 7 → top 7).
+mcheck "fold bbold R"     "/R$nl"    'top=7 bottom=12 total=20 pct=60% more'
+
 if [ "$fails" -eq 0 ]; then
     echo "gmore-search: OK ($n cases)"
     exit 0

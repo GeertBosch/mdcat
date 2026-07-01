@@ -43,12 +43,15 @@ struct Search {
 
     // Compile `pat` as the active pattern searched in direction `fwd`. Returns
     // false (and sets error) if the regex is malformed; the prior pattern is kept.
+    // The pattern is folded (foldText) before compilation so that math-font
+    // variants typed or pasted by the user match the same folded row text.
     bool compile(const std::string& pat, bool fwd) {
         if (pat.empty()) return valid;  // empty /  re-uses the last pattern
+        std::string folded = foldText(pat);
         auto flags = std::regex::ECMAScript;
-        if (!hasUpper(pat)) flags |= std::regex::icase;
+        if (!hasUpper(folded)) flags |= std::regex::icase;
         try {
-            re = std::regex(pat, flags);
+            re = std::regex(folded, flags);
         } catch (const std::regex_error& e) {
             error = std::string("Invalid regex: ") + e.what();
             return false;
