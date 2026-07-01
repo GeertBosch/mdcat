@@ -90,11 +90,11 @@ check mathit '$\mathit{ab}$'                        '𝑎𝑏'
 check mathbb-r  '$\mathbb{R}$'                      'ℝ'
 check mathbb-in '$x \in \mathbb{Z}$'               '𝑥 ∈ ℤ'
 
-# \sqrt / \frac fall back to explicit grouping parens (dimmed via escapes, which the escape-stripping
-# in check() removes, so only the parens themselves are compared here). Parens appear ONLY where the
-# flattened form would otherwise misgroup: a top-level sum/difference always; an explicit product or
-# division only in a denominator (same strength as the bar). A single term, a numerator product, or
-# implicit multiplication (2a) stays bare. The bar '/' is normal foreground (never dimmed) and spaced
+# \sqrt / \frac fall back to explicit grouping parens (faint gray via escapes, which the escape-
+# stripping in check() removes, so only the parens themselves are compared here). Parens appear ONLY
+# where the flattened form would otherwise misgroup: a top-level sum/difference always; an explicit
+# product or division only in a denominator (same strength as the bar). A single term, a numerator
+# product, or implicit multiplication (2a) stays bare. The bar '/' is normal foreground and spaced
 # on both sides so it reads as a same-strength operator alongside ⋅.
 check sqrt-arg      '$\sqrt{a^2 + b^2}$'            '√(𝑎² + 𝑏²)'
 check sqrt-term     '$\sqrt{2}$'                     '√2'

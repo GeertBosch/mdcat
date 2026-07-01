@@ -102,14 +102,15 @@ std::string kLightGray = "\033[38;5;250m";  // table row separators; lightened o
 const std::string kQuoteBar = "\033[38;5;244m▎\033[0m ";  // the left rule drawn before quoted lines
 // Grouping parentheses that renderMath adds around \sqrt / \frac arguments (our Unicode transliter-
 // ation can't draw an extended radical or a stacked fraction, so braces become parens instead).
-// Faint so the grouping reads as structure, not content, but still legible — the parens carry the
-// grouping, so they must not vanish. Light theme: gray 254 (near the white paper) + SGR dim, which
-// has plenty of room to fade against a bright background. Dark theme: gray 242 with NO dim (set in
-// initTheme). A near-background gray 235 + dim disappeared entirely on a dark terminal (iTerm), so
-// the dark path uses a legible mid-gray and drops the dim that compounded the problem. Empty until
-// initTheme runs (plain parens if never).
-std::string kMathGroupOn = "\033[2;38;5;254m";    // ghosted grouping parens (light-theme default)
-const std::string kMathGroupOff = "\033[22;39m";  // undo dim + restore default fg (keeps other SGR)
+// Faint so the grouping reads as structure, not content, but they MUST NOT vanish: they carry the
+// grouping. Earlier theme-specific grays (254 near-white on light, 235/242 near-black on dark) were
+// each invisible on the OPPOSITE background — and theme detection (OSC 11) fails silently over SSH,
+// under pipes, and on some terminals, falling back to the light value on a dark screen (which is
+// where the parens disappeared, iTerm). So we use one theme-independent mid-gray (245) with real
+// contrast against both a light and a dark background, and no SGR dim (which only pushed the glyph
+// further toward the background). No initTheme override.
+const std::string kMathGroupOn = "\033[38;5;245m";  // faint but theme-independent grouping parens
+const std::string kMathGroupOff = "\033[39m";       // restore default fg (keeps other SGR)
 
 // An explicit width from the --width/-w command-line flag, or <= 0 if none was given. Set by main()
 // before any rendering, and so before terminalWidth() is first called and caches its result.
@@ -783,9 +784,8 @@ void initTheme() {
     if (darkBackground()) {
         kCodeOn = "\033[48;5;236;38;5;252m";  // dark-gray bg, light-gray fg
         kLightGray = "\033[38;5;240m";        // a dimmer separator that reads on a dark background
-        kMathGroupOn =
-            "\033[38;5;242m";  // faint but legible grouping parens on a dark background (no dim:
-                               // dim + a near-black gray made them vanish on iTerm)
+        // kMathGroupOn is theme-independent (mid-gray 245): legible on both backgrounds, and robust
+        // when OSC 11 theme detection is unavailable. See its declaration.
         setHighlightTheme(true);
     } else {
         setHighlightTheme(false);  // kCodeOn/kLightGray keep their light-theme defaults
