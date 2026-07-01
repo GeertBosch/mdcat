@@ -15,6 +15,27 @@ prefer amending the existing commit over stacking new commits, so a single unit
 of work stays a single commit. Intermediate states remain recoverable via
 `git reflog`. Once a commit is pushed, do not amend it — add a new commit.
 
+## Always pass CI before pushing to origin
+
+Never push to `origin` until the exact commit being pushed has passed the CI
+checks locally. GitHub's `main` allows the push through, so a red build is only
+caught after the fact — reproduce it first.
+
+CI (`.github/workflows/ci.yml`) runs `make setup-clang-format` then `make check`
+on `ubuntu-latest`. Reproduce it faithfully — the pinned clang-format and GCC
+have caught breakage that Apple's toolchain did not:
+
+- Preferred: on the Ubuntu VM reachable via `ssh orb`, do a fresh `git clone` of
+  the local repo, `git checkout` the commit to be pushed, then run
+  `make setup-clang-format && make check` (with `LANG=C.UTF-8 LC_ALL=C.UTF-8`).
+  A clone rather than the shared working tree keeps the check honest and off the
+  local `build/`.
+- At minimum, run `make check` locally with the pinned clang-format.
+
+Push only when it is green. After pushing, confirm the real GitHub run also
+passed (`gh run watch`), since the local reproduction can still diverge from the
+runner.
+
 ## Keep memory in sync with substantial commits
 
 After each substantial commit, check whether the change makes any existing
