@@ -358,6 +358,13 @@ the styled character itself (e.g. `𝑎`) also works — the pattern is normalis
 the same way. Blackboard-bold letters (`ℝ`, `ℤ`, `ℎ`) map to their plain
 counterparts (`R`, `Z`, `h`) too.
 
+```bash
+./mdcat README.md | ./gmore  # render this file, then:
+# /x   finds every math-italic 𝑥 (from $x \in \mathbb{R}$ above)
+# /R   finds blackboard-bold ℝ (from \mathbb{R})
+# /2   finds superscript ² (from $mc^2$, $10^{23}$, …)
+```
+
 ## Requirements
 
 - A C++17 compiler (clang or g++)

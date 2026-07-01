@@ -196,9 +196,8 @@ inline char32_t foldFontVariant(char32_t cp) {
     case 0x207D: return U'(';  // ⁽
     case 0x207E: return U')';  // ⁾
     case 0x207F: return U'n';  // ⁿ
-    case 0x2071: return U'i';  // ⁱ
-    case 0x00B7:
-        return U'.';  // · middle dot (superscript '.' in mdcat)
+    case 0x2071:
+        return U'i';  // ⁱ
     // Subscript digits and operators
     case 0x2080: return U'0';  // ₀
     case 0x2081: return U'1';  // ₁
@@ -220,6 +219,35 @@ inline char32_t foldFontVariant(char32_t cp) {
 }
 
 /**
+ * Decode the UTF-8 code point beginning at s[i] into cp, returning the byte
+ * length consumed (>=1). An invalid/truncated sequence yields the single lead
+ * byte as cp with length 1 (best-effort — same convention as mdcat.cpp).
+ */
+inline int decodeUtf8(const std::string& s, size_t i, uint32_t& cp) {
+    unsigned char c = static_cast<unsigned char>(s[i]);
+    if (c < 0x80) {
+        cp = c;
+        return 1;
+    }
+    int n = (c < 0xE0) ? 2 : (c < 0xF0) ? 3 : 4;
+    if (c < 0xC2 || c >= 0xF8 || i + static_cast<size_t>(n) > s.size()) {
+        cp = c;
+        return 1;
+    }
+    static const unsigned char kLeadMask[5] = {0, 0x7F, 0x1F, 0x0F, 0x07};
+    cp = c & kLeadMask[n];
+    for (int k = 1; k < n; ++k) {
+        unsigned char cc = static_cast<unsigned char>(s[i + k]);
+        if ((cc & 0xC0) != 0x80) {
+            cp = c;
+            return 1;
+        }
+        cp = (cp << 6) | (cc & 0x3F);
+    }
+    return n;
+}
+
+/**
  * Return a copy of the UTF-8 string `s` with every code point replaced by its
  * foldFontVariant() equivalent.  Used to normalise search patterns and grid
  * row text so that, e.g., a search for plain 'a' matches math-italic '𝑎'.
@@ -227,33 +255,11 @@ inline char32_t foldFontVariant(char32_t cp) {
 inline std::string foldText(const std::string& s) {
     std::string out;
     out.reserve(s.size());
-    size_t i = 0;
-    while (i < s.size()) {
-        auto b0 = static_cast<unsigned char>(s[i++]);
-        char32_t cp;
-        if (b0 < 0x80) {
-            cp = b0;
-        } else if (b0 < 0xC2 || b0 >= 0xF8) {
-            out += static_cast<char>(b0);  // invalid lead byte — pass through
-            continue;
-        } else {
-            int n = (b0 < 0xE0) ? 2 : (b0 < 0xF0) ? 3 : 4;
-            cp = b0 & static_cast<unsigned char>(0x3F >> (n - 1));
-            for (int k = 1; k < n; ++k) {
-                if (i >= s.size()) {
-                    cp = 0xFFFDu;
-                    break;
-                }
-                auto b = static_cast<unsigned char>(s[i++]);
-                if ((b & 0xC0) != 0x80) {
-                    cp = 0xFFFDu;
-                    --i;
-                    break;
-                }
-                cp = (cp << 6) | (b & 0x3Fu);
-            }
-        }
+    for (size_t i = 0; i < s.size();) {
+        uint32_t cp;
+        int n = decodeUtf8(s, i, cp);
         appendUtf8(out, foldFontVariant(cp));
+        i += n;
     }
     return out;
 }
