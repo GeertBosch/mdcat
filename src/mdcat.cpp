@@ -76,6 +76,17 @@ namespace {
 
 constexpr char kEsc = '\033';
 
+// Math-atom sentinels. A rendered math expression is a self-contained unit that must NOT be broken
+// or respaced by reflow(): it is laid out like an inline image formed of characters (and will grow
+// a height dimension once stacked fractions/matrices arrive), so its internal spacing is exact and
+// meaningful, not prose whitespace to be collapsed. renderInline brackets each math span with these
+// two Private-Use markers; reflow's unitLength treats everything between them as ONE indivisible
+// unit (so interior spaces survive), displayWidth counts the interior but skips the markers, and a
+// final stripMathAtoms() pass removes the markers just before output. Zero-width by codePointWidth
+// so they never affect measurement. U+E000/U+E001 (UTF-8: EE 80 80 / EE 80 81).
+const std::string kMathAtomStart = "\xEE\x80\x80";  // U+E000
+const std::string kMathAtomEnd = "\xEE\x80\x81";    // U+E001
+
 const std::string kBoldOn = "\033[1m";
 const std::string kBoldOff = "\033[22m";
 const std::string kItalicOn = "\033[3m";
@@ -89,6 +100,14 @@ const std::string kCodeOff = "\033[39;49m";
 const std::string kReset = "\033[0m";
 std::string kLightGray = "\033[38;5;250m";  // table row separators; lightened on a dark theme
 const std::string kQuoteBar = "\033[38;5;244m▎\033[0m ";  // the left rule drawn before quoted lines
+// Grouping parentheses that renderMath adds around \sqrt / \frac arguments (our Unicode transliter-
+// ation can't draw an extended radical or a stacked fraction, so braces become parens instead).
+// Ghosted almost into the background so the grouping reads as faint structure, not content: gray
+// 254 (one step from white, near the paper) on a light theme, gray 235 (near black) on a dark theme
+// (both set in initTheme). The SGR "dim" attribute (\033[2m) is layered on top so terminals that
+// honour it fade the glyph further. Empty until initTheme runs (plain parens if never).
+std::string kMathGroupOn = "\033[2;38;5;254m";    // ghosted grouping parens (light-theme default)
+const std::string kMathGroupOff = "\033[22;39m";  // undo dim + restore default fg (keeps other SGR)
 
 // An explicit width from the --width/-w command-line flag, or <= 0 if none was given. Set by main()
 // before any rendering, and so before terminalWidth() is first called and caches its result.
@@ -762,6 +781,8 @@ void initTheme() {
     if (darkBackground()) {
         kCodeOn = "\033[48;5;236;38;5;252m";  // dark-gray bg, light-gray fg
         kLightGray = "\033[38;5;240m";        // a dimmer separator that reads on a dark background
+        kMathGroupOn =
+            "\033[2;38;5;235m";  // ghosted dark-gray grouping parens on a dark background
         setHighlightTheme(true);
     } else {
         setHighlightTheme(false);  // kCodeOn/kLightGray keep their light-theme defaults
@@ -914,6 +935,7 @@ int codePointWidth(uint32_t cp) {
         inRange(cp, 0x20D0, 0x20FF) ||                   // combining marks for symbols
         inRange(cp, 0xFE20, 0xFE2F) ||                   // combining half marks
         cp == 0x200B || cp == 0x200C || cp == 0x200D ||  // ZWSP, ZWNJ, ZWJ
+        cp == 0xE000 || cp == 0xE001 ||                  // math-atom sentinels (see kMathAtomStart)
         cp == 0xFEFF ||                                  // ZWNBSP / BOM
         inRange(cp, 0xFE00, 0xFE0F) ||  // variation selectors 1-16 (incl. VS16 emoji presentation)
         inRange(cp, 0xE0100, 0xE01EF))  // variation selectors supplement
@@ -1332,11 +1354,73 @@ bool convertScript(const std::string& s, size_t& i, std::string& out, bool sup) 
     return true;
 }
 
+// Whether a \sqrt / \frac argument needs grouping parentheses when flattened inline against the
+// fraction bar `/` we emit. The rule depends on which side of the bar the argument is on:
+//
+//   - Additive operators ALWAYS force parens (both sides): a top-level `+`, a `\pm`/`\mp` (`±`/`∓`,
+//     which bind like `+`), or a non-leading `-` (a leading sign is unary — `-b` is one term).
+//     Without them `a + b/c` and `a/b + c` misgroup.
+//   - Explicit MULTIPLICATIVE operators (`*`, `/`, `\times`, `\cdot`, `\div`) force parens only in
+//   a
+//     DENOMINATOR. They are same-strength as `/`, so on the numerator side left-to-right evaluation
+//     is already correct (`5*6/7` = `(5*6)/7` ✓), but in a denominator `5/6*7` would wrongly mean
+//     `(5/6)*7`, so `\frac{5}{6*7}` must render `5/(6*7)`.
+//   - IMPLICIT multiplication (juxtaposition, `2a`) binds tighter than `/` and never needs parens,
+//     even in a denominator: `x/2a` conventionally means `x/(2a)`, so `\frac{x}{2a}` stays `x/2a`.
+//
+// "Top level" means brace-depth 0 — operators inside a nested {…} or \sqrt/\frac subgroup don't
+// count. Scans the RAW LaTeX (before transliteration) so it can see \pm, \times, \cdot and braces.
+bool mathArgNeedsParens(const std::string& tex, bool denominator) {
+    int depth = 0;
+    bool sawTerm = false;  // have we passed any non-space content yet? (distinguishes unary '-')
+    for (size_t i = 0; i < tex.size(); ++i) {
+        char c = tex[i];
+        if (c == '{') {
+            ++depth;
+            continue;
+        }
+        if (c == '}') {
+            if (depth > 0) --depth;
+            continue;
+        }
+        if (depth != 0) continue;
+        if (c == '\\') {
+            size_t j = i + 1;
+            while (j < tex.size() && std::isalpha(static_cast<unsigned char>(tex[j]))) ++j;
+            std::string cmd = tex.substr(i + 1, j - (i + 1));
+            if (cmd == "pm" || cmd == "mp") return true;  // ± / ∓ bind like +
+            if (denominator && (cmd == "times" || cmd == "cdot" || cmd == "div")) return true;
+            sawTerm = true;
+            i = j - 1;  // skip the command name
+            continue;
+        }
+        if (std::isspace(static_cast<unsigned char>(c))) continue;
+        if (c == '+') return true;
+        if (c == '-' && sawTerm) return true;  // a non-leading '-' is a binary subtraction
+        if (denominator && (c == '*' || c == '/')) return true;  // explicit mul/div misgroups here
+        sawTerm = true;
+    }
+    return false;
+}
+
+std::string renderMath(const std::string& tex, MathStyle style = MathStyle::Italic);
+
+// Render a \sqrt / \frac argument, wrapping it in faint grouping parens ONLY when it needs them
+// (mathArgNeedsParens). The parens are drawn in kMathGroupOn/Off; the argument itself is rendered
+// in the ambient style. `denominator` picks the stricter rule for a \frac denominator (see
+// mathArgNeedsParens). A single term or product comes back bare (`2a`, `7`, `x`); a sum, or an
+// explicit product in a denominator, comes back parenthesized (`(a + b)`, `(6*7)`).
+std::string groupArg(const std::string& arg, MathStyle style, bool denominator = false) {
+    std::string inner = renderMath(arg, style);
+    if (!mathArgNeedsParens(arg, denominator)) return inner;
+    return kMathGroupOn + "(" + kMathGroupOff + inner + kMathGroupOn + ")" + kMathGroupOff;
+}
+
 // Best-effort transliteration of a LaTeX math fragment to Unicode. `tex` is the content between the
 // delimiters (without the $'s). `style` is the font applied to bare Latin letters (italic by
 // default, as in LaTeX math mode; \mathrm and friends recurse with a different style). Always
 // returns a renderable string.
-std::string renderMath(const std::string& tex, MathStyle style = MathStyle::Italic) {
+std::string renderMath(const std::string& tex, MathStyle style) {
     std::string out;
     size_t n = tex.size();
     for (size_t i = 0; i < n;) {
@@ -1362,8 +1446,19 @@ std::string renderMath(const std::string& tex, MathStyle style = MathStyle::Ital
                 continue;  // unknown: keep the backslash literally
             }
             std::string cmd = tex.substr(i + 1, j - (i + 1));
-            if (cmd == "quad" || cmd == "qquad") {
-                out += ' ';
+            // \quad (1em) and \qquad (2em) are the wide spaces that set separate expressions apart;
+            // approximate them with 2 and 4 columns. Plain spaces are fine: the whole expression is
+            // a math atom (kMathAtomStart..End) that reflow treats as one indivisible unit, so
+            // interior spaces are copied verbatim, never collapsed. A single space would be
+            // indistinguishable from the space around an operator, making two expressions read as
+            // one.
+            if (cmd == "quad") {
+                out += "  ";
+                i = j;
+                continue;
+            }
+            if (cmd == "qquad") {
+                out += "    ";
                 i = j;
                 continue;
             }
@@ -1436,6 +1531,56 @@ std::string renderMath(const std::string& tex, MathStyle style = MathStyle::Ital
                     continue;
                 }
                 out += tex.substr(i, groupEnd - i);  // keep \cmd{...} verbatim
+                i = groupEnd;
+                continue;
+            }
+
+            // \sqrt{...}: a radical sign followed by its argument in faint grouping parens. We
+            // can't draw an extended radical vinculum over the argument in a terminal, so the
+            // parens carry the grouping that LaTeX's overbar would ("√(a² + b²)" is unambiguous,
+            // "√a² + b²" is not). The argument is rendered recursively so nested markup still
+            // works. Bare \sqrt (no braces) falls through to the symbol table's "√".
+            if (hasArg && cmd == "sqrt") {
+                out += "√" + groupArg(arg, style);
+                i = groupEnd;
+                continue;
+            }
+
+            // \frac{num}{den}: a terminal has no stacked fraction, so render it inline as
+            // "(num)/(den)" with the grouping parens faint. Both arguments are read as balanced
+            // groups (the first via the generic arg scan above; the second scanned here) and
+            // rendered recursively. If the second argument is missing, fall through to keep the
+            // source readable.
+            if (hasArg && (cmd == "frac" || cmd == "dfrac" || cmd == "tfrac")) {
+                size_t p = groupEnd;
+                while (p < n && std::isspace(static_cast<unsigned char>(tex[p]))) ++p;
+                if (p < n && tex[p] == '{') {
+                    std::string den;
+                    size_t k = p + 1;
+                    int depth = 1;
+                    while (k < n && depth > 0) {
+                        if (tex[k] == '{')
+                            ++depth;
+                        else if (tex[k] == '}') {
+                            if (--depth == 0) break;
+                        }
+                        if (depth > 0) den += tex[k];
+                        ++k;
+                    }
+                    if (k < n) {  // balanced denominator
+                        // numerator "/" denominator, each parenthesized only if it contains a top-
+                        // level additive operator. The "/" itself is normal foreground (it is the
+                        // operator, not grouping); only the parens are faint. The bar is spaced on
+                        // both sides so it reads as a same-strength operator alongside \cdot etc.,
+                        // rather than binding tighter than them (which unspaced "2a" vs "6 ⋅ 7"
+                        // wrongly suggested).
+                        out += groupArg(arg, style) + " / " + groupArg(den, style, /*denom=*/true);
+                        i = k + 1;
+                        continue;
+                    }
+                }
+                // No second argument: keep \frac{...} verbatim so the intent survives.
+                out += tex.substr(i, groupEnd - i);
                 i = groupEnd;
                 continue;
             }
@@ -1637,7 +1782,10 @@ private:
                     if (open == 1 && after < s_.size() &&
                         std::isdigit(static_cast<unsigned char>(s_[after])))
                         return false;
-                    addText(renderMath(s_.substr(start, j - start)));
+                    // Bracket the rendered math with the atom sentinels so reflow treats it as one
+                    // indivisible unit (its interior spacing is exact, not prose to be collapsed).
+                    addText(kMathAtomStart + renderMath(s_.substr(start, j - start)) +
+                            kMathAtomEnd);
                     i = j + open;
                     return true;
                 }
@@ -2921,6 +3069,14 @@ size_t unitLength(const std::string& s, size_t i) {
         }
         return j - i;
     }
+    // A math atom (kMathAtomStart .. kMathAtomEnd) is one indivisible unit: reflow must never break
+    // inside it or collapse its interior spaces. Swallow everything through the end marker
+    // (inclusive) so the whole expression travels as a single "word".
+    if (s.compare(i, kMathAtomStart.size(), kMathAtomStart) == 0) {
+        size_t e = s.find(kMathAtomEnd, i + kMathAtomStart.size());
+        if (e != std::string::npos) return e + kMathAtomEnd.size() - i;
+        return s.size() - i;  // unterminated (shouldn't happen): take the rest
+    }
     // Base code point, then absorb following zero-width code points and ZWJ-joined sequences so the
     // whole grapheme cluster travels together.
     uint32_t cp;
@@ -2975,6 +3131,8 @@ std::string closeStylesAtLineBreaks(const std::string& s) {
     }
     return out;
 }
+
+std::string stripMathAtoms(const std::string& s);  // defined just below reflow
 
 // Reflow a rendered (ANSI-styled) string so that no output line exceeds `width` display columns,
 // breaking on spaces between words. A word longer than `width` on its own is hard-cut at exactly
@@ -3058,7 +3216,28 @@ std::string reflow(const std::string& s, int width) {
         lineWidth += ww;
         lineEmpty = false;
     }
-    return closeStylesAtLineBreaks(out);
+    return stripMathAtoms(closeStylesAtLineBreaks(out));
+}
+
+// Remove the math-atom sentinels (kMathAtomStart / kMathAtomEnd) from a fully laid-out string, just
+// before it is written to the terminal. They exist only to keep reflow from breaking a math
+// expression apart; once line breaking is done they have no purpose and must not reach the terminal
+// (some fonts render Private-Use code points as a visible box). Zero-width, so removing them never
+// changes any measured width.
+std::string stripMathAtoms(const std::string& s) {
+    if (s.find(kMathAtomStart[0]) == std::string::npos) return s;  // fast path: no U+E00x lead byte
+    std::string out;
+    out.reserve(s.size());
+    for (size_t i = 0; i < s.size();) {
+        if (s.compare(i, kMathAtomStart.size(), kMathAtomStart) == 0) {
+            i += kMathAtomStart.size();
+        } else if (s.compare(i, kMathAtomEnd.size(), kMathAtomEnd) == 0) {
+            i += kMathAtomEnd.size();
+        } else {
+            out += s[i++];
+        }
+    }
+    return out;
 }
 
 std::vector<std::string> splitOnNewlines(const std::string& s);  // defined below

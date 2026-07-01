@@ -90,6 +90,33 @@ check mathit '$\mathit{ab}$'                        '𝑎𝑏'
 check mathbb-r  '$\mathbb{R}$'                      'ℝ'
 check mathbb-in '$x \in \mathbb{Z}$'               '𝑥 ∈ ℤ'
 
+# \sqrt / \frac fall back to explicit grouping parens (dimmed via escapes, which the escape-stripping
+# in check() removes, so only the parens themselves are compared here). Parens appear ONLY where the
+# flattened form would otherwise misgroup: a top-level sum/difference always; an explicit product or
+# division only in a denominator (same strength as the bar). A single term, a numerator product, or
+# implicit multiplication (2a) stays bare. The bar '/' is normal foreground (never dimmed) and spaced
+# on both sides so it reads as a same-strength operator alongside ⋅.
+check sqrt-arg      '$\sqrt{a^2 + b^2}$'            '√(𝑎² + 𝑏²)'
+check sqrt-term     '$\sqrt{2}$'                     '√2'
+check sqrt-bare     '$\sqrt 2$'                      '√ 2'
+check frac-terms    '$\frac{a}{b}$'                  '𝑎 / 𝑏'
+check frac-sum      '$\frac{a+b}{c+d}$'             '(𝑎+𝑏) / (𝑐+𝑑)'
+check frac-implicit '$\frac{x}{2a}$'                '𝑥 / 2𝑎'
+check frac-num-prod '$\frac{5*6}{7}$'               '5*6 / 7'
+check frac-den-prod '$\frac{5}{6*7}$'               '5 / (6*7)'
+check frac-den-cdot '$\frac{5}{6 \cdot 7}$'         '5 / (6 ⋅ 7)'
+check frac-den-div  '$\frac{p}{q/r}$'               '𝑝 / (𝑞/𝑟)'
+check frac-pm       '$\frac{-b \pm c}{2a}$'         '(-𝑏 ± 𝑐) / 2𝑎'
+check frac-sqrt     '$\frac{1}{\sqrt{2}}$'          '1 / √2'
+check frac-nomatch  '$\frac{a}$'                     '\frac{a}'
+
+# \quad / \qquad are wide inter-expression gaps: 2 and 4 columns. A whole math expression is one atom
+# that reflow never breaks or respaces, so these interior spaces survive verbatim (no collapse). The
+# LaTeX space that must follow a control word (\quad b) is inside the atom too, so it survives as one
+# more space: \quad -> 2+1, \qquad -> 4+1.
+check quad-space  '$a\quad b$'                      '𝑎   𝑏'
+check qquad-space '$a\qquad b$'                     '𝑎     𝑏'
+
 # Block math ($$...$$) is transliterated the same way.
 check block '$$E = mc^2$$'                         '𝐸 = 𝑚𝑐²'
 

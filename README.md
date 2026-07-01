@@ -199,7 +199,19 @@ so the output is never worse than the input.
 The mass–energy equivalence is $E = mc^2$. For all $x \in \mathbb{R}$ there is a
 $y$ with $x \leq y$, and Avogadro's number is $6.022 \times 10^{23}\,\mathrm{mol}^{-1}$.
 
-$$a^2 + b^2 = c^2 \qquad \therefore c = \sqrt{a^2 + b^2}$$
+$$a^2 + b^2 = c^2 \qquad \therefore \qquad c = \sqrt{a^2 + b^2}$$
+
+A terminal can't draw an extended radical or a stacked fraction, so `\sqrt{...}`
+and `\frac{...}{...}` flatten inline as `√…` and `…/…`, with grouping parentheses
+added only where the flattened form would otherwise misgroup. A top-level sum or
+difference is always parenthesized; an explicit product or division is grouped
+only in a denominator (it binds like the fraction bar), while a single term, a
+numerator product, or implicit multiplication such as `2a` stays bare. The parens
+are dimmed almost into the background (near-white on a light theme, near-black on
+a dark one) so they read as structure; the fraction bar itself keeps the normal
+foreground colour:
+
+$$\frac{-b \pm \sqrt{b^2 - 4ac}}{2a} \qquad \frac{5}{6 \cdot 7} \qquad \frac{5 \cdot 6}{7}$$
 
 ### Mermaid diagrams
 
