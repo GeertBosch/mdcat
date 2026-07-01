@@ -1626,6 +1626,165 @@ std::string renderMath(const std::string& tex, MathStyle style) {
 }
 
 // ---------------------------------------------------------------------------
+// Stacked (multi-line) math layout
+// ---------------------------------------------------------------------------
+//
+// A display expression ($$...$$) can afford real two-dimensional layout, so a \frac renders as a
+// numerator ATOP a denominator, separated by a horizontal bar as wide as the wider of the two —
+// the way TeX sets display math — rather than the inline "num / den" flattening. The result is a
+// small rectangle of rows (a "MathBox"): rows[mid] is the baseline that aligns with surrounding
+// inline text, so a fraction contributes rows above and below that baseline while a plain term
+// occupies only the baseline row itself. This lives ONLY on the block-math path; inline $...$ in
+// running prose keeps flattening \frac, since a paragraph line has no room to grow vertically.
+//
+// The scope is deliberately one level: the numerator and denominator are rendered INLINE via
+// renderMath (a nested \frac inside them flattens to "a / b"), and only the outermost \frac of a
+// display expression stacks. Segments other than \frac (operators, other atoms, \quad spacing)
+// render inline on the baseline row and sit beside the stacked fractions.
+struct MathBox {
+    std::vector<std::string> rows;  // each row padded to `width` display columns
+    int width = 0;                  // common display width of every row
+    int mid = 0;                    // index of the baseline row (aligns with inline text)
+};
+
+// A single inline string as a one-row box whose only row is the baseline.
+MathBox inlineBox(const std::string& s) {
+    MathBox b;
+    b.rows.push_back(s);
+    b.width = displayWidth(s);
+    b.mid = 0;
+    return b;
+}
+
+// Build the stacked box for one \frac. The numerator and denominator are rendered inline (no
+// grouping parens: the over/under layout already carries the grouping the faint parens stood in
+// for, so `\frac{-b \pm ...}{2a}` shows a bare numerator, not "(-b ± ...)"). Each is centered over
+// a bar as wide as the wider side.
+MathBox fracBox(const std::string& num, const std::string& den, MathStyle style) {
+    std::string top = renderMath(num, style);
+    std::string bot = renderMath(den, style);
+    int w = std::max({displayWidth(top), displayWidth(bot), 1});
+    MathBox b;
+    b.rows.push_back(padAligned(top, w, Align::Center));
+    b.rows.push_back(horizontalLine(w));
+    b.rows.push_back(padAligned(bot, w, Align::Center));
+    b.width = w;
+    b.mid = 1;
+    return b;
+}
+
+// Concatenate two boxes side by side, aligning their baseline (mid) rows. The taller extent above
+// and below the shared baseline is taken from whichever box reaches further; the shorter box's
+// missing rows are blank padding of its own width, so columns stay aligned.
+MathBox hcat(const MathBox& a, const MathBox& b) {
+    int above = std::max(a.mid, b.mid);
+    int belowA = static_cast<int>(a.rows.size()) - 1 - a.mid;
+    int belowB = static_cast<int>(b.rows.size()) - 1 - b.mid;
+    int below = std::max(belowA, belowB);
+    MathBox out;
+    out.mid = above;
+    out.width = a.width + b.width;
+    for (int r = -above; r <= below; ++r) {
+        auto rowOf = [](const MathBox& box, int rel) -> std::string {
+            int idx = box.mid + rel;
+            if (idx < 0 || idx >= static_cast<int>(box.rows.size()))
+                return std::string(static_cast<size_t>(box.width), ' ');
+            return box.rows[static_cast<size_t>(idx)];
+        };
+        out.rows.push_back(rowOf(a, r) + rowOf(b, r));
+    }
+    return out;
+}
+
+// Read a balanced {...} group starting at tex[i]=='{'. Returns the contents and advances i past the
+// closing '}'. If unbalanced, returns false and leaves i unchanged.
+bool readBraceGroup(const std::string& tex, size_t& i, std::string& out) {
+    if (i >= tex.size() || tex[i] != '{') return false;
+    size_t k = i + 1;
+    int depth = 1;
+    std::string g;
+    while (k < tex.size() && depth > 0) {
+        if (tex[k] == '{')
+            ++depth;
+        else if (tex[k] == '}') {
+            if (--depth == 0) break;
+        }
+        if (depth > 0) g += tex[k];
+        ++k;
+    }
+    if (k >= tex.size()) return false;  // unbalanced
+    out = g;
+    i = k + 1;
+    return true;
+}
+
+// Render a display-math expression into a MathBox, stacking each top-level \frac and rendering
+// everything else inline on the baseline. Scans `tex` at brace-depth 0: a `\frac{..}{..}` (also
+// dfrac/tfrac) becomes a fracBox; every other run of characters accumulates into an inline segment
+// rendered by renderMath. Returns false if the expression has no top-level \frac (the caller then
+// keeps the plain single-line path).
+bool renderMathStacked(const std::string& tex,
+                       MathBox& result,
+                       MathStyle style = MathStyle::Italic) {
+    std::vector<MathBox> boxes;
+    std::string pending;  // inline text accumulated since the last box
+    bool sawFrac = false;
+    auto flush = [&]() {
+        if (!pending.empty()) {
+            boxes.push_back(inlineBox(renderMath(pending, style)));
+            pending.clear();
+        }
+    };
+    size_t n = tex.size();
+    for (size_t i = 0; i < n;) {
+        if (tex[i] == '\\') {
+            size_t j = i + 1;
+            while (j < n && std::isalpha(static_cast<unsigned char>(tex[j]))) ++j;
+            std::string cmd = tex.substr(i + 1, j - (i + 1));
+            if (cmd == "frac" || cmd == "dfrac" || cmd == "tfrac") {
+                size_t p = j;
+                while (p < n && std::isspace(static_cast<unsigned char>(tex[p]))) ++p;
+                std::string num;
+                if (p < n && tex[p] == '{' && readBraceGroup(tex, p, num)) {
+                    while (p < n && std::isspace(static_cast<unsigned char>(tex[p]))) ++p;
+                    std::string den;
+                    if (p < n && tex[p] == '{' && readBraceGroup(tex, p, den)) {
+                        flush();
+                        boxes.push_back(fracBox(num, den, style));
+                        sawFrac = true;
+                        i = p;
+                        continue;
+                    }
+                }
+                // Malformed \frac: fall through and let it accumulate as inline text.
+            }
+            pending += tex.substr(i, j - i);
+            i = j;
+            continue;
+        }
+        // Skip a balanced brace group verbatim into `pending` so a top-level {...} does not hide an
+        // interior '\frac' we must not stack (only depth-0 fracs stack).
+        if (tex[i] == '{') {
+            std::string g;
+            size_t p = i;
+            if (readBraceGroup(tex, p, g)) {
+                pending += tex.substr(i, p - i);
+                i = p;
+                continue;
+            }
+        }
+        pending += tex[i];
+        ++i;
+    }
+    flush();
+    if (!sawFrac || boxes.empty()) return false;
+    MathBox acc = boxes.front();
+    for (size_t k = 1; k < boxes.size(); ++k) acc = hcat(acc, boxes[k]);
+    result = acc;
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // Inline parsing
 // ---------------------------------------------------------------------------
 
@@ -3316,6 +3475,26 @@ void emitParagraph(const std::vector<std::string>& lines, std::ostream& out) {
     bool blockMath = trimmed.size() >= 4 && trimmed.compare(0, 2, "$$") == 0 &&
         trimmed.compare(trimmed.size() - 2, 2, "$$") == 0 &&
         trimmed.find("$$", 2) == trimmed.size() - 2;
+
+    if (blockMath) {
+        // Display math: try a two-dimensional layout so a top-level \frac stacks numerator over
+        // denominator (renderMathStacked). If the expression has no top-level \frac it returns
+        // false and we fall back to the flat single-line rendering below. The stacked box's rows
+        // are each centered within the terminal, keeping the whole figure horizontally centered.
+        std::string tex = trim(trimmed.substr(2, trimmed.size() - 4));
+        MathBox box;
+        if (renderMathStacked(tex, box)) {
+            int pad = std::max(0, (terminalWidth() - box.width) / 2);
+            for (const std::string& row : box.rows) {
+                // Right-trim the row so a centered blank tail doesn't emit trailing spaces; the
+                // constant left pad (same for every row) keeps the columns aligned.
+                std::string trimmedRow = row;
+                while (!trimmedRow.empty() && trimmedRow.back() == ' ') trimmedRow.pop_back();
+                out << std::string(static_cast<size_t>(pad), ' ') << trimmedRow << '\n';
+            }
+            return;
+        }
+    }
 
     std::string reflowed = reflow(renderInline(joined), terminalWidth());
     if (reflowed.empty()) return;

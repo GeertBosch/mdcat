@@ -120,6 +120,36 @@ check qquad-space '$a\qquad b$'                     '𝑎     𝑏'
 # Block math ($$...$$) is transliterated the same way.
 check block '$$E = mc^2$$'                         '𝐸 = 𝑚𝑐²'
 
+# checkbox NAME INPUT EXPECTED — like check, but keeps line breaks and normalizes runs of spaces to
+# a single space (the centering pad varies with terminal width). Used for stacked block-math layouts
+# that span several rows.
+checkbox() {
+    name=$1
+    input=$2
+    expected=$3
+    got=$(printf '%s\n' "$input" | "$mdcat" | strip | perl -pe 's/ +/ /g; s/ *\n/\n/g' | tr '\n' '|')
+    got=${got%|}
+    if [ "$got" = "$expected" ]; then
+        pass=$((pass + 1))
+    else
+        printf 'property-math: FAIL [%s]\n  input:    %s\n  expected: %s\n  got:      %s\n' \
+            "$name" "$input" "$expected" "$got" >&2
+        fail=$((fail + 1))
+        status=1
+    fi
+}
+
+# Display math ($$...$$) stacks a top-level \frac: numerator over a bar over denominator, each side
+# centered on the bar. The over/under layout carries the grouping, so the faint grouping parens that
+# the inline form adds around a whole numerator/denominator are dropped (a nested \sqrt keeps its own
+# interior parens). Rows are joined with '|' and runs of centering spaces collapsed to one.
+checkbox frac-stack-terms '$$\frac{a}{b}$$'        '𝑎|─|𝑏'
+checkbox frac-stack-sum   '$$\frac{a+b}{c+d}$$'    '𝑎+𝑏|───|𝑐+𝑑'
+checkbox frac-stack-drop-parens '$$\frac{-b \pm c}{2a}$$' '-𝑏 ± 𝑐|──────|2𝑎'
+checkbox frac-stack-sqrt  '$$\frac{-b \pm \sqrt{b^2-4ac}}{2a}$$' '-𝑏 ± √(𝑏²-4𝑎𝑐)|──────────────|2𝑎'
+# A block expression with no top-level \frac stays a single flat line.
+checkbox block-noflat     '$$a + b$$'              '𝑎 + 𝑏'
+
 # Prose dollar amounts are not math: a digit right after a single-$ closer, or a
 # space just inside a delimiter, leaves the dollars literal.
 check price     'I paid $5 and $10 today.'         'I paid $5 and $10 today.'

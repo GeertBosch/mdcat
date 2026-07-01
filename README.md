@@ -201,17 +201,27 @@ $y$ with $x \leq y$, and Avogadro's number is $6.022 \times 10^{23}\,\mathrm{mol
 
 $$a^2 + b^2 = c^2 \qquad \therefore \qquad c = \sqrt{a^2 + b^2}$$
 
-A terminal can't draw an extended radical or a stacked fraction, so `\sqrt{...}`
-and `\frac{...}{...}` flatten inline as `√…` and `…/…`, with grouping parentheses
-added only where the flattened form would otherwise misgroup. A top-level sum or
-difference is always parenthesized; an explicit product or division is grouped
-only in a denominator (it binds like the fraction bar), while a single term, a
-numerator product, or implicit multiplication such as `2a` stays bare. The parens
-are dimmed almost into the background (near-white on a light theme, near-black on
-a dark one) so they read as structure; the fraction bar itself keeps the normal
-foreground colour:
+**Display math stacks fractions.** In a `$$ ... $$` block a top-level
+`\frac{...}{...}` is set in two dimensions the way TeX does it: the numerator
+sits over the denominator, separated by a bar as wide as the wider side, each
+side centered on the bar. The over/under layout already carries the grouping, so
+the faint parentheses the inline form would wrap around a whole numerator or
+denominator are dropped — only interior grouping (a nested `\sqrt`, say) keeps
+its parens. Several fractions on one line share a common baseline:
 
 $$\frac{-b \pm \sqrt{b^2 - 4ac}}{2a} \qquad \frac{5}{6 \cdot 7} \qquad \frac{5 \cdot 6}{7}$$
+
+Inline `$...$` fractions and radicals stay on one line — a paragraph has no room
+to grow vertically — so `\sqrt{...}` and `\frac{...}{...}` flatten as `√…` and
+`…/…`, with grouping parentheses added only where the flattened form would
+otherwise misgroup. A top-level sum or difference is always parenthesized; an
+explicit product or division is grouped only in a denominator (it binds like the
+fraction bar), while a single term, a numerator product, or implicit
+multiplication such as `2a` stays bare. The parens are dimmed almost into the
+background (near-white on a light theme, near-black on a dark one) so they read
+as structure; the fraction bar itself keeps the normal foreground colour. For
+example, $\frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$ flattens inline, but the same
+expression displayed above stacks.
 
 ### Mermaid diagrams
 
