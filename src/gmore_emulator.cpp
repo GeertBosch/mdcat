@@ -1045,6 +1045,16 @@ struct Emulator::Impl {
         return last;
     }
 
+    // The absolute row an in-progress (not yet ST-terminated) sixel/Kitty sequence
+    // will anchor to, or SIZE_MAX if none is open. A producer that flushes a row's
+    // text and its image bytes in separate writes can hand feedUntilRows a read()
+    // boundary that falls between them: contentRows() already counts the text on
+    // that row, so the caller must know an image is still pending there too, or it
+    // stops feeding one chunk too early and the image never gets painted.
+    size_t pendingImageRow() const {
+        return (st == DCS || st == APC) ? top + (size_t)cr : (size_t)-1;
+    }
+
     // Paint images as ONE sixel each, clipped to the visible row window, rather than
     // a stack of per-row strips. The old per-row scheme relied on each sixel
     // advancing the cursor exactly one cell so the next strip overwrote the prior's
@@ -1234,6 +1244,9 @@ void Emulator::feed(const char* p, size_t n) {
 }
 size_t Emulator::contentRows() const {
     return impl_->contentRows();
+}
+size_t Emulator::pendingImageRow() const {
+    return impl_->pendingImageRow();
 }
 std::vector<std::pair<int, int>> Emulator::matchSpans(size_t absRow, const std::regex& re) const {
     return impl_->matchSpans(absRow, re);

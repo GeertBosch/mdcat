@@ -344,8 +344,14 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo, bool navTrac
             return false;
         }
     };
+    // A producer that writes a row's text and its image bytes in separate writes can
+    // hand us a read() boundary that falls between them: contentRows() already counts
+    // the text on that row, so stopping there would strand the image mid-transmission
+    // and it would never get painted. Keep feeding while an open sixel/Kitty sequence
+    // anchors at or before the row we need (pendingImageRow() < needRows), even once
+    // contentRows() alone looks satisfied.
     auto feedUntilRows = [&](size_t needRows) {
-        while (em.contentRows() < needRows) {
+        while (em.contentRows() < needRows || em.pendingImageRow() < needRows) {
             if (feedOneChunk()) return true;
         }
         return false;
