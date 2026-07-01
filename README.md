@@ -53,6 +53,10 @@ images on graphics-capable terminals. Images are scaled to fit the available
 column width while preserving aspect ratio. Supported formats: **PNG**, **JPEG**,
 **GIF**, **SVG** (via [timg](https://github.com/hzeller/timg)).
 
+| PNG | JPEG | GIF | SVG |
+| --- | ---- | --- | --- |
+| ![example.png (PNG)](tests/img/example.png) | <img src="tests/img/joan-mitchell.jpg" alt="Joan Mitchell (JPEG)"> | <img src="tests/img/sunflower.gif" alt="Sunflower (GIF)"> | <img src="tests/img/chessboard.svg" alt="Chessboard (SVG)"> |
+
 mdcat chooses a graphics protocol automatically: the **Kitty graphics protocol**
 on terminals that support it (VSCode, iTerm2, Ghostty/Orbstack, Kitty, WezTerm),
 falling back to **sixel** elsewhere. Kitty is preferred because it sizes images
@@ -166,7 +170,7 @@ to grow vertically — so `\sqrt{...}` and `\frac{...}{...}` flatten as `√…`
 otherwise misgroup. A top-level sum or difference is always parenthesized; an
 explicit product or division is grouped only in a denominator (it binds like the
 fraction bar), while a single term, a numerator product, or implicit
-multiplication such as `2a` stays bare. The parens are dimmed almost into the
+multiplication such as $2a$ stays bare. The parens are dimmed almost into the
 background (near-white on a light theme, near-black on a dark one) so they read
 as structure; the fraction bar itself keeps the normal foreground colour. For
 example, $\frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$ flattens inline, but the same
@@ -230,10 +234,6 @@ timeout and a size cap), then hands the bytes to the normal image pipeline.
 > [cells, pixels, and the 6-vs-14 problem](docs/TERMINAL-GRAPHICS.md#2-cells-pixels-and-the-6-vs-14-problem)
 > in the field guide. Keeping images aligned inside a **table** has its own war
 > story: [pin the footprint to the laid-out width](docs/TERMINAL-GRAPHICS.md#5-images-in-tables-pin-the-footprint-to-the-laid-out-width).
-
-| PNG | JPEG | GIF | SVG |
-| --- | ---- | --- | --- |
-| ![example.png (PNG)](tests/img/example.png) | <img src="tests/img/joan-mitchell.jpg" alt="Joan Mitchell (JPEG)"> | <img src="tests/img/sunflower.gif" alt="Sunflower (GIF)"> | <img src="tests/img/chessboard.svg" alt="Chessboard (SVG)"> |
 
 #### Remote sessions and overrides
 
