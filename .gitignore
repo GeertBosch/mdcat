@@ -2,3 +2,7 @@ build/
 compile_commands.json
 gmore
 mdcat
+
+# Pinned clang-format virtualenv, created by `make setup-clang-format`. Never
+# committed: it holds platform-specific binaries (an x86 wheel breaks arm/CI).
+.tooling/
