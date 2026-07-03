@@ -112,8 +112,14 @@ pycheck "none: alt-text fallback" none \
     '(b"knight" in d, "alt text missing from text fallback")'
 
 # sixel: the CLI override selects the sixel backend (DCS, no Kitty APC).
-pycheck "sixel: DCS not APC" sixel \
-    '(n_apc == 0 and d.count(b"\x1bP") >= 2, "expected sixel DCS, not Kitty APC")'
+# timg only grew a sixel output (-ps) after 1.4.3; on an older timg mdcat cannot
+# produce sixel at all, so skip this case rather than assert an impossible stream.
+if timg --help 2>&1 | grep -qi sixel; then
+    pycheck "sixel: DCS not APC" sixel \
+        '(n_apc == 0 and d.count(b"\x1bP") >= 2, "expected sixel DCS, not Kitty APC")'
+else
+    echo "mdcat-kitty: SKIP sixel case (this timg has no sixel output)"
+fi
 
 if [ "$fails" -eq 0 ]; then
     echo "mdcat-kitty: OK ($n cases)"
