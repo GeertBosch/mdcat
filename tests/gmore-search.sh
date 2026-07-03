@@ -164,6 +164,9 @@ EOF
 
 # scheck PAT KEYS EXPECT LABEL — assert WHICH occurrence is the current match.
 scheck() {
+    # Strip Kitty APCs first: repaint() emits a delete-all (ESC_Ga=d,d=A ESC\) right
+    # after RIS with no newline, so it glues to the front of row 0 and would break a
+    # ^-anchored $pat. It's invisible output; assert on the visible text only.
     # On the final screen, pick the line whose TEXT contains $pat, then reduce its
     # highlight-open SGRs to a marker string in order: C for the current match (CUR
     # colour), o for an other match (OTHER). grep -o the codes themselves (not the
@@ -171,6 +174,7 @@ scheck() {
     pat=$1; keys=$2; expect=$3; label=$4
     got=$(GMORE_KEYS="$keys" LINES=4 COLUMNS=40 "$gmore" "$tmp/multi" 2>"$tmp/err" \
           | awk 'BEGIN{RS="\033c"} {last=$0} END{printf "%s", last}' \
+          | perl -0777 -pe 's/\033_G[^\033]*\033\\//g' \
           | tr '\r' '\n' | grep "$pat" \
           | grep -ao "$(printf '\033')\[48;5;\(75\|153\)m" \
           | sed -e 's/.*75m/C/' -e 's/.*153m/o/' | tr -d '\n')

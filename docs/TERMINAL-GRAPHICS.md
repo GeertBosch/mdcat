@@ -340,6 +340,17 @@ we don't re-walk them.
 - **RIS forgets Kitty images.** `ESC c` resets the terminal's image memory, so any
   transmit-once cache must be cleared whenever RIS is emitted, or placements
   reference an id the terminal no longer has → nothing drawn.
+- **…but on iTerm2, RIS wipes the raster while leaving stale *placements* behind.**
+  A single small image survives RIS cleanly (an early probe said so). But with
+  several images on a large window (gmore's repaint after a not-found search, 55×272),
+  a bare `ESC c` followed by re-transmit + re-place leaves the old placements alive
+  and they **ghost at the top of the screen** — while the freshly placed copies also
+  render in their correct band. Ghostty and VSCode were unaffected. The cure is an
+  explicit Kitty **delete-all** right after RIS: `ESC_Ga=d,d=A,q=2 ESC\` (`q=2` so the
+  delete reply doesn't leak). This was isolated with a `GMORE_REPAINT_TEST` flag:
+  re-placing *without* re-transmitting still ghosted (proving RIS kept the
+  placements), and adding `a=d,d=A` fixed it. Note: `C=1` on the placement (suppress
+  cursor advance) did *not* help — the ghosts are stale placements, not a scroll.
 - **Never edit the graphics byte stream with `awk`/`sed`.** They are line-oriented
   and silently drop/move the `\n` that `timg` emits inside its APC, mis-placing the
   image. Splice byte-exactly with `perl -0777` or Python `bytes`.

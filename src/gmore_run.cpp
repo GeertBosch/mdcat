@@ -702,10 +702,17 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo, bool navTrac
     // (verified live). gmore relies on no terminal state RIS disturbs — it re-emits
     // every SGR/color per row, uses no scroll region or custom charset, and raw mode
     // is kernel-side (untouched).
+    // RIS clears the visible raster but, on iTerm2, does NOT drop the terminal's Kitty
+    // image PLACEMENTS: with several images visible on a large window, re-transmitting and
+    // re-placing after a bare RIS leaves the stale placements behind and they ghost at the
+    // top of the screen (verified on iTerm2 over SSH; Ghostty/VSCode were unaffected). An
+    // explicit Kitty delete-all (a=d,d=A) after the RIS gives a genuine clean slate, so the
+    // re-transmit+place below lands with no ghosts. q=2 keeps the delete reply off-screen.
     auto repaint = [&] {
         size_t vBot = std::min(total, viewTop + (size_t)pageH);
         std::fputs("\033c", stdout);
-        em.forgetKittyTransmissions();  // RIS dropped the terminal's Kitty images; re-send them
+        std::fputs("\033_Ga=d,d=A,q=2\033\\", stdout);  // drop stale Kitty placements RIS left
+        em.forgetKittyTransmissions();  // RIS dropped the image data too; re-send it below
         for (int i = 0; i < pageH; ++i) traceRow(viewTop + (size_t)i, i);
         paintWindow(viewTop, pageH, vBot);
     };
