@@ -2654,12 +2654,15 @@ std::string kittyQ2(const std::string& bytes) {
             out.append(bytes, found, (q + 2) - found);
             out += '2';
             pos = q + 3;  // past "q=" + one value digit
-        } else if (kittyIsFirstChunk(bytes, ctrlStart, ctrlEnd)) {
-            // First chunk with no q=: insert q=2 at the head of the controls run.
-            out.append("\033_Gq=2,");
-            pos = ctrlStart;
         } else {
-            out.append("\033_G");  // continuation chunk: nothing to do
+            // No q= in THIS control section — insert q=2. This must happen on EVERY chunk,
+            // not just the first: iTerm2 keys its ;OK reply off the FINAL chunk (m=0), which
+            // in Debian timg 1.4.3's output is a bare `m=0` with no q= (→ q=0, always reply)
+            // and no i= (so the reply is the tell-tale `ESC_Gi=0;OK ESC\`). macOS timg 1.6.3
+            // happens to stamp q= on every chunk, which is why the first-chunk-only rewrite
+            // masked this on macOS but not over SSH to the Ubuntu box.
+            out.append("\033_Gq=2");
+            if (ctrlStart != ctrlEnd) out += ',';  // empty controls (`ESC_G;…`): no trailing comma
             pos = ctrlStart;
         }
     }
