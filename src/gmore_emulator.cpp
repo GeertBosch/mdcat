@@ -1055,6 +1055,37 @@ struct Emulator::Impl {
         return (st == DCS || st == APC) ? top + (size_t)cr : (size_t)-1;
     }
 
+    // The highest row on which any image is anchored, or SIZE_MAX if there are none. A
+    // table cell's image anchors on the row's text line, so a table row of N images
+    // gives N images ALL anchored on one row; feedUntilRows uses this to notice when the
+    // last content it holds is such a row (siblings may still be streaming in).
+    size_t maxImageRow() const {
+        size_t r = (size_t)-1;
+        for (const Image& img : images)
+            if (r == (size_t)-1 || img.row > r) r = img.row;
+        return r;
+    }
+
+    // The highest row at which any content has been *anchored* (last non-blank text row,
+    // or an image's anchor row `img.row`), plus one — like contentRows() but WITHOUT
+    // counting an image's rendered height. Content is produced top-to-bottom, so once
+    // this passes needRows we know every image queued for the last visible row has
+    // arrived: several images can share that row (a table) and stream in across
+    // separate writes, and contentRows() can't tell them apart because one tall image
+    // already pushes it past needRows via its footprint. See feedUntilRows.
+    size_t contentAnchorRows() const {
+        size_t last = 0;
+        for (size_t r = 0; r < rows.size(); ++r)
+            for (const Cell& c : rows[r])
+                if (!(c.cp == U' ' && c.attr == 0)) {
+                    last = r + 1;
+                    break;
+                }
+        for (const Image& img : images)
+            if (img.row + 1 > last) last = img.row + 1;
+        return last;
+    }
+
     // Paint images as ONE sixel each, clipped to the visible row window, rather than
     // a stack of per-row strips. The old per-row scheme relied on each sixel
     // advancing the cursor exactly one cell so the next strip overwrote the prior's
@@ -1247,6 +1278,12 @@ size_t Emulator::contentRows() const {
 }
 size_t Emulator::pendingImageRow() const {
     return impl_->pendingImageRow();
+}
+size_t Emulator::contentAnchorRows() const {
+    return impl_->contentAnchorRows();
+}
+size_t Emulator::maxImageRow() const {
+    return impl_->maxImageRow();
 }
 std::vector<std::pair<int, int>> Emulator::matchSpans(size_t absRow, const std::regex& re) const {
     return impl_->matchSpans(absRow, re);

@@ -344,17 +344,30 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo, bool navTrac
             return false;
         }
     };
-    // A producer that writes a row's text and its image bytes in separate writes can
-    // hand us a read() boundary that falls between them: contentRows() already counts
-    // the text on that row, so stopping there would strand the image mid-transmission
-    // and it would never get painted. Keep feeding while an open sixel/Kitty sequence
-    // anchors at or before the row we need (pendingImageRow() < needRows), even once
-    // contentRows() alone looks satisfied.
+    // Filling `needRows` of content isn't enough to stop, for two reasons, both about
+    // images that stream in across separate read() chunks:
+    //   * pendingImageRow(): a chunk can end mid-image (an open sixel/Kitty sequence);
+    //     stopping there strands it half-transmitted, so keep reading until it closes.
+    //   * a table row carries several images ALL anchored on ONE row, emitted
+    //     left-to-right and contiguous in the byte stream. A tall image also stretches
+    //     contentRows() well past its anchor, so `needRows` is satisfied the moment the
+    //     FIRST cell's image arrives — even when that row sits just below the first page
+    //     yet is reachable by a short scroll (its height pads the scrollback). Nothing in
+    //     the bytes seen so far says a sibling is still coming; the only reliable "this
+    //     image row is complete" signal is content anchored on a LATER row. So while the
+    //     last content we hold is an image row (contentAnchorRows() == maxImageRow()+1),
+    //     keep reading until something anchors past it — content is produced
+    //     top-to-bottom, so that proves every image queued on that row has arrived.
+    //     Bounded: one row of look-ahead per trailing image row.
     auto feedUntilRows = [&](size_t needRows) {
-        while (em.contentRows() < needRows || em.pendingImageRow() < needRows) {
+        for (;;) {
+            bool pageFull = em.contentRows() >= needRows;
+            bool midImage = em.pendingImageRow() != (size_t)-1;
+            size_t mir = em.maxImageRow();
+            bool imageRowMaybeIncomplete = mir != (size_t)-1 && em.contentAnchorRows() == mir + 1;
+            if (pageFull && !midImage && !imageRowMaybeIncomplete) return false;
             if (feedOneChunk()) return true;
         }
-        return false;
     };
     auto feedAll = [&]() {
         while (!feedOneChunk()) {

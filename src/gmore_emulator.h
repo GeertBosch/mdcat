@@ -23,6 +23,8 @@ public:
     void feed(const char* p, size_t n);
     size_t contentRows() const;
     size_t pendingImageRow() const;
+    size_t contentAnchorRows() const;
+    size_t maxImageRow() const;
     std::vector<std::pair<int, int>> matchSpans(size_t absRow, const std::regex& re) const;
     void renderRow(size_t absRow,
                    std::string& out,
