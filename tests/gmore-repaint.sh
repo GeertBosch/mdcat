@@ -50,7 +50,9 @@ nl='
 # check LABEL KEYS EXPECTED_RIS — render with KEYS scripted, assert the RIS count.
 check() {
     label=$1; keys=$2; want=$3
-    got=$(GMORE_KEYS="$keys" LINES=6 COLUMNS=20 "$gmore" "$tmp/in" 2>"$tmp/err" | count_ris)
+    # Pin the RIS clear (GMORE_NO_RIS=0): this test uses the ESC c count as its
+    # repaint proxy, so it must not pick up the quiet clear when run under xterm.
+    got=$(GMORE_NO_RIS=0 GMORE_KEYS="$keys" LINES=6 COLUMNS=20 "$gmore" "$tmp/in" 2>"$tmp/err" | count_ris)
     if [ "$got" = "$want" ]; then
         n=$((n + 1))
     else
@@ -101,7 +103,7 @@ count_tx() { grep -aoE 'a=t,' | wc -l | tr -d ' '; }
 # number of a=t (re)transmissions.
 kcheck() {
     label=$1; keys=$2; want=$3
-    got=$(GMORE_KEYS="$keys" LINES=6 COLUMNS=20 GMORE_CELLW=8 GMORE_CELLH=16 \
+    got=$(GMORE_NO_RIS=0 GMORE_KEYS="$keys" LINES=6 COLUMNS=20 GMORE_CELLW=8 GMORE_CELLH=16 \
           "$gmore" "$tmp/kin" 2>"$tmp/err" | count_tx)
     if [ "$got" = "$want" ]; then
         n=$((n + 1))
@@ -119,6 +121,37 @@ kcheck "kitty fwd advance"  'jq'   1   # forward append: no RIS, no re-transmit
 kcheck "kitty jump off G"   'Gq'   1   # RIS, but image is off-screen: nothing to send
 kcheck "kitty back to top"  'Ggq'  2   # g returns to the image's view: re-transmit
 kcheck "kitty page back"    'fbq'  2   # backward RIS repaint with image visible
+
+# --- Quiet clear (avoid RIS) --------------------------------------------------
+# xterm rings the bell on RIS (ESC c), so gmore can clear with ESC[3J ESC[2J ESC[H
+# instead. GMORE_NO_RIS forces the choice; XTERM_VERSION auto-selects the quiet
+# clear. A backward page (fbq) full-repaints once, so we count exactly one clear of
+# whichever kind is in force and zero of the other. env is set inline so no ambient
+# XTERM_VERSION leaks in.
+count_quiet() { grep -aoE "$(printf '\033')\[3J$(printf '\033')\[2J$(printf '\033')\[H" | wc -l | tr -d ' '; }
+
+# qcheck LABEL ENV_ASSIGNS EXPECTED_RIS EXPECTED_QUIET
+qcheck() {
+    label=$1; envs=$2; wantr=$3; wantq=$4
+    out=$(env -u XTERM_VERSION $envs GMORE_KEYS='fbq' LINES=6 COLUMNS=20 \
+          "$gmore" "$tmp/in" 2>"$tmp/err")
+    gotr=$(printf '%s' "$out" | count_ris)
+    gotq=$(printf '%s' "$out" | count_quiet)
+    if [ "$gotr" = "$wantr" ] && [ "$gotq" = "$wantq" ]; then
+        n=$((n + 1))
+    else
+        echo "gmore-repaint: FAIL [$label] env='$envs'" >&2
+        echo "  expected RIS=$wantr quiet=$wantq; got RIS=$gotr quiet=$gotq" >&2
+        [ -s "$tmp/err" ] && { echo "  stderr:" >&2; sed 's/^/    /' "$tmp/err" >&2; }
+        fails=$((fails + 1))
+    fi
+}
+
+qcheck "default is RIS"       ''                     1 0
+qcheck "NO_RIS=1 -> quiet"    'GMORE_NO_RIS=1'       0 1
+qcheck "NO_RIS=0 -> RIS"      'GMORE_NO_RIS=0'       1 0
+qcheck "xterm auto -> quiet"  'XTERM_VERSION=X(1)'   0 1
+qcheck "xterm + NO_RIS=0"     'XTERM_VERSION=X(1) GMORE_NO_RIS=0' 1 0
 
 if [ "$fails" -eq 0 ]; then
     echo "gmore-repaint: OK ($n cases)"

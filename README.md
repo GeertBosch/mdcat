@@ -329,6 +329,7 @@ the percentage appears once the total is known.
 | Environment | Description |
 | ----------- | ----------- |
 | `GMORE_CELLW` / `GMORE_CELLH` | Terminal cell size in pixels, for sizing images when the kernel can't report it |
+| `GMORE_NO_RIS` | Repaint without RIS (`ESC c`) to avoid xterm's reset bell: `1` forces the quiet clear, `0` forces RIS. Unset auto-selects the quiet clear when `XTERM_VERSION` is set. |
 
 | Key | Action |
 | --- | ------ |

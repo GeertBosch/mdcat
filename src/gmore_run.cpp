@@ -129,6 +129,28 @@ static inline int envInt(const char* name, int def) {
     return x > 0 ? x : def;
 }
 
+// True when we appear to be running on a real xterm. xterm rings the bell as part
+// of its RIS (ESC c) power-on-reset handling — the same beep `reset(1)` produces —
+// so gmore's full-repaint clear beeps on every page move there. We key off
+// XTERM_VERSION (xterm sets it; most emulators that merely claim TERM=xterm-256color
+// do not) so lookalikes aren't misclassified.
+static inline bool looksLikeXterm() {
+    return std::getenv("XTERM_VERSION") != nullptr;
+}
+
+// Whether repaint()'s full clear should avoid RIS (ESC c) and use a plain
+// ESC[3J ESC[2J ESC[H erase instead. RIS is the only clear that reliably drops a
+// relocated sixel raster (softer clears ghost scrolled-off images), so it's the
+// default — except on xterm, where RIS beeps (see looksLikeXterm). GMORE_NO_RIS
+// overrides: "1"/"true" forces the quiet clear everywhere, "0"/"false" forces RIS
+// everywhere; unset means auto (quiet on xterm, RIS elsewhere).
+static inline bool avoidRIS() {
+    const char* v = std::getenv("GMORE_NO_RIS");
+    if (v && (v[0] == '1' || v[0] == 't' || v[0] == 'T')) return true;
+    if (v && (v[0] == '0' || v[0] == 'f' || v[0] == 'F')) return false;
+    return looksLikeXterm();
+}
+
 // Terminal rows/cols (and pixel size when the kernel reports it). Tries stdout,
 // then stderr/stdin, then /dev/tty — so it still works when stdout is a pipe
 // (e.g. `timg … | gmore`), where ioctl on stdout fails.
@@ -612,6 +634,12 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo, bool navTrac
     // grid rows we paint onto which screen lines, and where image strips land), so
     // the scroll logic can be reasoned about without a sixel-capable tty.
     const bool dbg = std::getenv("GMORE_DEBUG") != nullptr;
+
+    // Full-clear sequence for repaint()/help. RIS (ESC c) reliably drops relocated
+    // sixel rasters but beeps on xterm; the quiet ESC[3J ESC[2J ESC[H erase doesn't
+    // beep but can ghost scrolled-off images. See avoidRIS() for the policy.
+    const bool noRIS = avoidRIS();
+    const char* clearSeq = noRIS ? "\033[3J\033[2J\033[H" : "\033c";
     auto trace = [&](const char* what) {
         if (!dbg) return;
         std::fprintf(
@@ -673,7 +701,7 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo, bool navTrac
             "  q, Q           quit",
             "",
         };
-        std::fputs("\033c", stdout);  // RIS: clear like repaint()
+        std::fputs(clearSeq, stdout);  // clear like repaint() (RIS or quiet erase)
         for (const char* l : lines) std::fprintf(stdout, "%s\r\n", l);
         std::fputs("\033[7mPress any key to continue\033[27m", stdout);
         std::fflush(stdout);
@@ -708,11 +736,16 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo, bool navTrac
     // top of the screen (verified on iTerm2 over SSH; Ghostty/VSCode were unaffected). An
     // explicit Kitty delete-all (a=d,d=A) after the RIS gives a genuine clean slate, so the
     // re-transmit+place below lands with no ghosts. q=2 keeps the delete reply off-screen.
+    // When avoidRIS() picked the quiet ESC[3J/2J/H clear instead of RIS (e.g. xterm,
+    // which beeps on RIS), the visible sixel raster is NOT dropped, so a scrolled-off
+    // image can ghost; that's the accepted tradeoff for a bell-free repaint. The Kitty
+    // delete-all + re-transmit below is independent of the clear method and still gives
+    // Kitty-protocol images a clean slate either way.
     auto repaint = [&] {
         size_t vBot = std::min(total, viewTop + (size_t)pageH);
-        std::fputs("\033c", stdout);
-        std::fputs("\033_Ga=d,d=A,q=2\033\\", stdout);  // drop stale Kitty placements RIS left
-        em.forgetKittyTransmissions();  // RIS dropped the image data too; re-send it below
+        std::fputs(clearSeq, stdout);
+        std::fputs("\033_Ga=d,d=A,q=2\033\\", stdout);  // drop stale Kitty placements left behind
+        em.forgetKittyTransmissions();  // the clear dropped the image data too; re-send it below
         for (int i = 0; i < pageH; ++i) traceRow(viewTop + (size_t)i, i);
         paintWindow(viewTop, pageH, vBot);
     };

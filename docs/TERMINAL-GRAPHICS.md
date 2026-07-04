@@ -172,6 +172,16 @@ Scroll behaviour we measured — and it is **asymmetric**:
   it — it append-scrolls only the newly revealed rows. RIS is reserved for
   backward/jump repaints. (And see §7: RIS also makes the terminal forget Kitty
   images.)
+- **RIS rings the bell on xterm.** Real `xterm` treats RIS as a power-on reset and
+  beeps — the same `^G` you hear from `reset(1)` — so every backward/jump repaint
+  chirps. No escape sequence suppresses just the bell; the xterm resource
+  `XTerm*bellOnReset: false` (in `~/.Xresources`) does. In gmore, `avoidRIS()`
+  instead swaps RIS for a quiet `ESC[3J ESC[2J ESC[H` erase: auto-selected when
+  `XTERM_VERSION` is set, and forced either way by `GMORE_NO_RIS` (`1`/`0`). The
+  quiet erase does **not** drop a relocated sixel raster (RIS does), so a
+  scrolled-off image can ghost — the accepted trade for a bell-free repaint, and
+  why RIS stays the default off xterm. The Kitty delete-all + re-transmit is
+  independent of the clear choice, so Kitty images stay clean under both.
 
 **External `less` is dead for images.** `less -R` passes SGR + OSC-8 only; a sixel
 DCS is neither, so it prints the bytes as text. That's why `gmore` exists.
