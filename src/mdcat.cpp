@@ -39,6 +39,8 @@
 //         backend.
 
 #include <fcntl.h>
+#include <pthread.h>
+#include <signal.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
 #include <termios.h>
@@ -403,9 +405,26 @@ bool gTightItem = false;
 // The full terminal width, before any container indentation is taken out. Determined once and
 // cached (see the comment in terminalWidth). Callers want terminalWidth(), which subtracts the
 // indent.
+// Re-layout width override for the integrated pager. When gmore re-renders the held source
+// on a window resize it sets this to the new terminal width; 0 (the default) means "detect
+// normally". Consulted before the memoized detection so a resize can drive a fresh width
+// without the once-per-process cache getting in the way. Not thread-safe by itself, but the
+// render thread that reads it is (re)started by the resize path after the value is set, so
+// the write happens-before the read.
+int gRenderWidth = 0;
+
+// When set, render() emits a private provenance OSC (see emitProvenance) before each
+// top-level block, tagging the following grid rows with their markdown source line so the
+// integrated pager can restore the reading position after a resize re-layout. Enabled ONLY
+// on the pager path; left off for --dump, --imginfo, and non-tty output so those stay
+// byte-identical (the golden --dump tests and property-concat.sh depend on it).
+bool gEmitProvenance = false;
+
 int fullTerminalWidth() {
-    // Determined once and cached for the rest of the run: the width is fixed for our purposes and
-    // there is no reason to repeat the syscall for every block and every reflowed line.
+    // A resize-driven override wins and is NOT cached (it changes across re-renders).
+    if (gRenderWidth > 0) return gRenderWidth;
+    // Otherwise determined once and cached for the rest of the run: the width is fixed for our
+    // purposes and there is no reason to repeat the syscall for every block and reflowed line.
     //
     // Precedence, most explicit first:
     //   1. --width / -w on the command line (gWidthOverride): an unconditional override.
@@ -4238,6 +4257,7 @@ void emitBlockQuote(const std::vector<std::string>& inner, std::ostream& out) {
 void render(const std::vector<std::string>& lines, std::ostream& out) {
     size_t n = lines.size();
     bool emitted = false;  // has any block been printed yet?
+    size_t curLine = 0;    // source-line index of the block currently being emitted (for mark)
     // A tight list item suppresses the blank line between its own top-level blocks (its lead
     // paragraph and a nested list). Snapshot the flag and clear it immediately, so this applies
     // only to this render's top level — blocks rendered deeper, and recursive renders, separate
@@ -4246,9 +4266,14 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
     gTightItem = false;
     // Print a blank line before every block except the first, so blocks are visually separated
     // without a leading or trailing blank line in the output. A tight item skips that blank.
+    // After the separator (so the cursor sits on the block's first row) emit the provenance
+    // marker tagging that row with the block's markdown source line: gEmitProvenance gates it
+    // to the pager path and gIndent == 0 restricts it to top-level blocks, whose curLine is a
+    // real source line the pager can re-render from. See srcAtRow in gmore_emulator.cpp.
     auto separate = [&] {
         if (emitted && !tight) out << '\n';
         emitted = true;
+        if (gEmitProvenance && gIndent == 0) out << "\033]9999;" << curLine << "\033\\";
     };
     for (size_t i = 0; i < n;) {
         const std::string& line = lines[i];
@@ -4258,6 +4283,7 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
             ++i;
             continue;
         }  // blank lines separate blocks
+        curLine = i;  // the source line separate()'s provenance marker will tag
 
         // Stream incrementally: flush the output sink before starting the next block, so each block
         // (and any subprocess-rendered image it contains) reaches the terminal as soon as it is
@@ -4789,45 +4815,89 @@ int main(int argc, char** argv) {
     (void)queryBackgroundColor();
     initTheme();
 
-    // On a TTY, page through gmore by default. The render thread streams bytes into a pipe while
-    // gmore parses from the read end and can paint the first page before the full document is
-    // ready.
+    // On a TTY, page through gmore by default. A render THREAD (not a forked child, so the
+    // source and the renderer stay resident) streams bytes into a pipe while gmore parses the
+    // read end and paints the first page before the whole document is ready. gmore holds the
+    // source via the relayout callback: on a window resize it re-renders at the new width and
+    // restores the reading position by source-line provenance (see gEmitProvenance / gmore).
     bool usePager = isatty(STDOUT_FILENO);
     if (usePager) {
-        int pfd[2];
-        if (pipe(pfd) != 0) {
-            std::perror("mdcat: pipe");
-            return 1;
-        }
-        pid_t pid = fork();
-        if (pid < 0) {
-            std::perror("mdcat: fork");
-            close(pfd[0]);
-            close(pfd[1]);
-            return 1;
-        }
-        if (pid == 0) {
-            close(pfd[0]);
-            SlotSink sink(pfd[1]);
-            std::ostream out(&sink);
-            int rc = renderAll(out);
-            out.flush();
-            sink.finish();
-            close(pfd[1]);
-            _exit(rc);
+        // Read the source ONCE into re-renderable segments (one per file, so `mdcat a b` keeps
+        // rendering each independently — never merging a's last block with b's first). Held for
+        // the life of the pager so every re-layout renders from the same source.
+        struct Segment {
+            std::string fileDir;
+            std::vector<std::string> lines;
+        };
+        std::vector<Segment> segments;
+        if (!files.empty()) {
+            for (const auto& path : files) {
+                std::ifstream f(path);
+                if (!f) {
+                    std::cerr << "mdcat: " << path << ": cannot open file\n";
+                    return 1;
+                }
+                size_t slash = path.rfind('/');
+                segments.push_back(
+                    {slash != std::string::npos ? path.substr(0, slash) : std::string(),
+                     splitLines(f)});
+            }
+        } else {
+            segments.push_back({std::string(), splitLines(std::cin)});
         }
 
-        close(pfd[1]);
-        int pagerRc = gmore::run(std::string(), false, false, false, false, pfd[0]);
-        close(pfd[0]);
+        // Render all held segments at `width` into a fresh pipe on a background thread; return
+        // the read end for gmore to ingest. Provenance markers are emitted (paging path) so the
+        // grid rows carry their source line. Only one render thread runs at a time — the caller
+        // joins the previous one before starting the next (see joinRender), so gRenderWidth and
+        // the other render globals are never touched concurrently.
+        std::thread renderThread;
+        auto joinRender = [&] {
+            if (renderThread.joinable()) renderThread.join();
+        };
+        auto startRender = [&](int width) -> int {
+            joinRender();
+            int pfd[2];
+            if (pipe(pfd) != 0) {
+                std::perror("mdcat: pipe");
+                return -1;
+            }
+            // SIGWINCH must reach gmore's main thread (it drives re-layout), never the render
+            // thread. A newly created thread inherits the creator's signal mask, so block
+            // SIGWINCH on THIS (main) thread across the spawn — the render thread inherits the
+            // block — then restore the main thread's mask below. Masking from inside the render
+            // thread instead is both racy (it runs asynchronously) and, on this platform,
+            // was observed to leave SIGWINCH blocked on the main thread, silently killing
+            // resize handling. Blocking here and unblocking here keeps the mask change on one
+            // thread and deterministic.
+            sigset_t block, prev;
+            sigemptyset(&block);
+            sigaddset(&block, SIGWINCH);
+            pthread_sigmask(SIG_BLOCK, &block, &prev);
+            renderThread = std::thread([&segments, width, wfd = pfd[1]] {
+                gRenderWidth = width;    // re-layout width for this pass (0 elsewhere)
+                gEmitProvenance = true;  // tag rows with their source line for resize anchoring
+                SlotSink sink(wfd);
+                std::ostream out(&sink);
+                for (auto& seg : segments) {
+                    gFileDir = seg.fileDir;
+                    render(seg.lines, out);
+                    out.flush();
+                }
+                gFileDir.clear();
+                sink.finish();
+                close(wfd);
+            });
+            pthread_sigmask(SIG_SETMASK, &prev, nullptr);  // main handles SIGWINCH again
+            return pfd[0];
+        };
 
-        int status = 0;
-        if (waitpid(pid, &status, 0) < 0) {
-            std::perror("mdcat: waitpid");
-            return 1;
-        }
-        if (WIFEXITED(status) && WEXITSTATUS(status) != 0) return WEXITSTATUS(status);
-        if (WIFSIGNALED(status)) return 128 + WTERMSIG(status);
+        int rfd = startRender(fullTerminalWidth());
+        if (rfd < 0) return 1;
+        gmore::Relayout relayout = [&](int width) { return startRender(width); };
+        int pagerRc = gmore::run(std::string(), false, false, false, false, rfd, relayout);
+        close(rfd);
+        joinRender();
         return pagerRc;
     }
 

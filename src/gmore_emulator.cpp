@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 #include <regex>
 #include <set>
 #include <string>
@@ -480,6 +481,15 @@ struct Emulator::Impl {
     int osRow = -1, osCol = -1;  // cell `put` last wrote (overstrike target)
     bool osBack = false;         // a bs() just backed the cursor onto (osRow,osCol)
 
+    // Source-line provenance (for re-layout on window resize). mdcat emits a private OSC
+    // marker (see dispatchOsc) at each block boundary carrying the 0-based markdown source
+    // line the following block came from; we record it against the current absolute grid
+    // row. On resize gmore maps the top-of-screen row back to a source line, re-renders at
+    // the new width, and scrolls that source line to the top. Sorted so a row with no exact
+    // marker resolves to the nearest preceding one (upper_bound). Empty when the producer
+    // isn't mdcat's pager (standalone gmore), which simply disables the anchor.
+    std::map<size_t, long> srcAtRow;
+
     Impl(int w, int h, int cw, int ch)
         : W(w < 1 ? 1 : w), H(h < 1 ? 1 : h), cellW(cw < 1 ? 1 : cw), cellH(ch < 1 ? 1 : ch) {
         ensure();
@@ -779,12 +789,23 @@ struct Emulator::Impl {
         }
         seq.push_back(static_cast<char>(b));
     }
+    // Private provenance OSC: "9999;<n>" tags the current absolute grid row as coming from
+    // 0-based markdown source line <n>. mdcat's pager emits it at each block boundary; it is
+    // consumed here and never reaches a real terminal (gmore strips all OSC). See srcAtRow.
+    static constexpr const char* kSrcPrefix = "9999;";
     void dispatchOsc() {
         // OSC 8 format: "8;<params>;<uri>"  — empty uri closes the link.
         if (seq.size() >= 2 && seq[0] == '8' && seq[1] == ';') {
             size_t semi = seq.find(';', 2);
             std::string uri = (semi != std::string::npos) ? seq.substr(semi + 1) : std::string{};
             pen.link = internUri(uri);
+            return;
+        }
+        size_t plen = std::strlen(kSrcPrefix);
+        if (seq.size() > plen && seq.compare(0, plen, kSrcPrefix) == 0) {
+            char* end = nullptr;
+            long n = std::strtol(seq.c_str() + plen, &end, 10);
+            if (end != seq.c_str() + plen && n >= 0) srcAtRow[top + (size_t)cr] = n;
         }
     }
     // DCS (sixel): accumulate until ST, then decode + anchor the image.
@@ -1045,6 +1066,31 @@ struct Emulator::Impl {
         return last;
     }
 
+    // The markdown source line the content at absolute grid row `row` came from, or -1 if
+    // no provenance was recorded (standalone gmore, or a row above the first marker). Rows
+    // between markers resolve to the nearest preceding marker — the block the row belongs
+    // to — so a wrapped continuation line or a blank separator still anchors correctly.
+    long srcLineForRow(size_t row) const {
+        if (srcAtRow.empty()) return -1;
+        auto it = srcAtRow.upper_bound(row);    // first marker strictly after `row`
+        if (it == srcAtRow.begin()) return -1;  // `row` precedes every marker
+        return std::prev(it)->second;
+    }
+
+    // The first absolute grid row whose content came from source line `src` (or the nearest
+    // block at/after it if that exact line produced no visible row), or 0 if unknown. Used
+    // after a re-layout to scroll the anchored source line back to the top of the view.
+    size_t rowForSrcLine(long src) const {
+        size_t best = 0;
+        bool found = false;
+        for (const auto& kv : srcAtRow)
+            if (kv.second >= src && (!found || kv.first < best)) {
+                best = kv.first;
+                found = true;
+            }
+        return best;
+    }
+
     // The absolute row an in-progress (not yet ST-terminated) sixel/Kitty sequence
     // will anchor to, or SIZE_MAX if none is open. A producer that flushes a row's
     // text and its image bytes in separate writes can hand feedUntilRows a read()
@@ -1266,6 +1312,11 @@ struct Emulator::Impl {
 
 Emulator::Emulator(int w, int h, int cw, int ch) : impl_(new Impl(w, h, cw, ch)) {}
 Emulator::~Emulator() = default;
+// Defined here (not =default in the header) because Impl is incomplete there. The pager's
+// resize path move-assigns a freshly-built Emulator over the old one to swap in the
+// re-laid-out grid.
+Emulator::Emulator(Emulator&&) noexcept = default;
+Emulator& Emulator::operator=(Emulator&&) noexcept = default;
 
 void Emulator::forgetKittyTransmissions() const {
     impl_->forgetKittyTransmissions();
@@ -1284,6 +1335,12 @@ size_t Emulator::contentAnchorRows() const {
 }
 size_t Emulator::maxImageRow() const {
     return impl_->maxImageRow();
+}
+long Emulator::srcLineForRow(size_t row) const {
+    return impl_->srcLineForRow(row);
+}
+size_t Emulator::rowForSrcLine(long src) const {
+    return impl_->rowForSrcLine(src);
 }
 std::vector<std::pair<int, int>> Emulator::matchSpans(size_t absRow, const std::regex& re) const {
     return impl_->matchSpans(absRow, re);

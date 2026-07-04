@@ -15,6 +15,7 @@ public:
     Emulator(int w, int h, int cw, int ch);
     ~Emulator();
     Emulator(Emulator&&) noexcept;
+    Emulator& operator=(Emulator&&) noexcept;  // rebuild in place on a resize re-layout
 
     Emulator(const Emulator&) = delete;
     Emulator& operator=(const Emulator&) = delete;
@@ -25,6 +26,10 @@ public:
     size_t pendingImageRow() const;
     size_t contentAnchorRows() const;
     size_t maxImageRow() const;
+    // Source-line provenance for re-layout on resize: map a grid row to the markdown source
+    // line it came from, and back. See the srcAtRow comment in gmore_emulator.cpp.
+    long srcLineForRow(size_t row) const;
+    size_t rowForSrcLine(long src) const;
     std::vector<std::pair<int, int>> matchSpans(size_t absRow, const std::regex& re) const;
     void renderRow(size_t absRow,
                    std::string& out,

@@ -111,6 +111,16 @@ static inline void onSignal(int sig) {
     signal(sig, SIG_DFL);
     raise(sig);
 }
+
+// Set by the SIGWINCH handler; polled by the input loop, which does the actual re-layout
+// (reading window size, re-rendering, swapping the grid) outside signal context. The handler
+// deliberately does no work — it just flags, and the blocking tty read() returns EINTR so the
+// loop wakes to notice. A burst of resizes collapses to one re-layout (the loop reads the
+// final size). volatile sig_atomic_t is the only type safe to touch from a signal handler.
+static volatile sig_atomic_t gWinch = 0;
+static void onWinch(int) {
+    gWinch = 1;
+}
 static inline bool enterRaw() {
     if (tcgetattr(gTtyFd, &gSaved) != 0) return false;
     struct termios raw = gSaved;
@@ -313,7 +323,13 @@ struct Nav {
 // Returns 0 on success. When stdout is not a tty and neither dump nor imginfo
 // mode is requested, passes the data through verbatim (pager-as-cat).
 // ---------------------------------------------------------------------------
-int run(std::string data, bool dump, bool dumpImages, bool imginfo, bool navTrace, int streamFd) {
+int run(std::string data,
+        bool dump,
+        bool dumpImages,
+        bool imginfo,
+        bool navTrace,
+        int streamFd,
+        Relayout relayout) {
     internAttr(Attr{});  // id 0 = default
 
     // Terminal geometry. Env wins (for --dump/tests); then the kernel's TIOCGWINSZ
@@ -619,6 +635,23 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo, bool navTrac
         std::atexit(restoreTty);
         std::signal(SIGINT, onSignal);
         std::signal(SIGTERM, onSignal);
+        // SIGWINCH must interrupt the blocking tty read() so the loop notices the resize, so
+        // install it WITHOUT SA_RESTART (std::signal may set it). Only meaningful when we can
+        // re-layout (relayout set); harmless otherwise (the loop just repaints at the new size).
+        struct sigaction sa = {};
+        sa.sa_handler = onWinch;
+        sigemptyset(&sa.sa_mask);
+        sa.sa_flags = 0;  // no SA_RESTART: read() returns EINTR on resize
+        sigaction(SIGWINCH, &sa, nullptr);
+        // Guarantee SIGWINCH is deliverable to THIS (the pager's main) thread. It can arrive
+        // blocked: the geometry probe reads the tty during startup, and a resize landing while
+        // that read blocks was observed to leave SIGWINCH masked on the main thread on macOS —
+        // after which the handler never runs and resizes are silently ignored. Unblock it here,
+        // where the pager owns the signal, so delivery is independent of how we got here.
+        sigset_t unblock;
+        sigemptyset(&unblock);
+        sigaddset(&unblock, SIGWINCH);
+        pthread_sigmask(SIG_UNBLOCK, &unblock, nullptr);
     }
 
     // view = rows [viewTop, viewTop + pageH); pageH = H-1 (bottom row = prompt).
@@ -790,6 +823,58 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo, bool navTrac
         // viewTop == prevTop: clamped at an edge, nothing moved — leave the screen.
     };
 
+    // Re-layout after a SIGWINCH (see gWinch/onWinch). The document is re-rendered at the new
+    // width by the host (relayout), because gmore's grid is fixed-width and cannot re-wrap.
+    // To keep the reading position, we anchor on the SOURCE LINE of the first on-screen row:
+    // read it from the old grid, re-render, then scroll that same source line back to the top.
+    //   1. Read the new window size (rows/cols; cell size is stable, keep the existing one).
+    //   2. anchor = the markdown source line of the current top-of-view row.
+    //   3. relayout(newW) streams a freshly-rendered document; swap in a new Emulator fed from
+    //      it (same early-paint ingest as the first render, so a big re-render paints promptly).
+    //   4. viewTop = the row that anchor's source line now maps to, clamped; full repaint.
+    // Without a relayout callback (standalone gmore) there is nothing to re-render, so we only
+    // adopt the new size and repaint the existing grid.
+    auto doResize = [&] {
+        struct winsize ws;
+        if (!getWinsize(ws)) return;
+        int newW = ws.ws_col > 0 ? ws.ws_col : W;
+        int newH = ws.ws_row > 0 ? ws.ws_row : H;
+        if (!relayout) {  // no re-renderer: just adopt the new size and repaint
+            W = newW;
+            H = newH;
+            pageH = H - 1;
+            nav.total = total;
+            viewTop = std::min(viewTop, nav.maxTop());
+            repaint();
+            return;
+        }
+        long anchor = em.srcLineForRow(viewTop);
+        int fd = relayout(newW);
+        if (fd < 0) return;  // re-render failed; leave the current view untouched
+        if (streamFd >= 0) close(streamFd);
+        streamFd = fd;
+        W = newW;
+        H = newH;
+        pageH = H - 1;
+        em = Emulator(W, H, cellW, cellH);
+        inputEof = false;
+        // Fill enough rows to cover the anchored page. We don't yet know the anchor's new row,
+        // so first fill a screen; the ingest below tops up once we know where the anchor landed.
+        inputEof = feedUntilRows((size_t)std::max(1, H - 1));
+        total = em.contentRows();
+        size_t target = anchor >= 0 ? em.rowForSrcLine(anchor) : viewTop;
+        // Ensure the anchored page is materialised: keep feeding until we hold target+pageH rows
+        // (or hit EOF), so the fast-forward lands on real content rather than an unfilled tail.
+        if (!inputEof) {
+            inputEof = feedUntilRows(target + (size_t)pageH);
+            total = em.contentRows();
+            target = anchor >= 0 ? em.rowForSrcLine(anchor) : target;
+        }
+        nav.total = total;
+        viewTop = std::min(target, nav.maxTop());
+        repaint();
+    };
+
     // GMORE_KEYS scripts the keystroke stream (one char = one key) instead of
     // reading the tty, so a session like "jk" can be replayed non-interactively
     // and its exact output (escapes + sixel strips) captured for inspection.
@@ -799,14 +884,28 @@ int run(std::string data, bool dump, bool dumpImages, bool imginfo, bool navTrac
     size_t keyPos = 0;
 
     // One keystroke from the scripted stream or the tty; returns false at EOF so
-    // both the main loop and the search input editor share one read path.
+    // both the main loop and the search input editor share one read path. A SIGWINCH
+    // interrupts the blocking read (EINTR): we re-layout for the new size, then resume
+    // waiting for a key — the resize is transparent to callers (no phantom keystroke).
     auto nextKey = [&](unsigned char& c) -> bool {
         if (scriptedKeys) {
             if (!scriptedKeys[keyPos]) return false;
             c = (unsigned char)scriptedKeys[keyPos++];
             return true;
         }
-        return read(gTtyFd, &c, 1) == 1;
+        for (;;) {
+            ssize_t n = read(gTtyFd, &c, 1);
+            if (n == 1) return true;
+            if (n < 0 && errno == EINTR) {
+                if (gWinch) {
+                    gWinch = 0;
+                    doResize();
+                    showPrompt();  // resize repainted the window; restore the prompt row
+                }
+                continue;  // resume waiting for an actual keystroke
+            }
+            return false;  // real EOF or error
+        }
     };
 
     // On streaming input, forward motion from (the current) end needs more rows first.
