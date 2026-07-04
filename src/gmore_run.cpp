@@ -670,6 +670,10 @@ int run(std::string data,
         std::atexit(restoreTty);
         std::signal(SIGINT, onSignal);
         std::signal(SIGTERM, onSignal);
+        // Resize re-layout closes the old render pipe's read end while the render thread may
+        // still be writing into it (see doResize); that write must come back as EPIPE, not a
+        // process-killing SIGPIPE.
+        std::signal(SIGPIPE, SIG_IGN);
         // SIGWINCH must interrupt the blocking tty read() so the loop notices the resize, so
         // install it WITHOUT SA_RESTART (std::signal may set it). Only meaningful when we can
         // re-layout (relayout set); harmless otherwise (the loop just repaints at the new size).
@@ -898,9 +902,18 @@ int run(std::string data,
             return;
         }
         long anchor = em.srcLineForRow(viewTop);
-        int fd = relayout(newW);
-        if (fd < 0) return;  // re-render failed; leave the current view untouched
+        // Close the OLD stream before relayout: the old render thread is often still blocked
+        // writing into a full pipe nobody will drain again (any doc whose rendered bytes exceed
+        // the pipe buffer — always true with images), and relayout() starts by joining that
+        // thread. Closing the read end first fails its write with EPIPE (SIGPIPE is ignored)
+        // so the join can complete; keeping the fd open instead deadlocks the resize.
         if (streamFd >= 0) close(streamFd);
+        streamFd = -1;
+        int fd = relayout(newW);
+        if (fd < 0) {  // re-render failed; keep showing the current grid (its stream is gone)
+            inputEof = true;
+            return;
+        }
         streamFd = fd;
         W = newW;
         H = newH;
