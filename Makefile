@@ -61,7 +61,8 @@ TESTS := \
 	tests/gmore-nav.sh \
 	tests/gmore-search.sh \
 	tests/gmore-repaint.sh \
-	tests/gmore-links.sh
+	tests/gmore-links.sh \
+	tests/gmore-winch.sh
 
 CLANG_FORMAT ?= clang-format
 CLANG_FORMAT_REQUIRED_MAJOR ?= 20

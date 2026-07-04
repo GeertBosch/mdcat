@@ -14,6 +14,7 @@
 
 #include <fcntl.h>
 #include <sys/ioctl.h>
+#include <sys/select.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -118,8 +119,42 @@ static inline void onSignal(int sig) {
 // loop wakes to notice. A burst of resizes collapses to one re-layout (the loop reads the
 // final size). volatile sig_atomic_t is the only type safe to touch from a signal handler.
 static volatile sig_atomic_t gWinch = 0;
+// Self-pipe: the handler also writes one byte here. The kernel delivers SIGWINCH to an
+// arbitrary thread with it unblocked — on macOS that can be a render/image-pool worker, not
+// the pager thread, so the pager's blocking tty read() is NOT interrupted and an EINTR-only
+// scheme never notices the flag. nextKey therefore select()s on {tty, this pipe}: whichever
+// thread runs the handler, the pipe byte wakes the pager. (select, not poll: macOS poll(2)
+// does not work on /dev/tty.)
+static int gWinchPipe[2] = {-1, -1};
+// TEMP diagnostics (GMORE_WINCH_LOG=<file>): async-signal-safe trace of signal delivery —
+// which thread the handler runs on, whether the read EINTRs, whether doResize runs.
+static int gWinchLogFd = -1;
+static void winchLog(const char* tag) {
+    if (gWinchLogFd < 0) return;
+    char buf[96];
+    uintptr_t tid = (uintptr_t)pthread_self();
+    size_t n = 0;
+    while (tag[n] && n < 40) {
+        buf[n] = tag[n];
+        ++n;
+    }
+    buf[n++] = ' ';
+    buf[n++] = 't';
+    buf[n++] = 'i';
+    buf[n++] = 'd';
+    buf[n++] = '=';
+    for (int s = (int)sizeof(tid) * 8 - 4; s >= 0; s -= 4)
+        buf[n++] = "0123456789abcdef"[(tid >> s) & 0xf];
+    buf[n++] = '\n';
+    write(gWinchLogFd, buf, n);
+}
 static void onWinch(int) {
     gWinch = 1;
+    if (gWinchPipe[1] >= 0) {
+        char b = 'w';
+        (void)!write(gWinchPipe[1], &b, 1);  // non-blocking; a full pipe is fine (flag is set)
+    }
+    winchLog("WINCH");
 }
 static inline bool enterRaw() {
     if (tcgetattr(gTtyFd, &gSaved) != 0) return false;
@@ -638,6 +673,15 @@ int run(std::string data,
         // SIGWINCH must interrupt the blocking tty read() so the loop notices the resize, so
         // install it WITHOUT SA_RESTART (std::signal may set it). Only meaningful when we can
         // re-layout (relayout set); harmless otherwise (the loop just repaints at the new size).
+        // Self-pipe first (before the handler can fire): non-blocking both ends so the
+        // async-signal-safe write in onWinch can never block, close-on-exec so children
+        // (e.g. an image converter) don't inherit it.
+        if (gWinchPipe[0] < 0 && pipe(gWinchPipe) == 0) {
+            for (int fd : gWinchPipe) {
+                fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+                fcntl(fd, F_SETFD, FD_CLOEXEC);
+            }
+        }
         struct sigaction sa = {};
         sa.sa_handler = onWinch;
         sigemptyset(&sa.sa_mask);
@@ -652,6 +696,10 @@ int run(std::string data,
         sigemptyset(&unblock);
         sigaddset(&unblock, SIGWINCH);
         pthread_sigmask(SIG_UNBLOCK, &unblock, nullptr);
+        if (const char* lf = std::getenv("GMORE_WINCH_LOG")) {
+            gWinchLogFd = open(lf, O_WRONLY | O_CREAT | O_APPEND, 0644);
+            dprintf(gWinchLogFd, "install pid=%d\n", getpid());
+        }
     }
 
     // view = rows [viewTop, viewTop + pageH); pageH = H-1 (bottom row = prompt).
@@ -835,6 +883,7 @@ int run(std::string data,
     // Without a relayout callback (standalone gmore) there is nothing to re-render, so we only
     // adopt the new size and repaint the existing grid.
     auto doResize = [&] {
+        winchLog("doResize");
         struct winsize ws;
         if (!getWinsize(ws)) return;
         int newW = ws.ws_col > 0 ? ws.ws_col : W;
@@ -894,16 +943,58 @@ int run(std::string data,
             return true;
         }
         for (;;) {
+            // Self-healing: field logs (iTerm2) show SIGWINCH ends up BLOCKED on this thread
+            // after the first keypress — blocked on every thread, the signal stays pending and
+            // resize handling dies silently. Re-asserting the unblock is idempotent, and per
+            // POSIX a pending SIGWINCH is delivered immediately when unblocked, so a resize
+            // that happened while masked still lands. Log when we catch the mask flipped so
+            // the culprit can be found.
+            {
+                sigset_t cur;
+                pthread_sigmask(SIG_SETMASK, nullptr, &cur);
+                if (sigismember(&cur, SIGWINCH)) {
+                    winchLog("mask-flipped:unblocking");
+                    sigset_t un;
+                    sigemptyset(&un);
+                    sigaddset(&un, SIGWINCH);
+                    pthread_sigmask(SIG_UNBLOCK, &un, nullptr);
+                }
+            }
+            if (gWinchLogFd >= 0) {  // one line per key wait: is the handler still ours?
+                struct sigaction cur = {};
+                sigaction(SIGWINCH, nullptr, &cur);
+                winchLog(cur.sa_handler == onWinch ? "wait:ours" : "wait:HANDLER-REPLACED");
+            }
+            // The handler may have run on ANY thread (see gWinchPipe); check the flag
+            // unconditionally, not just after an EINTR on this thread.
+            if (gWinch) {
+                gWinch = 0;
+                if (gWinchPipe[0] >= 0) {  // drain coalesced wakeup bytes
+                    char junk[64];
+                    while (read(gWinchPipe[0], junk, sizeof junk) > 0) {
+                    }
+                }
+                doResize();
+                showPrompt();  // resize repainted the window; restore the prompt row
+                continue;
+            }
+            fd_set rf;
+            FD_ZERO(&rf);
+            FD_SET(gTtyFd, &rf);
+            int maxFd = gTtyFd;
+            if (gWinchPipe[0] >= 0) {
+                FD_SET(gWinchPipe[0], &rf);
+                maxFd = std::max(maxFd, gWinchPipe[0]);
+            }
+            int r = select(maxFd + 1, &rf, nullptr, nullptr, nullptr);
+            if (r < 0) {
+                if (errno == EINTR) continue;  // signal on this thread; loop re-checks gWinch
+                return false;
+            }
+            if (!FD_ISSET(gTtyFd, &rf)) continue;  // pipe woke us; loop re-checks gWinch
             ssize_t n = read(gTtyFd, &c, 1);
             if (n == 1) return true;
-            if (n < 0 && errno == EINTR) {
-                if (gWinch) {
-                    gWinch = 0;
-                    doResize();
-                    showPrompt();  // resize repainted the window; restore the prompt row
-                }
-                continue;  // resume waiting for an actual keystroke
-            }
+            if (n < 0 && errno == EINTR) continue;
             return false;  // real EOF or error
         }
     };
