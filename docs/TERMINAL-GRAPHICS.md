@@ -215,6 +215,27 @@ The deeper lesson, learned three times:
    piped producer) **and** gmore (the interactive consumer) — and gmore must
    **honour the producer's `c=`/`r=`** rather than recomputing from pixels.
 
+### 5a. The same overlay, degenerate to one row: leading-image headings/paragraphs
+
+A heading or paragraph that *starts* with a Markdown image followed by more text
+(`# ![Logo](logo.png) Project Name` — a common README pattern) reuses this exact
+reserve-then-overlay technique (`renderLeadingImageBlock`), just with a single
+image column and a single text column instead of a full table grid: text lines
+are laid out first with the image's column reserved as blank padding, then the
+image is painted into that reserved space via relative cursor moves bracketed by
+DECSC/DECRC (`replaySixel`). Two differences from the table case:
+
+- The image is **capped to a few text-lines' height** (currently 3), since a
+  heading logo sized to its own aspect ratio could otherwise be arbitrarily tall.
+  The cap is enforced by requesting a smaller height and re-rendering — up to a
+  few retries — because the requested pixel height (nominal cell) and the
+  measured footprint (real cell) round independently, so a single attempt at
+  exactly the cap can still land one row over.
+- Unlike a table (which needs every image's footprint before it can lay out
+  columns, so all of a table's images are joined together), a leading image is
+  the only thing sizing its block, so it can defer through the ordinary
+  single-slot SlotSink path (ADR 0003) like a standalone image paragraph.
+
 ---
 
 ## 6. Over SSH: why Kitty, and how sizing still works

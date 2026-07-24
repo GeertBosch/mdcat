@@ -67,6 +67,20 @@ back to its alt text, or the filename if no alt is given.
 
 Image paths are resolved relative to the markdown file's directory.
 
+#### Leading-image headings and paragraphs
+
+A heading or paragraph that **starts** with an image, e.g.
+`# ![Logo](logo.png) Project Name` (a common README pattern for a small logo
+next to the title), renders as a two-column layout: the image on the left, the
+rest of the text vertically centered to its right, instead of falling back to
+alt text. The image is capped to a few text-line's height so a large logo
+cannot balloon a single heading into a huge block.
+
+# ![example.png](tests/img/example.png) A Heading With a Logo
+
+![example.png](tests/img/example.png) A paragraph that starts with an image
+works the same way, wrapping the remaining text in the space beside it.
+
 ### Block quotes
 
 Block quotes render with a left-rule decoration; nesting is supported.
