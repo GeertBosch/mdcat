@@ -53,6 +53,7 @@ TESTS := \
 	tests/property-hard-breaks.sh \
 	tests/property-math.sh \
 	tests/property-provenance.sh \
+	tests/property-image-assets.sh \
 	tests/unicode-width.sh \
 	tests/mdcat-kitty.sh \
 	tests/mdcat-remote-image.sh \
