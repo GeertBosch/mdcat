@@ -135,33 +135,6 @@ int gForcedBackend = -1;  // -1 = unset; else a GraphicsBackend value
 // Empty string means the current working directory. Set by main() before each render() call.
 std::string gFileDir;
 
-// Resolve an OSC 8 link target. Absolute URLs (those with a scheme like http://, or a
-// fragment/mailto/etc.) are emitted unchanged so they stay portable; a relative path is rewritten
-// to an absolute file:// URL anchored on the rendered file's directory, so terminals can open it on
-// click. A bare in-document fragment (#anchor) is left alone — there's nothing local to point at.
-std::string resolveLinkTarget(const std::string& url) {
-    if (url.empty() || url[0] == '#') return url;
-    // A URL scheme is letters/digits/+/-/. followed by ':' before any '/' — leave those alone.
-    for (size_t i = 0; i < url.size(); ++i) {
-        char c = url[i];
-        if (c == ':') return url;  // has a scheme (http:, mailto:, file:, ...)
-        if (!(std::isalnum((unsigned char)c) || c == '+' || c == '-' || c == '.')) break;
-    }
-    std::string path = url;
-    if (path[0] != '/') {
-        std::string base = gFileDir;
-        if (base.empty() || base[0] != '/') {
-            char cwd[4096];
-            if (getcwd(cwd, sizeof(cwd))) {
-                std::string c(cwd);
-                base = base.empty() ? c : c + "/" + base;
-            }
-        }
-        if (!base.empty()) path = base + "/" + path;
-    }
-    return "file://" + path;
-}
-
 // --- Remote image trust ----------------------------------------------------------------------
 //
 // Viewing a Markdown file should not fetch arbitrary network resources. mdcat will fetch a remote
@@ -2157,7 +2130,7 @@ private:
             case Kind::Text: out += t.text; break;
             case Kind::Code: out += kCodeOn + t.text + kCodeOff; break;
             case Kind::Link:
-                out += "\033]8;;" + resolveLinkTarget(t.url) + "\033\\" + t.text + "\033]8;;\033\\";
+                out += "\033]8;;" + t.url + "\033\\" + t.text + "\033]8;;\033\\";
                 break;
             case Kind::Image:
                 // Inline image: show alt text (we can't fetch remote URLs inline).
@@ -2873,8 +2846,7 @@ bool renderImageBlock(const std::string& text,
             label = text;
         auto hrefIt = attrs.find("href");
         if (hrefIt != attrs.end() && !hrefIt->second.empty())
-            out = "\033]8;;" + resolveLinkTarget(hrefIt->second) + "\033\\" + renderInline(label) +
-                "\033]8;;\033\\";
+            out = "\033]8;;" + hrefIt->second + "\033\\" + renderInline(label) + "\033]8;;\033\\";
         else
             out = renderInline(label);
         cellWidth = displayWidth(out);
@@ -3014,7 +2986,7 @@ bool renderImageBlock(const std::string& text,
     }
     auto hrefIt = attrs.find("href");
     if (hrefIt != attrs.end() && !hrefIt->second.empty())
-        out = "\033]8;;" + resolveLinkTarget(hrefIt->second) + "\033\\" + img + "\033]8;;\033\\";
+        out = "\033]8;;" + hrefIt->second + "\033\\" + img + "\033]8;;\033\\";
     else
         out = img;
     return true;
