@@ -4997,59 +4997,81 @@ int main(int argc, char** argv) {
             segments.push_back({std::string(), splitLines(std::cin)});
         }
 
-        // Render all held segments at `width` into a fresh pipe on a background thread; return
-        // the read end for gmore to ingest. Provenance markers are emitted (paging path) so the
-        // grid rows carry their source line. Only one render thread runs at a time — the caller
-        // joins the previous one before starting the next (see joinRender), so gRenderWidth and
-        // the other render globals are never touched concurrently.
-        std::thread renderThread;
-        auto joinRender = [&] {
-            if (renderThread.joinable()) renderThread.join();
-        };
-        auto startRender = [&](int width) -> int {
-            joinRender();
-            int pfd[2];
-            if (pipe(pfd) != 0) {
-                std::perror("mdcat: pipe");
-                return -1;
+        // Page one segment (file) at a time: each gets its own render thread/pipe/gmore::run(),
+        // so advancing past the end of a file only ever needed that file's bytes, never the rest
+        // of the argument list. Like less(1) with multiple operands, the prompt shows "(file x of
+        // y)" and 'q' quits the whole session while reaching a file's end just advances to the
+        // next one.
+        for (size_t idx = 0; idx < segments.size(); ++idx) {
+            Segment& seg = segments[idx];
+            std::string promptSuffix;
+            if (segments.size() > 1) {
+                promptSuffix = " (file " + std::to_string(idx + 1) + " of " +
+                    std::to_string(segments.size()) + ")";
             }
-            // SIGWINCH must reach gmore's main thread (it drives re-layout), never the render
-            // thread. A newly created thread inherits the creator's signal mask, so block
-            // SIGWINCH on THIS (main) thread across the spawn — the render thread inherits the
-            // block — then restore the main thread's mask below. Masking from inside the render
-            // thread instead is both racy (it runs asynchronously) and, on this platform,
-            // was observed to leave SIGWINCH blocked on the main thread, silently killing
-            // resize handling. Blocking here and unblocking here keeps the mask change on one
-            // thread and deterministic.
-            sigset_t block, prev;
-            sigemptyset(&block);
-            sigaddset(&block, SIGWINCH);
-            pthread_sigmask(SIG_BLOCK, &block, &prev);
-            renderThread = std::thread([&segments, width, wfd = pfd[1]] {
-                gRenderWidth = width;    // re-layout width for this pass (0 elsewhere)
-                gEmitProvenance = true;  // tag rows with their source line for resize anchoring
-                SlotSink sink(wfd);
-                std::ostream out(&sink);
-                for (auto& seg : segments) {
+
+            // Render `seg` at `width` into a fresh pipe on a background thread; return the read
+            // end for gmore to ingest. Provenance markers are emitted (paging path) so the grid
+            // rows carry their source line. Only one render thread runs at a time — the caller
+            // joins the previous one before starting the next (see joinRender), so gRenderWidth
+            // and the other render globals are never touched concurrently.
+            std::thread renderThread;
+            auto joinRender = [&] {
+                if (renderThread.joinable()) renderThread.join();
+            };
+            auto startRender = [&](int width) -> int {
+                joinRender();
+                int pfd[2];
+                if (pipe(pfd) != 0) {
+                    std::perror("mdcat: pipe");
+                    return -1;
+                }
+                // SIGWINCH must reach gmore's main thread (it drives re-layout), never the render
+                // thread. A newly created thread inherits the creator's signal mask, so block
+                // SIGWINCH on THIS (main) thread across the spawn — the render thread inherits
+                // the block — then restore the main thread's mask below. Masking from inside the
+                // render thread instead is both racy (it runs asynchronously) and, on this
+                // platform, was observed to leave SIGWINCH blocked on the main thread, silently
+                // killing resize handling. Blocking here and unblocking here keeps the mask
+                // change on one thread and deterministic.
+                sigset_t block, prev;
+                sigemptyset(&block);
+                sigaddset(&block, SIGWINCH);
+                pthread_sigmask(SIG_BLOCK, &block, &prev);
+                renderThread = std::thread([&seg, width, wfd = pfd[1]] {
+                    gRenderWidth = width;    // re-layout width for this pass (0 elsewhere)
+                    gEmitProvenance = true;  // tag rows with their source line for resize anchoring
+                    SlotSink sink(wfd);
+                    std::ostream out(&sink);
                     gFileDir = seg.fileDir;
                     render(seg.lines, out);
                     out.flush();
-                }
-                gFileDir.clear();
-                sink.finish();
-                close(wfd);
-            });
-            pthread_sigmask(SIG_SETMASK, &prev, nullptr);  // main handles SIGWINCH again
-            return pfd[0];
-        };
+                    gFileDir.clear();
+                    sink.finish();
+                    close(wfd);
+                });
+                pthread_sigmask(SIG_SETMASK, &prev, nullptr);  // main handles SIGWINCH again
+                return pfd[0];
+            };
 
-        int rfd = startRender(fullTerminalWidth());
-        if (rfd < 0) return 1;
-        gmore::Relayout relayout = [&](int width) { return startRender(width); };
-        int pagerRc = gmore::run(std::string(), false, false, false, false, rfd, relayout);
-        close(rfd);
-        joinRender();
-        return pagerRc;
+            int rfd = startRender(fullTerminalWidth());
+            if (rfd < 0) return 1;
+            gmore::Relayout relayout = [&](int width) { return startRender(width); };
+            bool quitRequested = false;
+            int pagerRc = gmore::run(std::string(),
+                                     false,
+                                     false,
+                                     false,
+                                     false,
+                                     rfd,
+                                     relayout,
+                                     promptSuffix,
+                                     &quitRequested);
+            close(rfd);
+            joinRender();
+            if (pagerRc != 0 || quitRequested) return pagerRc;
+        }
+        return 0;
     }
 
     // Non-tty: stream blocks out as they are rendered. Each file is rendered independently and the

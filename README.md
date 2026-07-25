@@ -310,7 +310,13 @@ mdcat [--width N] [--img[=kitty|sixel|none]] [--] [file ...]
 | `MDCAT_CELL_W` / `MDCAT_CELL_H` | Local terminal cell size in pixels (for remote sessions that can't query it) |
 | `MDCAT_AREA_W` / `MDCAT_AREA_H` | Local terminal text-area size in pixels (for an exact pixel↔cell ratio) |
 
-Reads stdin when no files are given. Multiple files are concatenated.
+Reads stdin when no files are given. With multiple files, non-interactive
+output (piped or redirected) concatenates them; on a terminal, `mdcat` pages
+through them one at a time, like `less` — advancing past the end of a file
+moves to the next without waiting for the rest to render, and the prompt reads
+`--More-- (file 2 of 3)` (or `(END) (file 2 of 3)` at each file's last page).
+Pressing `q` quits the whole session; reaching the last file's end just exits
+normally.
 
 ### gmore
 

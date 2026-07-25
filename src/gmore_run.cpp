@@ -364,7 +364,10 @@ int run(std::string data,
         bool imginfo,
         bool navTrace,
         int streamFd,
-        Relayout relayout) {
+        Relayout relayout,
+        const std::string& promptSuffix,
+        bool* quitRequested) {
+    if (quitRequested) *quitRequested = false;
     internAttr(Attr{});  // id 0 = default
 
     // Terminal geometry. Env wins (for --dump/tests); then the kernel's TIOCGWINSZ
@@ -755,11 +758,12 @@ int run(std::string data,
         if (!message.empty())
             std::fprintf(stdout, "\033[7m%s\033[27m", message.c_str());
         else if (!inputEof)
-            std::fputs("\033[7m--More--\033[27m", stdout);
+            std::fprintf(stdout, "\033[7m--More--%s\033[27m", promptSuffix.c_str());
         else if (nav.atEnd())
-            std::fputs("\033[7m(END)\033[27m", stdout);
+            std::fprintf(stdout, "\033[7m(END)%s\033[27m", promptSuffix.c_str());
         else
-            std::fprintf(stdout, "\033[7m--More--(%d%%)\033[27m", nav.percent());
+            std::fprintf(
+                stdout, "\033[7m--More--(%d%%)%s\033[27m", nav.percent(), promptSuffix.c_str());
         std::fflush(stdout);
     };
     auto clearPrompt = [&] { std::fputs("\r\033[K", stdout); };
@@ -1161,7 +1165,10 @@ int run(std::string data,
         size_t prevTop = viewTop;
         Nav::Action a = nav.dispatch(c, count);
         count = 0;
-        if (a == Nav::QUIT) break;
+        if (a == Nav::QUIT) {
+            if (quitRequested && (c == 'q' || c == 'Q')) *quitRequested = true;
+            break;
+        }
         if (a == Nav::REPAINT) {
             trace("dispatch");
             // A contiguous forward step appends the newly-revealed rows below the screen,
