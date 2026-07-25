@@ -186,6 +186,21 @@ Scroll behaviour we measured — and it is **asymmetric**:
 **External `less` is dead for images.** `less -R` passes SGR + OSC-8 only; a sixel
 DCS is neither, so it prints the bytes as text. That's why `gmore` exists.
 
+**An image taller than the screen is windowed, not shrunk.** `renderImageBlock`
+does not clamp `-g` to the terminal's row count — an image (or Mermaid diagram)
+can reserve more rows than fit in one screen. `gmore` scrolls through it like any
+other content: each repaint re-derives the visible vertical slice from the scroll
+offset and re-places only that band, without re-invoking `timg` or re-encoding
+pixels. Kitty does this with a payload-free `a=p` placement that re-crops the
+already-transmitted image via `x=/y=/w=/h=` (`kittyPlace`,
+gmore_emulator.cpp); sixel has no native source-rectangle, so the same band is
+sliced verbatim out of the original raster bytes by rewriting `Pv` and cutting
+the kept rows (`replaySixel`, gmore_emulator.cpp). Landed in `ec33233` (edge
+clipping) and `6ff3249`/`9d564e1` (Kitty transmit-once + crop placement,
+`probe-kitty-clip.sh`). A prior attempt to instead cap image height to the
+screen at render time was reverted — it fights this mechanism and needlessly
+shrinks diagrams that already scroll correctly.
+
 ---
 
 ## 5. Images in tables: pin the footprint to the laid-out width

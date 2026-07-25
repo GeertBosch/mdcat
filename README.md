@@ -204,6 +204,22 @@ graph LR
     render --> output[Output]
 ```
 
+A diagram taller than the terminal isn't shrunk to fit — `gmore` scrolls
+through it like any other content, revealing more of it a row at a time:
+
+```mermaid
+graph TD
+    a[Start] --> b[Step 1]
+    b --> c[Step 2]
+    c --> d[Step 3]
+    d --> e[Step 4]
+    e --> f[Step 5]
+    f --> g[Step 6]
+    g --> h[Step 7]
+    h --> i[Step 8]
+    i --> j[End]
+```
+
 ### Unicode 🌍
 
 Text is measured by *display width*, not byte or code-point count, so everything
