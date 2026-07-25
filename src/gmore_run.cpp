@@ -1019,10 +1019,16 @@ int run(std::string data,
                                c == 'd' || c == 0x04 || c == 'G');
         bool corpusWideRequest = (c == '/' || c == '?' || c == 'n' || c == 'N' || c == 'G');
         if (!corpusWideRequest && (!forwardRequest || !nav.atEnd())) return;
-        // We can paint the first page early, but once the user asks for movement/search beyond the
-        // currently available tail, finish ingesting so pagination and multi-image rows are
-        // coherent.
-        inputEof = feedAll();
+        if (corpusWideRequest) {
+            // Search and "go to end" genuinely need the whole corpus: a search must scan every
+            // row, and G with no more input available means "last line", wherever that is.
+            inputEof = feedAll();
+        } else {
+            // Plain forward paging (space/f/j/d) only needs one more page's worth of rows, so a
+            // long file list (`mdcat *.md`) advances a page at a time instead of blocking the
+            // keystroke until every remaining file has been rendered.
+            inputEof = feedUntilRows(nav.viewTop + 2 * (size_t)nav.pageH);
+        }
         total = em.contentRows();
         nav.total = total;
     };
