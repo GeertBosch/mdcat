@@ -69,6 +69,7 @@
 
 #include "gmore_run.h"
 #include "highlight.h"
+#include "tty_guard.h"
 
 namespace {
 
@@ -467,6 +468,7 @@ ProbeResult probeGraphics() {
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 2;  // 0.2s between bytes before giving up
     tcsetattr(fd, TCSANOW, &raw);
+    ttyguard::enter(fd, saved);
     // a=q: validate + reply, do not draw ("AAAA" is one 1x1 black pixel). Then Primary DA (CSI c).
     static const char query[] = "\033_Gi=1,a=q,f=24,s=1,v=1;AAAA\033\\\033[c";
     ProbeResult result = ProbeResult::Unknown;
@@ -494,6 +496,7 @@ ProbeResult probeGraphics() {
         // else: total silence -> Unknown (slow/lost reply, or env-stripped Kitty-capable remote)
     }
     tcsetattr(fd, TCSANOW, &saved);
+    ttyguard::leave();
     close(fd);
     return result;
 }
@@ -658,6 +661,7 @@ TwoInts queryWindowOp(const char* op) {
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 2;  // 0.2s between bytes before giving up
     tcsetattr(fd, TCSANOW, &raw);
+    ttyguard::enter(fd, saved);
     std::string query = std::string("\033[") + op + "t";
     TwoInts out{0, 0};
     if (write(fd, query.c_str(), query.size()) == static_cast<ssize_t>(query.size())) {
@@ -676,6 +680,7 @@ TwoInts queryWindowOp(const char* op) {
             out = {a, b};
     }
     tcsetattr(fd, TCSANOW, &saved);
+    ttyguard::leave();
     close(fd);
     return out;
 }
@@ -705,6 +710,7 @@ std::string queryBackgroundColor() {
         raw.c_cc[VMIN] = 0;
         raw.c_cc[VTIME] = 2;  // 0.2s between bytes
         tcsetattr(fd, TCSANOW, &raw);
+        ttyguard::enter(fd, saved);
         std::string out;
         const char query[] = "\033]11;?\033\\";
         if (write(fd, query, sizeof query - 1) == static_cast<ssize_t>(sizeof query - 1)) {
@@ -736,6 +742,7 @@ std::string queryBackgroundColor() {
             }
         }
         tcsetattr(fd, TCSANOW, &saved);
+        ttyguard::leave();
         close(fd);
         return out;
     }();

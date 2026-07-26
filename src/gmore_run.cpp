@@ -20,6 +20,7 @@
 
 #include "gmore_attrs.h"
 #include "gmore_emulator.h"
+#include "tty_guard.h"
 
 namespace gmore {
 
@@ -96,22 +97,10 @@ struct Search {
 };
 
 // ---------------------------------------------------------------------------
-// terminal raw-mode (restored on exit/signal)
+// terminal raw-mode (restored on exit/signal via ttyguard)
 // ---------------------------------------------------------------------------
 static int gTtyFd = -1;
-static struct termios gSaved;
 static bool gRaw = false;
-static inline void restoreTty() {
-    if (gRaw && gTtyFd >= 0) {
-        tcsetattr(gTtyFd, TCSANOW, &gSaved);
-        gRaw = false;
-    }
-}
-static inline void onSignal(int sig) {
-    restoreTty();
-    signal(sig, SIG_DFL);
-    raise(sig);
-}
 
 // Set by the SIGWINCH handler; polled by the input loop, which does the actual re-layout
 // (reading window size, re-rendering, swapping the grid) outside signal context. The handler
@@ -157,12 +146,22 @@ static void onWinch(int) {
     winchLog("WINCH");
 }
 static inline bool enterRaw() {
-    if (tcgetattr(gTtyFd, &gSaved) != 0) return false;
-    struct termios raw = gSaved;
+    // A multi-file paging session (see the segment loop in mdcat.cpp) calls run(), and
+    // therefore enterRaw(), once per file, deliberately staying in raw mode between files
+    // rather than flipping back to cooked and re-raw'ing (which would flash echo on).
+    // On the second and later files the tty is already raw, so re-running tcgetattr() here
+    // would capture the CURRENT raw/no-echo settings as "the settings to restore on exit" —
+    // clobbering the true original cooked settings ttyguard captured on the first call, and
+    // leaving the shell without echo after quitting. Only the first call may save/restore.
+    if (gRaw) return true;
+    struct termios saved;
+    if (tcgetattr(gTtyFd, &saved) != 0) return false;
+    struct termios raw = saved;
     raw.c_lflag &= ~(ICANON | ECHO);
     raw.c_cc[VMIN] = 1;
     raw.c_cc[VTIME] = 0;
     if (tcsetattr(gTtyFd, TCSANOW, &raw) != 0) return false;
+    ttyguard::enter(gTtyFd, saved);
     gRaw = true;
     return true;
 }
@@ -229,6 +228,7 @@ static inline std::string queryCsiT(const char* arg) {
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 2;  // 0.2s inter-byte timeout
     tcsetattr(fd, TCSANOW, &raw);
+    ttyguard::enter(fd, saved);
     std::string query = std::string("\033[") + arg + "t";
     std::string reply;
     if (write(fd, query.data(), query.size()) == static_cast<ssize_t>(query.size())) {
@@ -241,6 +241,7 @@ static inline std::string queryCsiT(const char* arg) {
         }
     }
     tcsetattr(fd, TCSANOW, &saved);
+    ttyguard::leave();
     close(fd);
     return reply;
 }
@@ -664,15 +665,20 @@ int run(std::string data,
     // pipe/file) — skip raw mode entirely in that case.
     const bool scripted = std::getenv("GMORE_KEYS") != nullptr;
     if (!scripted) {
-        gTtyFd = open("/dev/tty", O_RDWR);
-        if (gTtyFd < 0) gTtyFd = STDIN_FILENO;
+        // A multi-file session (see mdcat.cpp) calls run() once per file; gTtyFd/gRaw persist
+        // across those calls (see enterRaw()), so on the second and later files the tty is
+        // already open and raw — reopening here would leak the previous file's fd.
+        if (gTtyFd < 0) {
+            gTtyFd = open("/dev/tty", O_RDWR);
+            if (gTtyFd < 0) gTtyFd = STDIN_FILENO;
+        }
         if (!enterRaw()) {
             paintWindow(0, (int)total, total);
             return 0;
         }
-        std::atexit(restoreTty);
-        std::signal(SIGINT, onSignal);
-        std::signal(SIGTERM, onSignal);
+        // ttyguard::enter() (called by enterRaw() above) has already installed handlers for
+        // SIGINT/SIGTERM/SIGQUIT/SIGHUP plus an atexit hook, so raw mode is restored however
+        // the pager exits.
         // Resize re-layout closes the old render pipe's read end while the render thread may
         // still be writing into it (see doResize); that write must come back as EPIPE, not a
         // process-killing SIGPIPE.

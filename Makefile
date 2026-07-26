@@ -24,13 +24,13 @@ $(B)/gmore_attrs.o: $(S)/gmore_attrs.cpp $(S)/gmore_attrs.h $(S)/gmore_types.h |
 $(B)/gmore_emulator.o: $(S)/gmore_emulator.cpp $(S)/gmore_emulator.h $(S)/gmore_attrs.h $(S)/gmore_types.h | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
 
-$(B)/gmore_run.o: $(S)/gmore_run.cpp $(S)/gmore_run.h $(S)/gmore_emulator.h $(S)/gmore_attrs.h $(S)/gmore_types.h | $(B)
+$(B)/gmore_run.o: $(S)/gmore_run.cpp $(S)/gmore_run.h $(S)/gmore_emulator.h $(S)/gmore_attrs.h $(S)/gmore_types.h $(S)/tty_guard.h | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
 
 $(B)/highlight.o: $(S)/highlight.cpp $(S)/highlight.h | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
 
-$(B)/mdcat: $(S)/mdcat.cpp $(S)/highlight.h $(S)/gmore_run.h $(GMORE_OBJS) $(B)/highlight.o | $(B)
+$(B)/mdcat: $(S)/mdcat.cpp $(S)/highlight.h $(S)/gmore_run.h $(S)/tty_guard.h $(GMORE_OBJS) $(B)/highlight.o | $(B)
 	$(CXX) $(CXXFLAGS) $(PTHREAD) -I$(S) -o $@ $(S)/mdcat.cpp $(B)/highlight.o $(GMORE_OBJS)
 
 $(B)/gmore: $(S)/gmore.cpp $(S)/gmore_run.h $(GMORE_OBJS) | $(B)
@@ -85,6 +85,7 @@ FMT_SRCS := \
 	$(S)/gmore_types.h \
 	$(S)/highlight.cpp \
 	$(S)/highlight.h \
+	$(S)/tty_guard.h \
 	$(S)/mdcat.cpp \
 	$(S)/gmore.cpp
 
