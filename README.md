@@ -332,8 +332,11 @@ scrolling stays smooth and images render correctly over SSH.
 > [paging images: the 18-px strip, and scroll asymmetry](docs/TERMINAL-GRAPHICS.md#4-paging-images-the-18-px-strip-and-scroll-asymmetry).
 
 ```
-gmore [--dump | --dump-images | --imginfo] [file]
+gmore [--help] [--dump | --dump-images | --imginfo] [file]
 ```
+
+`gmore --help` (or `-h`) prints this usage and exits; an unrecognized option
+prints an error to stderr and exits with status 2.
 
 Reads stdin when given no file (or `-`). gmore does not choose a graphics
 protocol itself: it replays whatever image bytes are in the stream (sixel or

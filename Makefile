@@ -59,6 +59,7 @@ TESTS := \
 	tests/mdcat-remote-image.sh \
 	tests/gmore-emulator.sh \
 	tests/gmore-sixel.sh \
+	tests/gmore-options.sh \
 	tests/gmore-nav.sh \
 	tests/gmore-search.sh \
 	tests/gmore-repaint.sh \

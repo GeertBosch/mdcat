@@ -60,11 +60,34 @@ static int streamCopy(int inFd, int outFd) {
     }
 }
 
+static const char* kUsage =
+    "usage: gmore [options] [file]\n"
+    "\n"
+    "A graphics-aware pager. Reads standard input when no file (or '-') is given.\n"
+    "\n"
+    "options:\n"
+    "  -h, --help      show this help and exit\n"
+    "  --dump          render the text grid to stdout (no images)\n"
+    "  --dump-images   render text and re-encoded sixel strips to stdout\n"
+    "  --imginfo       print decoded image metadata and ASCII rasters\n"
+    "  --nav-trace     trace navigation (for testing)\n"
+    "  --              treat the remaining argument as a file name\n"
+    "\n"
+    "Press h inside the pager for the key bindings.\n";
+
 int main(int argc, char** argv) {
     bool dump = false, dumpImages = false, imginfo = false, navTrace = false;
     const char* path = nullptr;
+    bool endOfOptions = false;
     for (int i = 1; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--dump") == 0)
+        if (endOfOptions)
+            path = argv[i];
+        else if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
+            std::fputs(kUsage, stdout);
+            return 0;
+        } else if (std::strcmp(argv[i], "--") == 0)
+            endOfOptions = true;
+        else if (std::strcmp(argv[i], "--dump") == 0)
             dump = true;
         else if (std::strcmp(argv[i], "--dump-images") == 0) {
             dump = true;
@@ -75,7 +98,11 @@ int main(int argc, char** argv) {
             navTrace = true;
         else if (std::strcmp(argv[i], "-") == 0)
             path = nullptr;
-        else
+        else if (argv[i][0] == '-') {
+            std::fprintf(stderr, "gmore: unrecognized option '%s'\n", argv[i]);
+            std::fputs("Try 'gmore --help' for more information.\n", stderr);
+            return 2;
+        } else
             path = argv[i];
     }
 
