@@ -1,5 +1,6 @@
 #pragma once
 
+#include "unicode_width.h"
 #include <algorithm>
 #include <cstdint>
 #include <string>
@@ -83,27 +84,6 @@ struct Cell {
      */
     std::u32string combine;
 };
-
-/**
- * Column width of a code point, mirrored from mdcat.cpp's codePointWidth so the pager
- * measures text exactly as the renderer laid it out. 0 = zero-width (combining/joiner/VS),
- * 2 = wide, else 1.
- */
-inline int cellWidthOf(char32_t cp) {
-    auto in = [&](char32_t lo, char32_t hi) { return cp >= lo && cp <= hi; };
-    if (cp == 0) return 0;
-    if (in(0x0300, 0x036F) || in(0x1AB0, 0x1AFF) || in(0x1DC0, 0x1DFF) || in(0x20D0, 0x20FF) ||
-        in(0xFE20, 0xFE2F) || cp == 0x200B || cp == 0x200C || cp == 0x200D || cp == 0xFEFF ||
-        in(0xFE00, 0xFE0F) || in(0xE0100, 0xE01EF))
-        return 0;
-    if (in(0x1100, 0x115F) || cp == 0x2329 || cp == 0x232A || in(0x2E80, 0x303E) ||
-        in(0x3041, 0x33FF) || in(0x3400, 0x4DBF) || in(0x4E00, 0x9FFF) || in(0xA000, 0xA4CF) ||
-        in(0xAC00, 0xD7A3) || in(0xF900, 0xFAFF) || in(0xFE10, 0xFE19) || in(0xFE30, 0xFE6F) ||
-        in(0xFF00, 0xFF60) || in(0xFFE0, 0xFFE6) || in(0x1F300, 0x1F64F) || in(0x1F680, 0x1F6FF) ||
-        in(0x1F900, 0x1F9FF) || in(0x1FA70, 0x1FAFF) || in(0x20000, 0x3FFFD))
-        return 2;
-    return 1;
-}
 
 inline void appendUtf8(std::string& out, char32_t cp) {
     if (cp < 0x80) {

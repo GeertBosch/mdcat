@@ -76,8 +76,20 @@ def dwidth(s):
             w += 2          # regional-indicator pair -> one flag, two columns
             i += 2
             continue
-        w += cpw(cp)
+        # A grapheme cluster is as wide as its base; VS16 widens a narrow base to emoji
+        # presentation (2), and everything after a ZWJ or skin-tone modifier joins for free.
+        b = cpw(cp)
         i += 1
+        zwj = False
+        while i < len(s):
+            n = ord(s[i])
+            if cpw(n) != 0 and not zwj and not 0x1F3FB <= n <= 0x1F3FF:
+                break
+            if n == 0xFE0F and b == 1 and not zwj:
+                b = 2
+            zwj = (n == 0x200D)
+            i += 1
+        w += b
     return w
 
 mode = sys.argv[1]
@@ -175,6 +187,15 @@ check_equal "emoji/cjk/combining table" "$emoji_table"
 check_equal "mixed wide+narrow table"   "$mixed_table"
 check_maxwidth "reflow with hard clusters" 40 "$hard_para"
 check_maxwidth "reflow with hard clusters (narrow)" 24 "$hard_para"
+
+# An emoji presentation selector (U+FE0F) makes a narrow base like U+2764 or U+2708 draw two
+# columns wide; reflow must count that, or a line holding several such emoji overflows the
+# terminal width and the terminal re-wraps it.
+vs16_para='Variation selectors (❤️, ✈️, ☂️, ❤️, ✈️, ❤️, ✈️), and more (❤️, ✈️) wrap correctly ❤️ ✈️ ❤️ ✈️ ❤️ ✈️ ❤️ ✈️ ❤️ ✈️ ❤️ ✈️ here.
+'
+for n in 20 31 40 57 72; do
+    check_maxwidth "reflow with emoji presentation at $n" "$n" "$vs16_para"
+done
 
 # Round-trip the clusters through gmore's emulator and confirm none are lost.
 # (Cluster literals embedded directly so the grep is byte-exact.)

@@ -536,18 +536,21 @@ struct Emulator::Impl {
     }
     int screen2(int r, int c) const { return rows[top + r][c].width ? rows[top + r][c].width : 1; }
     void put(char32_t cp) {
-        int w = cellWidthOf(cp);
-        // Zero-width follower, or any code point right after a ZWJ: glue it onto the current
-        // cluster.
-        if ((w == 0 || lastCp == 0x200D) && atBase()) {
-            screen(baseRow)[baseCol].combine.push_back(cp);
-            lastCp = cp;
-            return;
-        }
-        // A regional-indicator following another forms one flag grapheme: attach as a combiner so
-        // the pair occupies the single wide cell already written for the first indicator.
-        if (cp >= 0x1F1E6 && cp <= 0x1F1FF && lastCp >= 0x1F1E6 && lastCp <= 0x1F1FF && atBase()) {
-            screen(baseRow)[baseCol].combine.push_back(cp);
+        int w = uw::codePointWidth(cp);
+        // A follower of the current cluster (combining mark, selector, ZWJ part, flag half) joins
+        // the cell already written; if it makes the cluster wider, the cell grows to match.
+        if (atBase() && uw::continuesCluster(lastCp, cp)) {
+            Cell& base = screen(baseRow)[baseCol];
+            if (base.width == 1 && uw::widthWithFollower(1, cp) == 2 && cc < W) {
+                base.width = 2;
+                Cell& cont = screen(baseRow)[cc];
+                cont = Cell{};
+                cont.cp = 0;
+                cont.attr = base.attr;
+                cont.width = 0;
+                ++cc;
+            }
+            base.combine.push_back(cp);
             lastCp = cp;
             return;
         }
