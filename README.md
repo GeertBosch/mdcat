@@ -232,12 +232,12 @@ grapheme. Right-to-left scripts (العربية, עברית) and the full range 
 Because alignment uses true width, a table of mixed scripts and emoji keeps its
 columns flush — count the cells, not the bytes:
 
-| Script   | Sample   | Flag |
-| :------- | :------- | :--: |
-| Latin    | mdcat    | 🇺🇸   |
-| Japanese | 日本語   | 🇯🇵   |
-| Korean   | 한국어   | 🇰🇷   |
-| Emoji    | 👩‍🚀🚀🌕 | 🚩   |
+| Script   | Sample | Flag |
+| :------- | :----- | :--: |
+| Latin    | mdcat  | 🇺🇸   |
+| Japanese | 日本語 | 🇯🇵   |
+| Korean   | 한국어 | 🇰🇷   |
+| Emoji    | 🚀🌕🎉 | 🚩   |
 
 #### Remote images and the trust list
 
