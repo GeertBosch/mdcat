@@ -367,7 +367,8 @@ int run(std::string data,
         int streamFd,
         Relayout relayout,
         const std::string& promptSuffix,
-        bool* quitRequested) {
+        bool* quitRequested,
+        size_t startLine) {
     if (quitRequested) *quitRequested = false;
     internAttr(Attr{});  // id 0 = default
 
@@ -528,6 +529,7 @@ int run(std::string data,
         int H2 = H ? H : 24;
         t.pageH = H2 - 1;
         t.total = total;
+        if (startLine) t.gotoLine(startLine);
         Search search;
         const char* note = "";
         auto doSearch = [&](int dir) {
@@ -1106,6 +1108,15 @@ int run(std::string data,
         return true;  // a match was found; caller repaints (the current highlight moved
                       // even when the view itself didn't — e.g. next match on the same row)
     };
+
+    // `+N`: open with line N at the top. Streaming input needs enough rows loaded first.
+    if (startLine > 1) {
+        if (streamFd >= 0 && !inputEof) inputEof = feedUntilRows(startLine + (size_t)pageH);
+        total = em.contentRows();
+        nav.total = total;
+        nav.gotoLine(startLine);
+        repaint();
+    }
 
     long count = 0;
     bool counting = false;  // mid-count: don't reprint the prompt between digits

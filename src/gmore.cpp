@@ -16,6 +16,7 @@
 // motion; a count to d/u sets the half-screen step. Search is regex, smart-case,
 // and highlights matches with a blue background (brighter for the current match).
 // Up-scroll full-repaints the window (an incremental up-paint clobbers image cells).
+// +N opens with line N at the top (like more/less +N).
 // --dump renders the text grid to stdout (no images, for testing).
 // --dump-images renders text + re-encoded sixel strips (for render testing).
 // --imginfo prints decoded image metadata + ASCII rasters.
@@ -61,11 +62,12 @@ static int streamCopy(int inFd, int outFd) {
 }
 
 static const char* kUsage =
-    "usage: gmore [options] [file]\n"
+    "usage: gmore [options] [+N] [file]\n"
     "\n"
     "A graphics-aware pager. Reads standard input when no file (or '-') is given.\n"
     "\n"
     "options:\n"
+    "  +N              open with line N at the top (like more/less)\n"
     "  -h, --help      show this help and exit\n"
     "  --dump          render the text grid to stdout (no images)\n"
     "  --dump-images   render text and re-encoded sixel strips to stdout\n"
@@ -78,6 +80,7 @@ static const char* kUsage =
 int main(int argc, char** argv) {
     bool dump = false, dumpImages = false, imginfo = false, navTrace = false;
     const char* path = nullptr;
+    size_t startLine = 0;
     bool endOfOptions = false;
     for (int i = 1; i < argc; ++i) {
         if (endOfOptions)
@@ -96,7 +99,17 @@ int main(int argc, char** argv) {
             imginfo = true;
         else if (std::strcmp(argv[i], "--nav-trace") == 0)
             navTrace = true;
-        else if (std::strcmp(argv[i], "-") == 0)
+        else if (argv[i][0] == '+') {
+            char* end = nullptr;
+            errno = 0;
+            unsigned long n = std::strtoul(argv[i] + 1, &end, 10);
+            if (argv[i][1] < '0' || argv[i][1] > '9' || *end != '\0' || errno == ERANGE) {
+                std::fprintf(stderr, "gmore: invalid line number '%s'\n", argv[i]);
+                std::fputs("Try 'gmore --help' for more information.\n", stderr);
+                return 2;
+            }
+            startLine = n;
+        } else if (std::strcmp(argv[i], "-") == 0)
             path = nullptr;
         else if (argv[i][0] == '-') {
             std::fprintf(stderr, "gmore: unrecognized option '%s'\n", argv[i]);
@@ -123,7 +136,16 @@ int main(int argc, char** argv) {
             return streamCopy(STDIN_FILENO, STDOUT_FILENO);
         }
         if (!path && !isatty(STDIN_FILENO)) {
-            return gmore::run(std::string(), dump, dumpImages, imginfo, navTrace, STDIN_FILENO);
+            return gmore::run(std::string(),
+                              dump,
+                              dumpImages,
+                              imginfo,
+                              navTrace,
+                              STDIN_FILENO,
+                              {},
+                              {},
+                              nullptr,
+                              startLine);
         }
     }
 
@@ -140,5 +162,6 @@ int main(int argc, char** argv) {
         data = readAll(STDIN_FILENO);
     }
 
-    return gmore::run(std::move(data), dump, dumpImages, imginfo, navTrace);
+    return gmore::run(
+        std::move(data), dump, dumpImages, imginfo, navTrace, -1, {}, {}, nullptr, startLine);
 }

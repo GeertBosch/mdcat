@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <functional>
 #include <string>
 
@@ -18,6 +19,7 @@ using Relayout = std::function<int(int width)>;
 // `quitRequested`, if non-null, is set to true iff the user pressed q/Q (as opposed to reaching
 // the end of input and dismissing the last page with space) — the signal a multi-file caller
 // needs to stop advancing to the next file.
+// `startLine` (1-based; 0 = none) opens the pager with that line at the top, like more/less `+N`.
 int run(std::string data,
         bool dump = false,
         bool dumpImages = false,
@@ -26,6 +28,7 @@ int run(std::string data,
         int streamFd = -1,
         Relayout relayout = {},
         const std::string& promptSuffix = {},
-        bool* quitRequested = nullptr);
+        bool* quitRequested = nullptr,
+        size_t startLine = 0);
 
 }  // namespace gmore
