@@ -201,6 +201,13 @@ clipping) and `6ff3249`/`9d564e1` (Kitty transmit-once + crop placement,
 screen at render time was reverted — it fights this mechanism and needlessly
 shrinks diagrams that already scroll correctly.
 
+The producer reserves such a band as N newlines, `CSI N A`, DECSC, the image,
+DECRC, `CSI N B`, and N can exceed the screen height. A cursor-up clamped at
+the screen edge cannot reach the reserved band's logical start in scrollback.
+gmore recognizes this image placement and anchors it at the start of the
+reserved band instead, while retaining normal clamped cursor movements. Otherwise
+the image is anchored too low and overlaps the following text.
+
 ---
 
 ## 5. Images in tables: pin the footprint to the laid-out width

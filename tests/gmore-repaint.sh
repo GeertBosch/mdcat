@@ -122,6 +122,26 @@ kcheck "kitty jump off G"   'Gq'   1   # RIS, but image is off-screen: nothing t
 kcheck "kitty back to top"  'Ggq'  2   # g returns to the image's view: re-transmit
 kcheck "kitty page back"    'fbq'  2   # backward RIS repaint with image visible
 
+# A four-row reserved image is taller than this two-row page. Jump into it and
+# check the source crop and destination height, not just the presence of an APC.
+{
+    printf 'top\n\n\n\n\n\033[4A\0337'
+    printf '\033_Ga=T,i=8,q=2,f=100,m=1,c=1,r=4;%s\033\\' \
+        'iVBORw0KGgoAAAANSUhEUgAAABAAAAAgCAIAAACU62+bAAAA'
+    printf '\033_Gm=0;%s\033\\' \
+        'HUlEQVR4nGP4z8BAEiJN9aiGUQ2jGkY1jGoYohoAP8T+EE3PqSIAAAAASUVORK5CYII='
+    printf '\0338\033[4B\rafter\n'
+    seq 1 10
+} > "$tmp/tall"
+GMORE_NO_RIS=0 GMORE_KEYS=q LINES=3 COLUMNS=20 GMORE_CELLW=8 GMORE_CELLH=16 \
+    "$gmore" +3 "$tmp/tall" > "$tmp/paint" 2> "$tmp/err"
+if grep -aFq "$(printf '\033_Ga=p,i=8,q=2,x=0,y=8,w=16,h=16,c=1,r=2\033\\')" "$tmp/paint"; then
+    n=$((n + 1))
+else
+    echo "gmore-repaint: FAIL [tall kitty crop after jump]" >&2
+    fails=$((fails + 1))
+fi
+
 # --- Quiet clear (avoid RIS) --------------------------------------------------
 # xterm rings the bell on RIS (ESC c), so gmore can clear with ESC[3J ESC[2J ESC[H
 # instead. GMORE_NO_RIS forces the choice; XTERM_VERSION auto-selects the quiet

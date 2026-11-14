@@ -472,6 +472,10 @@ struct Emulator::Impl {
     int uneed = 0;
     bool absorbLf = false;  // swallow one LF right after a sixel (cursor is already below it)
     std::string kittyAcc;   // accumulates a Kitty image's chunks (ESC_G..ESC\ × N) until m=0
+    size_t consecutiveLf = 0;
+    enum BandPhase { NO_BAND, BAND_SAVE, BAND_IMAGE } bandPhase = NO_BAND;
+    size_t bandAnchor = 0;
+    int bandRows = 0;
 
     // Overstrike (typewriter convention used by `man`/groff via nroff): bold is
     // `X \b X`, underline is `_ \b X` (or `X \b _`). When a backspace lands the
@@ -684,6 +688,11 @@ struct Emulator::Impl {
             st = ESC;
             return;
         }
+        bandPhase = NO_BAND;
+        if (b == '\n')
+            ++consecutiveLf;
+        else
+            consecutiveLf = 0;
         if (uneed > 0) {  // UTF-8 continuation
             if ((b & 0xC0) == 0x80) {
                 uacc = (uacc << 6) | (b & 0x3F);
@@ -723,6 +732,11 @@ struct Emulator::Impl {
     }
 
     void esc(unsigned char b) {
+        if (b != '[') consecutiveLf = 0;
+        if (b == '7' && bandPhase == BAND_SAVE)
+            bandPhase = BAND_IMAGE;
+        else if (!(bandPhase == BAND_IMAGE && (b == 'P' || b == '_' || b == ']')))
+            bandPhase = NO_BAND;
         switch (b) {
         case '[':
             st = CSI;
@@ -824,12 +838,20 @@ struct Emulator::Impl {
         }
         seq.push_back(static_cast<char>(b));
     }
+    size_t imageAnchor(int height) {
+        size_t anchor = bandPhase == BAND_IMAGE && height == bandRows ? bandAnchor : top + cr;
+        bandPhase = NO_BAND;
+        return anchor;
+    }
     // Decode the captured sixel, anchor it at the cursor, and advance the cursor to
     // the row directly below the image, column 0 (the terminal's post-sixel behaviour).
     void finishSixel() {
         Image img;
-        if (!decodeSixel(seq, img)) return;
-        img.row = top + cr;
+        if (!decodeSixel(seq, img)) {
+            bandPhase = NO_BAND;
+            return;
+        }
+        img.row = imageAnchor(img.heightCells(cellH));
         img.col = cc;
         img.sixel = seq;  // keep the producer's exact bytes for verbatim replay
         images.push_back(std::move(img));
@@ -884,15 +906,16 @@ struct Emulator::Impl {
         int pw = 0, ph = 0, footCols = 0, footRows = 0;
         if (!kittyParse(kittyAcc, id, pw, ph, footCols, footRows)) {
             kittyAcc.clear();
+            bandPhase = NO_BAND;
             return;
         }
         Image img;
-        img.row = top + cr;
         img.col = cc;
         img.Ph = pw;
         img.Pv = ph;
         img.footCols = footCols;
         img.footRows = footRows;
+        img.row = imageAnchor(img.heightCells(cellH));
         img.kitty = kittyAcc;
         img.kid = id;
         images.push_back(std::move(img));
@@ -927,6 +950,16 @@ struct Emulator::Impl {
         }
         auto P = [&](size_t i, int def) { return (i < ps.size() && ps[i] >= 0) ? ps[i] : def; };
         auto P1 = [&](size_t i) { return std::max(1, P(i, 1)); };  // 0/absent -> 1
+        // A reserved image band may extend above the emulated screen. Remember its
+        // logical top, but leave normal terminal cursor motion clamped to the viewport.
+        int n = P1(0);
+        if (final == 'A' && n > cr && consecutiveLf >= static_cast<size_t>(n) &&
+            top + static_cast<size_t>(cr) >= static_cast<size_t>(n)) {
+            bandAnchor = top + static_cast<size_t>(cr) - static_cast<size_t>(n);
+            bandRows = n;
+            bandPhase = BAND_SAVE;
+        }
+        consecutiveLf = 0;
         switch (final) {
         case 'A': up(P1(0)); break;
         case 'B': down(P1(0)); break;

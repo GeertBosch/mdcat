@@ -98,6 +98,30 @@ check "plain backspace"  'ac\n'                  dump 80 "$tmp/in"
 mkin 'raw\nbytes\n'
 check "cat passthrough"  'raw\nbytes\n'          "$gmore" "$tmp/in"
 
+# 13. mdcat reserves a band with newlines, moves up, saves the cursor, paints
+#     the image, restores the cursor and moves down. When the band is taller
+#     than the screen, the image must still anchor at its logical top.
+nl30=$(printf '\\n%.0s' $(seq 30))
+mkin "top\\n${nl30}\033[30A\033\0067\033_Ga=T,i=7,q=2,f=100,c=1,r=30;iVBORw0KGgoAAAANSUhEUgAAABAAAAAgCAIAAACU62+bAAAAHUlEQVR4nGP4z8BAEiJN9aiGUQ2jGkY1jGoYohoAP8T+EE3PqSIAAAAASUVORK5CYII=\033\\\\\033\0070\033[30B\rafter\\n"
+check "tall band text"   "top\\n${nl30}after\\n" dump 80 "$tmp/in"
+imginfo() { LINES=24 GMORE_CELLW=8 GMORE_CELLH=16 "$gmore" --imginfo "$1" | head -1; }
+check "tall kitty band anchor" 'image 1 @1,0 16x32px 1x30cells\n' imginfo "$tmp/in"
+
+mkin "top\\n${nl30}\033[30A\033\0067\033Pq\"1;1;3;480#0;2;0;0;0#0~~~\033\\\\\033\0070\033[30B\rafter\\n"
+check "tall sixel band anchor" 'image 1 @1,0 3x480px 1x30cells\n' imginfo "$tmp/in"
+check "tall sixel band text" "top\\n${nl30}after\\n" dump 80 "$tmp/in"
+
+# A save followed by an image of a different height is not a reserved band.
+mkin "top\\n${nl30}\033[30A\033\0067\033Pq#0;2;0;0;0#0~~~\033\\\\\033\0070\033[30B\rafter\\n"
+check "unrelated image remains on screen" 'image 1 @8,0 3x6px 1x1cells\n' imginfo "$tmp/in"
+
+# Ordinary cursor moves still clamp to the screen, even after scrolling.
+mkin "top\\n${nl30}\033[30Aoverwrite\\n"
+nl7=$(printf '\\n%.0s' $(seq 7))
+check "cursor-up clamps to screen" "top\\n${nl7}overwrite\\n" dump 80 "$tmp/in"
+mkin "top\\n${nl30}\033[30Bbottom\\n"
+check "cursor-down clamps to screen" "top\\n${nl30}bottom\\n" dump 80 "$tmp/in"
+
 if [ "$fails" -eq 0 ]; then
     echo "gmore-emulator: OK ($n cases)"
     exit 0
