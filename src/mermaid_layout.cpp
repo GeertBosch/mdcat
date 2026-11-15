@@ -16,24 +16,29 @@ int floorDiv(int a, int b) {
     return q;
 }
 
+// Dummies pull harder than real nodes during placement, so that long edges stay straight.
+constexpr int kDummyWeight = 8;
+
 // One thing that occupies a slot in a rank: a real node, or a dummy that an edge spanning several
 // ranks passes through.
 struct Item {
     int rank = 0;
-    int ext = 1;   // extent across the flow, in cells
-    int left = 0;  // start across the flow, in cells
+    int ext = 1;     // extent across the flow, in cells
+    int left = 0;    // start across the flow, in cells
+    int weight = 1;  // how strongly placement honours its desired position
 };
 
 // Place the items of one rank, in order, as close as possible to their desired starts (in cells)
 // without overlapping or reordering: each item is put at its desired position, and neighbours that
-// would overlap merge into a block placed at the mean of their desires (pool-adjacent-violators).
+// would overlap merge into a block placed at the weighted mean of their desires
+// (pool-adjacent-violators).
 void placeRank(std::vector<Item>& items,
                const std::vector<int>& order,
                const std::vector<int>& desire,
                int sep) {
     struct Block {
         long sum;
-        long count;
+        long weight;
         size_t first;
     };
     std::vector<int> offset(order.size());
@@ -44,23 +49,126 @@ void placeRank(std::vector<Item>& items,
     }
     std::vector<Block> blocks;
     for (size_t i = 0; i < order.size(); ++i) {
-        blocks.push_back({desire[i] - offset[i], 1, i});
+        long w = items[static_cast<size_t>(order[i])].weight;
+        blocks.push_back({w * (desire[i] - offset[i]), w, i});
         while (blocks.size() >= 2) {
             const Block& a = blocks[blocks.size() - 2];
             const Block& b = blocks.back();
-            if (a.sum * b.count <= b.sum * a.count) break;
-            Block merged{a.sum + b.sum, a.count + b.count, a.first};
+            if (a.sum * b.weight <= b.sum * a.weight) break;
+            Block merged{a.sum + b.sum, a.weight + b.weight, a.first};
             blocks.pop_back();
             blocks.back() = merged;
         }
     }
     for (size_t k = 0; k < blocks.size(); ++k) {
         size_t end = k + 1 < blocks.size() ? blocks[k + 1].first : order.size();
-        int at = floorDiv(static_cast<int>(2 * blocks[k].sum + blocks[k].count),
-                          static_cast<int>(2 * blocks[k].count));
+        int at = floorDiv(static_cast<int>(2 * blocks[k].sum + blocks[k].weight),
+                          static_cast<int>(2 * blocks[k].weight));
         for (size_t i = blocks[k].first; i < end; ++i)
             items[static_cast<size_t>(order[i])].left = at + offset[i];
     }
+}
+
+// Pairs of segments between rank r and rank r + 1 that cross: one starts to the left of the other
+// but ends to its right. Segments that share an end never cross.
+int gapCrossings(const std::vector<std::vector<int>>& order,
+                 const std::vector<int>& pos,
+                 const std::vector<std::vector<int>>& down,
+                 size_t r) {
+    if (r + 1 >= order.size()) return 0;
+    std::vector<std::pair<int, int>> segs;
+    for (int u : order[r])
+        for (int v : down[static_cast<size_t>(u)])
+            segs.push_back({pos[static_cast<size_t>(u)], pos[static_cast<size_t>(v)]});
+    int crossings = 0;
+    for (size_t i = 0; i < segs.size(); ++i)
+        for (size_t j = 0; j < segs.size(); ++j)
+            if (segs[i].first < segs[j].first && segs[i].second > segs[j].second) ++crossings;
+    return crossings;
+}
+
+void setPositions(const std::vector<int>& row, std::vector<int>& pos) {
+    for (size_t i = 0; i < row.size(); ++i) pos[static_cast<size_t>(row[i])] = static_cast<int>(i);
+}
+
+// Reorder one rank by the barycenter of each item's neighbours in the adjacent rank, in positions
+// times 1000. An item with no such neighbours keeps its slot; the others are sorted into the
+// remaining slots, ties staying in their old order.
+void sortByBarycenter(std::vector<std::vector<int>>& order,
+                      std::vector<int>& pos,
+                      const std::vector<std::vector<int>>& nbr,
+                      size_t r) {
+    std::vector<int>& row = order[r];
+    std::vector<size_t> slots;
+    std::vector<std::pair<long, int>> keyed;  // barycenter, then old position
+    std::vector<int> movable;
+    for (size_t i = 0; i < row.size(); ++i) {
+        const std::vector<int>& from = nbr[static_cast<size_t>(row[i])];
+        if (from.empty()) continue;
+        long sum = 0;
+        for (int p : from) sum += pos[static_cast<size_t>(p)];
+        slots.push_back(i);
+        keyed.push_back({sum * 1000 / static_cast<long>(from.size()), static_cast<int>(i)});
+        movable.push_back(row[i]);
+    }
+    std::vector<size_t> by(keyed.size());
+    for (size_t i = 0; i < by.size(); ++i) by[i] = i;
+    std::stable_sort(by.begin(), by.end(), [&](size_t a, size_t b) { return keyed[a] < keyed[b]; });
+    for (size_t i = 0; i < by.size(); ++i) row[slots[i]] = movable[by[i]];
+    setPositions(row, pos);
+}
+
+// Choose the order of the items in each rank so that few edges cross: sweeps of the barycenter
+// heuristic, each followed by swaps of adjacent items that strictly reduce the crossings. The best
+// order seen wins; the initial one on ties.
+void reduceCrossings(std::vector<std::vector<int>>& order,
+                     size_t itemCount,
+                     const std::vector<std::vector<int>>& up,
+                     const std::vector<std::vector<int>>& down) {
+    const size_t ranks = order.size();
+    std::vector<int> pos(itemCount, 0);
+    for (const std::vector<int>& row : order) setPositions(row, pos);
+    auto total = [&] {
+        int sum = 0;
+        for (size_t r = 0; r + 1 < ranks; ++r) sum += gapCrossings(order, pos, down, r);
+        return sum;
+    };
+    auto local = [&](size_t r) {  // the crossings that moving items of rank r can change
+        return (r > 0 ? gapCrossings(order, pos, down, r - 1) : 0) +
+            gapCrossings(order, pos, down, r);
+    };
+    std::vector<std::vector<int>> best = order;
+    int bestCount = total();
+    for (int sweep = 0; sweep < 8 && bestCount > 0; ++sweep) {
+        if (sweep % 2 == 0) {
+            for (size_t r = 1; r < ranks; ++r) sortByBarycenter(order, pos, up, r);
+        } else {
+            for (size_t r = ranks - 1; r-- > 0;) sortByBarycenter(order, pos, down, r);
+        }
+        for (bool improved = true; improved;) {
+            improved = false;
+            for (size_t r = 0; r < ranks; ++r) {
+                std::vector<int>& row = order[r];
+                for (size_t i = 0; i + 1 < row.size(); ++i) {
+                    int before = local(r);
+                    std::swap(row[i], row[i + 1]);
+                    setPositions(row, pos);
+                    if (local(r) < before) {
+                        improved = true;
+                    } else {
+                        std::swap(row[i], row[i + 1]);
+                        setPositions(row, pos);
+                    }
+                }
+            }
+        }
+        int count = total();
+        if (count < bestCount) {
+            bestCount = count;
+            best = order;
+        }
+    }
+    order = best;
 }
 
 // An edge segment between two adjacent ranks: the items at its ends, and where they are across the
@@ -245,6 +353,30 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
         }
         rank[i] = r;
     }
+    // Tighten: move a node a rank toward the side with more edges while every edge on the other
+    // side has slack to spare, which shortens the total edge length. Each move shortens it by at
+    // least one, so this ends.
+    for (bool moved = true; moved;) {
+        moved = false;
+        for (size_t i = 0; i < n; ++i) {
+            int slackIn = INT_MAX, slackOut = INT_MAX;
+            for (int k : inE[i]) {
+                const Edge& e = g.edges[static_cast<size_t>(k)];
+                slackIn = std::min(slackIn, rank[i] - rank[static_cast<size_t>(e.from)] - e.minlen);
+            }
+            for (int k : outE[i]) {
+                const Edge& e = g.edges[static_cast<size_t>(k)];
+                slackOut = std::min(slackOut, rank[static_cast<size_t>(e.to)] - rank[i] - e.minlen);
+            }
+            if (outE[i].size() > inE[i].size() && slackOut >= 1) {
+                ++rank[i];
+                moved = true;
+            } else if (inE[i].size() > outE[i].size() && slackIn >= 1) {
+                --rank[i];
+                moved = true;
+            }
+        }
+    }
     int lowest = *std::min_element(rank.begin(), rank.end());
     int highest = 0;
     for (int& r : rank) {
@@ -295,6 +427,7 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
             for (int r = rank[u] + 1; r < rank[v]; ++r) {
                 Item d;
                 d.rank = r;
+                d.weight = kDummyWeight;
                 items.push_back(d);
                 c.push_back(static_cast<int>(items.size()) - 1);
                 order[static_cast<size_t>(r)].push_back(static_cast<int>(items.size()) - 1);
@@ -312,13 +445,18 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
             if (find(j) == root && inE[j].empty()) visit(j);
     }
 
+    std::vector<std::vector<int>> preds(items.size()), succs(items.size());
+    for (const std::vector<int>& c : chain) {
+        for (size_t i = 0; i + 1 < c.size(); ++i) {
+            preds[static_cast<size_t>(c[i + 1])].push_back(c[i]);
+            succs[static_cast<size_t>(c[i])].push_back(c[i + 1]);
+        }
+    }
+    reduceCrossings(order, items.size(), preds, succs);
+
     // Placement across the flow. Pack each rank, then in one pass from the first rank on, move each
     // item toward the mean centre of the items its edges come from.
     const int sep = td ? tune::kSepTd : tune::kSepLr;
-    std::vector<std::vector<int>> preds(items.size());
-    for (const std::vector<int>& c : chain)
-        for (size_t i = 0; i + 1 < c.size(); ++i)
-            preds[static_cast<size_t>(c[i + 1])].push_back(c[i]);
     for (const std::vector<int>& row : order) {
         int at = 0;
         for (int id : row) {
@@ -358,6 +496,57 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
         }
         placeRank(items, row, desire, sep);
     }
+    // Refine: alternate passes down and up, moving each item toward the median centre of its
+    // neighbours in the rank before (or after) it, until a round moves nothing, or after four. The
+    // result is the best placement seen, by total edge slant, the initial one on ties.
+    auto slant = [&] {
+        long sum = 0;
+        for (size_t v = 0; v < items.size(); ++v)
+            for (int u : preds[v])
+                sum += static_cast<long>(
+                           std::max(items[v].weight, items[static_cast<size_t>(u)].weight)) *
+                    std::abs(centre(u) - centre(static_cast<int>(v)));
+        return sum;
+    };
+    auto lefts = [&] {
+        std::vector<int> at;
+        for (const Item& it : items) at.push_back(it.left);
+        return at;
+    };
+    std::vector<int> best = lefts();
+    long bestSlant = slant();
+    for (int round = 0; round < 4; ++round) {
+        const std::vector<int> before = lefts();
+        for (int pass = 0; pass < 2; ++pass) {
+            const std::vector<std::vector<int>>& nbr = pass == 0 ? preds : succs;
+            for (size_t step = 0; step < ranks; ++step) {
+                size_t r = pass == 0 ? step : ranks - 1 - step;
+                const std::vector<int>& row = order[r];
+                std::vector<int> desire(row.size());
+                for (size_t i = 0; i < row.size(); ++i) {
+                    const Item& it = items[static_cast<size_t>(row[i])];
+                    std::vector<int> cs;
+                    for (int p : nbr[static_cast<size_t>(row[i])]) cs.push_back(centre(p));
+                    if (cs.empty()) {
+                        desire[i] = it.left;
+                        continue;
+                    }
+                    std::sort(cs.begin(), cs.end());
+                    size_t m = cs.size() / 2;
+                    int median = cs.size() % 2 ? cs[m] : floorDiv(cs[m - 1] + cs[m] + 1, 2);
+                    desire[i] = floorDiv(median - it.ext + 1, 2);
+                }
+                placeRank(items, row, desire, sep);
+            }
+        }
+        const std::vector<int> after = lefts();
+        if (slant() < bestSlant) {
+            bestSlant = slant();
+            best = after;
+        }
+        if (after == before) break;
+    }
+    for (size_t i = 0; i < items.size(); ++i) items[i].left = best[i];
     int minLeft = INT_MAX, across = 0;
     for (const Item& it : items) minLeft = std::min(minLeft, it.left);
     for (Item& it : items) {

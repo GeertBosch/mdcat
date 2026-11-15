@@ -55,34 +55,39 @@ graph LR
 
 ## One crossing (top down)
 
-Expected: `A` fans out to `C` and `D`, and `B` links to `C`, so `B`'s edge has to
-cross the edge into `D`. The crossing is one bridge: the horizontal run from `B`
-breaks where the arrow into `D` passes, with no dot.
+Expected: `A` and `B` both link to `C` and `D`, and `B` also links to `E`. The
+crossing sweeps find no order without a crossing: one of `B`'s edges crosses one of
+`A`'s, so the horizontal run from `B` breaks where the other edge passes, with no
+dot.
 
 ```mermaid
 graph TD
     A --> C
     A --> D
     B --> C
+    B --> D
+    B --> E
 ```
 
 ## One crossing (left to right)
 
-Expected: the same graph turned on its side. The horizontal stroke into `C`
-breaks where it crosses the vertical track that leads to `D`.
+Expected: the same graph turned on its side. A horizontal stroke breaks where it
+crosses a vertical track.
 
 ```mermaid
 graph LR
     A --> C
     A --> D
     B --> C
+    B --> D
+    B --> E
 ```
 
-## Two buses with a bridge (top down)
+## Two buses sharing a target (top down)
 
 Expected: `Left` fans out to `Out` and `Far`, and `Right` fans out to `Out` and
-`Mid`, so `Out` merges two arrows. `Right`'s run to `Mid` has to pass over the
-arrow into `Far`, and does so with one bridge.
+`Mid`, so `Out` merges two arrows. `Out` sits between the other two, so no edge
+has to cross another and there is no bridge.
 
 ```mermaid
 graph TD
@@ -109,14 +114,15 @@ graph LR
 ## Too many crossings (declined for now)
 
 Expected: three of these edges cross others, which is more than the builtin
-allows. It declines with `crossings: 3 > 2`, and the source is shown.
+allows, even after the boxes are reordered. It declines with `crossings: 3 > 2`, and
+the source is shown.
 
 ```mermaid
 graph TD
-    C --> F
-    C --> D
-    B --> E
-    A --> F
     C --> E
-    B --> D
+    A --> F
+    A --> G
+    A --> E
+    B --> E
+    B --> H
 ```

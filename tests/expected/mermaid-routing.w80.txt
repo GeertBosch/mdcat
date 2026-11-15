@@ -70,55 +70,57 @@ image @54,32 c=15 r=11 z=0 C=1 png=150x220
 One crossing (top down)
 ────────────────────────────────────────────────────────────────────────────────
 
-Expected: A fans out to C and D, and B links to C, so B's edge has to cross the
-edge into D. The crossing is one bridge: the horizontal run from B breaks where
-the arrow into D passes, with no dot.
+Expected: A and B both link to C and D, and B also links to E. The crossing
+sweeps find no order without a crossing: one of B's edges crosses one of A's, so
+the horizontal run from B breaks where the other edge passes, with no dot.
 
-image @73,33 c=13 r=10 z=0 C=1 png=130x200
-                                  ▗▄▄▄▄  ▗▄▄▄▄
-                                  ▐ A ▐  ▐ B ▐
-                                  ▐▄▄▄▟  ▐▄▄▄▟
-                                    ▐      ▐
-                                   ▗█▄▄▄▄▄▄▐
-                                   █▄▄▄▄▄▄▟▛
-                                   ▐      ▐
-                                 ▗▄█▙▄  ▗▄█▙▄
-                                 ▐ C ▐  ▐ D ▐
-                                 ▐▄▄▄▟  ▐▄▄▄▟
+image @73,30 c=19 r=10 z=0 C=1 png=190x200
+                                ▗▄▄▄▄  ▗▄▄▄▄
+                                ▐ A ▐  ▐ B ▐
+                                ▐▄▄▄▟  ▐▄▄▄▟
+                                  ▐      ▐
+                                ▗▄█▄▄▄▄▄ ▐
+                                █▄▄▄▄▄▄█▄█▄▄▄▄▄
+                                ▐      ▐      ▐
+                              ▗▄█▙▄  ▗▄█▙▄  ▗▄█▙▄
+                              ▐ C ▐  ▐ D ▐  ▐ E ▐
+                              ▐▄▄▄▟  ▐▄▄▄▟  ▐▄▄▄▟
 
 One crossing (left to right)
 ────────────────────────────────────────────────────────────────────────────────
 
-Expected: the same graph turned on its side. The horizontal stroke into C breaks
-where it crosses the vertical track that leads to D.
+Expected: the same graph turned on its side. A horizontal stroke breaks where it
+crosses a vertical track.
 
-image @90,33 c=14 r=8 z=0 C=1 png=140x160
+image @90,33 c=14 r=11 z=0 C=1 png=140x220
                                           ▗▄▄▄▄
                                  ▗▄▄▄▄ ▗█▟█ C ▐
                                  ▐ A ▐▄█▐ ▐▄▄▄▟
                                  ▐▄▄▄▟ ▐▐
                                        ▐▐ ▗▄▄▄▄
-                                 ▗▄▄▄▄ ▐▟▟█ D ▐
-                                 ▐ B ▐▄▄▛ ▐▄▄▄▟
-                                 ▐▄▄▄▟
+                                 ▗▄▄▄▄ ▐█▟█ D ▐
+                                 ▐ B ▐▄▄█ ▐▄▄▄▟
+                                 ▐▄▄▄▟  ▐
+                                        ▐ ▗▄▄▄▄
+                                        ▐▟█ E ▐
+                                          ▐▄▄▄▟
 
-Two buses with a bridge (top down)
+Two buses sharing a target (top down)
 ────────────────────────────────────────────────────────────────────────────────
 
 Expected: Left fans out to Out and Far, and Right fans out to Out and Mid, so
-Out merges two arrows. Right's run to Mid has to pass over the arrow into Far,
-and does so with one bridge.
+Out merges two arrows. Out sits between the other two, so no edge has to cross
+another and there is no bridge.
 
-image @106,27 c=25 r=10 z=0 C=1 png=250x200
+image @109,27 c=25 r=9 z=0 C=1 png=250x180
                              ▗▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄
                              ▐ Left  ▐  ▐ Right ▐
                              ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟
                                  ▐          ▐
-                              ▗▄▄█▄▄▄▄▄▄    ▐
-                              █▄▄▄▄▄▄▄▄▟▄▄▄▄█▄▄▄▄
+                              ▗▄▄█▄▄▄▄▄█▄▄▄▄█▄▄▄▄
                               ▐        ▐        ▐
                            ▗▄▄█▙▄▄  ▗▄▄█▙▄▄  ▗▄▄█▙▄▄
-                           ▐ Out ▐  ▐ Far ▐  ▐ Mid ▐
+                           ▐ Far ▐  ▐ Out ▐  ▐ Mid ▐
                            ▐▄▄▄▄▄▟  ▐▄▄▄▄▄▟  ▐▄▄▄▄▄▟
 
 Aligned boxes (declined for now)
@@ -138,13 +140,14 @@ Too many crossings (declined for now)
 ────────────────────────────────────────────────────────────────────────────────
 
 Expected: three of these edges cross others, which is more than the builtin
-allows. It declines with crossings: 3 > 2, and the source is shown.
+allows, even after the boxes are reordered. It declines with crossings: 3 > 2,
+and the source is shown.
 
   graph TD
-      C --> F
-      C --> D
-      B --> E
-      A --> F
       C --> E
-      B --> D
+      A --> F
+      A --> G
+      A --> E
+      B --> E
+      B --> H
 

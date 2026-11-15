@@ -108,9 +108,10 @@ constexpr int kMaxCrossings = 2;  // edge crossings (bridges) a diagram may have
 // Parse the body of a ```mermaid block. On failure `reason` is one of the stable fallback reasons.
 bool parseFlowchart(const std::vector<std::string>& body, Graph& g, std::string& reason);
 
-// Lay out an acyclic graph in ranks, routing the edges between two ranks along as many tracks as
-// they need. Does not check the width against the environment; the caller compares `lay.cols` with
-// Env::availCols.
+// Lay out an acyclic graph in ranks, ordering and placing the boxes of each rank so that few edges
+// cross and long ones run straight, and routing the edges between two ranks along as many tracks
+// as they need. Does not check the width against the environment; the caller compares `lay.cols`
+// with Env::availCols.
 bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reason);
 
 // The points, in half-cell units, where one edge's path crosses another's without either path

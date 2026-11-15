@@ -136,22 +136,22 @@ beside B through a dummy position and comes
 back to C; the arrow into C merges with the
 one from B.
 
-image @132,18 c=8 r=15 z=0 C=1 png=80x300
-                    ▗▄▄▄▄
-                    ▐ A ▐
-                    ▐▄▄▄▟
-                      ▐
-                    ▗▄█▄▄▄
-                    ▐    ▐
-                  ▗▄█▙▄  ▐
-                  ▐ B ▐  ▐
-                  ▐▄▄▄▟  ▐
-                    ▐    ▐
-                    ▐▄▄█▄▛
-                       ▐
-                     ▗▄█▙▄
-                     ▐ C ▐
+image @132,17 c=9 r=15 z=0 C=1 png=90x300
+                     ▗▄▄▄▄
+                     ▐ A ▐
                      ▐▄▄▄▟
+                       ▐
+                   ▗▄▄▄█▄
+                   ▐    ▐
+                 ▗▄█▙▄  ▐
+                 ▐ B ▐  ▐
+                 ▐▄▄▄▟  ▐
+                   ▐    ▐
+                   ▐▄▄█▄▛
+                      ▐
+                    ▗▄█▙▄
+                    ▐ C ▐
+                    ▐▄▄▄▟
 
 Skip edge (left to right)
 ────────────────────────────────────────────
@@ -159,12 +159,13 @@ Skip edge (left to right)
 Expected: the same, with the long edge
 passing under B.
 
-image @154,10 c=23 r=5 z=0 C=1 png=230x100
+image @154,10 c=23 r=6 z=0 C=1 png=230x120
                    ▗▄▄▄▄
-          ▗▄▄▄▄ ▗▄▟█ B ▐▄▄
-          ▐ A ▐▄█  ▐▄▄▄▟ ▐  ▗▄▄▄▄
-          ▐▄▄▄▟ ▐        █▄▟█ C ▐
-                ▐▄▄▄▄▄▄▄▄▛  ▐▄▄▄▟
+                ▗▄▟█ B ▐▄▄
+                ▐  ▐▄▄▄▟ ▐  ▗▄▄▄▄
+          ▗▄▄▄▄ ▐        █▄▟█ C ▐
+          ▐ A ▐▄█▄▄▄▄▄▄▄▄▛  ▐▄▄▄▟
+          ▐▄▄▄▟
 
 Long links (top down)
 ────────────────────────────────────────────
@@ -174,18 +175,17 @@ one more rank. Short is one rank below Top,
 Mid two, Far three, and Top stays the only
 box in its rank.
 
-image @168,12 c=20 r=20 z=0 C=1 png=200x400
+image @169,11 c=21 r=19 z=0 C=1 png=210x380
                    ▗▄▄▄▄▄▄
                    ▐ Top ▐
                    ▐▄▄▄▄▄▟
                       ▐
-                ▗▄▄▄▄▄██▄▄▄
-                ▐      ▐  ▐
-            ▗▄▄▄█▙▄▄▄  ▐  ▐
-            ▐ Short ▐  ▐  ▐
-            ▐▄▄▄▄▄▄▄▟  ▐  ▐
-                       ▐  ▐
-                      ▗▛  ▐▄▄
+               ▗▄▄▄▄▄▄█▄▄▄▄▄▄
+               ▐      ▐     ▐
+           ▗▄▄▄█▙▄▄▄  ▐     ▐
+           ▐ Short ▐  ▐     ▐
+           ▐▄▄▄▄▄▄▄▟  ▐     ▐
+                      ▐     ▐
                       ▐     ▐
                    ▗▄▄█▙▄▄  ▐
                    ▐ Mid ▐  ▐
@@ -210,8 +210,8 @@ image @196,1 c=42 r=9 z=0 C=1 png=420x180
  ▗▄▄▄▄▄▄ ▐               ▗▄▄▄▄▄▄
  ▐ Top ▐▄█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟█ Mid ▐
  ▐▄▄▄▄▄▟ ▐               ▐▄▄▄▄▄▟
-         ▐▄▄▄▄▄▄▄▄▄▄▄▄▄             ▗▄▄▄▄▄▄
-                      ▐▄▄▄▄▄▄▄▄▄▄▄▄▟█ Far ▐
+         ▐                          ▗▄▄▄▄▄▄
+         ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟█ Far ▐
                                     ▐▄▄▄▄▄▟
 
 Two components (top down)
@@ -222,12 +222,11 @@ each with its own arrows. A box declared
 after the first graph's boxes still sits
 with its own graph.
 
-image @214,10 c=24 r=14 z=0 C=1 png=240x280
-            ▗▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄
-            ▐ First ▐  ▐ Other ▐
-            ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟
-                ▐          ▐
-               ▗▛          ▐▄
+image @214,10 c=24 r=13 z=0 C=1 png=240x260
+           ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄
+           ▐ First ▐    ▐ Other ▐
+           ▐▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▟
+               ▐            ▐
                ▐            ▐
           ▗▄▄▄▄█▙▄▄▄▄  ▗▄▄▄▄█▙▄▄▄▄
           ▐ Second  ▐  ▐ Another ▐
@@ -244,7 +243,7 @@ Two components (left to right)
 Expected: the graphs are stacked, one above
 the other.
 
-image @235,3 c=37 r=7 z=0 C=1 png=370x140
+image @234,3 c=37 r=7 z=0 C=1 png=370x140
    ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄     ▗▄▄▄▄▄▄▄▄
    ▐ First ▐▄▄▄▟█ Second ▐▄▄▄▄▟█ Third ▐
    ▐▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▟     ▐▄▄▄▄▄▄▄▟
@@ -260,7 +259,7 @@ Expected: Late starts at the rank just above
 End rather than at the top, so its arrow is
 as short as it can be.
 
-image @250,12 c=19 r=19 z=0 C=1 png=190x380
+image @249,12 c=19 r=19 z=0 C=1 png=190x380
             ▗▄▄▄▄▄▄▄▄
             ▐ Start ▐
             ▐▄▄▄▄▄▄▄▟
