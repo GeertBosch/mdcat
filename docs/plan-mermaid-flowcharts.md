@@ -35,7 +35,7 @@ touch. The steps form a dependency chain:
 | ---- | ----- | ----- |
 | 0 | Probe: text over a Kitty image (user-run) | — |
 | 1 | Render the README's two diagrams | — (0's results refine it) |
-| 2 | Previewer, PNG compression, gmore `z=` | 1 |
+| 2 | Previewer, PNG compression | 1 |
 | 3 | Override flag, fallback reasons, fallback fixture | 1 |
 | 4 | Restructure into model / parse / layout / draw | 2, 3 |
 | 5 | Trees, merges, multi-rank edges | 4 |
@@ -201,23 +201,30 @@ with no cursor-up**, and then prints its text:
   text rows that follow scroll normally, and the image scrolls with them. Each
   text row carries the centring pad as leading spaces.
 - **The APC** carries one image with a PNG payload. Its first chunk is
-  `a=T,f=100,i=<id>,q=2,C=1,c=<cols>,r=<rows>,z=-1`. The base64 payload is split
+  `a=T,f=100,i=<id>,q=2,C=1,c=<cols>,r=<rows>,z=0`. The base64 payload is split
   into chunks of at most 4096 bytes (`m=1` … `m=0`), and **every** continuation
   chunk also carries `q=2`. `docs/TERMINAL-GRAPHICS.md` §5 and §8 explain why.
 - **Ids:** emit any id. The writer renumbers every slot's Kitty ids in document
   order (`kittyRenumberAll`, ADR 0003), so ids stay distinct.
 - **gmore** stores the text in its cell grid and the image in its image layer,
-  anchored at the cursor. Two changes are needed:
-  - Honour `C=1` in `finishKitty`: anchor the image at the cursor, and do not
-    advance the cursor or set `absorbLf` (Step 1).
-  - Forward the producer's `z=` on its crop placements (`kittyParse` →
-    `kittyPlace`, Step 2).
+  anchored at the cursor. One change is needed: honour `C=1` in `finishKitty`
+  (anchor the image at the cursor, and do not advance the cursor or set
+  `absorbLf`, Step 1). The image is sent with `z=0`, the default, so `gmore`'s crop
+  placements need no `z=`.
 
   When `gmore` repaints, it writes the text first and then places the image.
 - **Two orders, both required.** Direct output draws the image and then the
   text; a `gmore` repaint draws the text and then the image. Labels must survive
-  both. Transparent label cells plus `z=-1` (image under text) should make the
-  order irrelevant. Step 0 measures this on real terminals.
+  both. Transparent label cells make the order irrelevant, with the image at
+  `z=0` (over the text). Step 0 measured this: `z=0` works on Ghostty, iTerm2,
+  Kitty and VSCode, while `z=-1` shows no image at all on VSCode.
+- **Text rows skip the band with cursor moves, never spaces.** On VSCode, spaces
+  printed over a `z=0` image make it disappear. Write each label run at its column
+  with `ESC[<n>C` moves over everything else (the Step 0 cases H and I). Only the
+  centring pad to the *left* of the image may be spaces.
+- **Tall bands on VSCode.** In Step 0 case K, a band three screens tall shows its
+  text shifted relative to the image on VSCode (unresolved). On VSCode
+  (`TERM_PROGRAM=vscode`), a diagram taller than the screen falls back.
 - **No `timg`.** mdcat writes this APC itself, from a PNG it encodes itself
   (`src/png_write.cpp`). This is a deliberate exception to ADR 0002 ("keep timg
   for all formats"), whose concern was the quality of *downscaling*. A generated
@@ -468,7 +475,7 @@ Work:
    - **G.** Does `C=1` keep the cursor still? Print a marker right after the APC,
      without `ESC7`/`ESC8`.
 2. Add a "Text over Kitty images" section to `docs/TERMINAL-GRAPHICS.md`, with a
-   results table: Ghostty, iTerm2, VSCode, Kitty and WezTerm against cases A–G.
+   results table: Ghostty, iTerm2, VSCode and Kitty against cases A–G.
    - Use "TBD" until the user reports.
    - State the rule: if any terminal fails A or C, the builtin is denied on that
      terminal by `TERM_PROGRAM` (in Step 1, or as a follow-up), and falls back.
@@ -566,7 +573,7 @@ Work:
      `tests/expected/mermaid-basic.w80.txt`, whose escapes are stripped and whose
      APCs are summarized by perl as `<kitty c=… r=… z=… C=… bytes=…>`. It also:
      - checks that every APC's first chunk carries `f=100`, `C=1`, `c=`, `r=`,
-       `z=-1` and `q=2`, and that every chunk carries `q=2`;
+       `z=0` and `q=2`, and that every chunk carries `q=2`;
      - checks each PNG with a `python3 -c` one-liner (`zlib` decompress, IHDR
        size), skipping that check if `python3` is absent;
      - runs `./gmore --imginfo` and asserts that the image is anchored at the
@@ -583,17 +590,17 @@ Work:
    diagrams still go to `mmdc`, and otherwise show as source. Keep the "taller
    than the terminal" sentence true. Leave the diagrams unchanged.
 
-**Out of scope:** the previewer, compression, `z=` in `gmore`, flags, reasons, and
+**Out of scope:** the previewer, compression, flags, reasons, and
 anything beyond a simple path.
 
 **Done when:** `make check` passes, and the user sees both README diagrams
 correctly in a Kitty terminal, directly (`./mdcat --img kitty README.md | cat`)
 and in `gmore` while scrolling through the tall TD chain.
 
-## Step 2 — Previewer, PNG compression, gmore `z=`
+## Step 2 — Previewer, PNG compression
 
-**Assumes:** Step 1. All three items here are small and independent; together
-they finish the Kitty infrastructure.
+**Assumes:** Step 1. Both items here are small and independent; together they
+finish the Kitty infrastructure.
 
 Work:
 
@@ -605,10 +612,6 @@ Work:
    The preview golden must stay **identical**, because the pixels do not change.
    Add a harness assertion that the README TD chain's PNG is under 8 KB at
    10×20 cells.
-3. **`gmore` `z=`**: `kittyParse` reads `z=` (as it reads `c=`/`r=`) into a new
-   `Image::z`. `kittyPlace` appends `,z=<z>` when it is non-zero. Extend
-   `tests/gmore-repaint.sh`, which already captures `a=p` repaints: the repainted
-   `a=p` must carry `z=-1`.
 
 **Out of scope:** any rendering change.
 

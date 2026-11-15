@@ -445,9 +445,85 @@ exist to be re-run on a new terminal before trusting it. Notable ones:
 | `probe-kitty-multichunk-*.sh` | multi-chunk transmit + footprint + placement |
 | `probe-remote-cellinfo.sh` | CSI queries answer over SSH (§6) |
 | `probe-remote-image.sh` | timg can't fetch a URL on the image path; curl→timg works (§7) |
+| `probe-kitty-text-overlay.sh` | text over a transparent Kitty image, both paint orders (§10) |
 
 `tools/probe-common.sh` holds the shared raw-mode `term_query` helper (with the
 dash workaround above).
+
+---
+
+## 10. Text over Kitty images
+
+The built-in Mermaid flowchart renderer ([ADR 0004](adr/0004-builtin-mermaid-kitty.md))
+draws shapes and arrows as **one transparent Kitty image** and writes the labels as
+ordinary text in the cells over it. It relies on how a terminal stacks text and an
+image in the same cells, which nothing in this document measured until now. Both
+paint orders occur in practice:
+
+- **Direct output** (mdcat to the terminal) draws the image, then the text.
+- **A `gmore` repaint** draws the text, then the image.
+
+The image was first designed with `z=-1` (under text) and is fully transparent wherever
+a label sits, so in theory the order is irrelevant. `tools/probe-kitty-text-overlay.sh`
+checks that on each terminal. Its test image is 24×4 cells (a rounded box and two
+arrows, with two guaranteed-transparent 8-cell label spans), and every case clears
+the screen first:
+
+| Case | What it does | Question |
+|---|---|---|
+| A | label rows, `CUU`, `ESC7`, image `z=-1`, `ESC8` | text then image (a `gmore` repaint): are the labels visible? |
+| B | case A with `z=0` | does transparency alone keep the labels visible? |
+| C | `ESC7`, image `C=1,z=-1`, `ESC8`, then label rows written with cursor moves | image then text (direct output): does writing text erase image cells, or the whole image? |
+| D | case C, but spaces are printed across the whole band | do default-background spaces hide or erase the image? |
+| E | cases A and C with one label on a non-default background (a code span) | does a cell background hide the image strokes, or the label? |
+| F | case C with a 3-screen-tall image and band, then scroll back | do image and labels stay aligned over the whole height? |
+| G | `C=1`, no `ESC7`/`ESC8`, a marker printed right after the APC | does `C=1` keep the cursor still? |
+| H–L | cases C–G again with `z=0` instead of `z=-1` (H=C, I=D, J=E, K=F, L=G) | on a terminal that does not draw `z=-1` images, does `z=0` work in every case? |
+
+**Results** (run the probe, then fill in a cell with `OK` or the failure):
+
+| Terminal | A | B | C | D | E | F | G | H | I | J | K | L |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Ghostty | OK | OK | OK | OK | OK | OK | OK (see note) | OK | OK | OK | OK | OK |
+| iTerm2 | OK | OK | OK | OK | OK | OK | OK (see note) | OK | OK | OK | OK | OK |
+| VSCode | No image | OK | No image | No image | No image | No image | No image | OK | No image | OK | Text shifted downward | OK, but box starts under the ']' character |
+| Kitty | OK | OK | OK | OK | OK | OK | OK (see note) | OK | OK | OK | OK | OK |
+
+Notes:
+
+- **Case G:** on Ghostty, iTerm2 and Kitty, `C=1` keeps the cursor still: `]` lands
+  right after `[`, and `AFTER` appears below the box. The probe's marker text
+  (`<- cursor`) sits on the band's first row, so the box outline runs behind it. The
+  text is drawn over the strokes, as `z=-1` requires, so this is expected and not a
+  failure.
+- **Case G placement:** the image is anchored where the cursor is when the APC
+  arrives, which is after `[` and before `]`. So the box starts under the `]`, on
+  every terminal. An earlier caption said "under the `[`"; that was a probe error,
+  not a terminal difference (the Ghostty screenshot shows the same).
+- **VSCode** draws no image at `z=-1` (A, C–G). With `z=0` it draws it in cases B,
+  H (image then text, written with cursor moves), J (coloured label background) and
+  L (`C=1` keeps the cursor still), so a `z=0` image works there. Three findings
+  shape the emission:
+  - **Case I fails:** printing spaces over a `z=0` image makes it disappear. Text
+    written after the image must skip non-label cells with cursor moves (case H),
+    never write spaces across the band.
+  - **Case K fails:** with a tall band (3 screens) the text is shifted downward
+    relative to the image. Until that is understood, a diagram taller than the
+    screen is not safe on VSCode; treat it as a fallback condition there.
+  - `z=0` puts the image over the text. Labels stay readable only because their
+    cells are transparent, which every terminal measured so far honours (B).
+
+**Conclusion.** `z=0` passes every case on Ghostty, iTerm2 and Kitty (H–L), and on
+VSCode passes B, H, J and L. So the builtin renderer sends `z=0` everywhere, writes
+label runs with cursor moves rather than spaces (VSCode case I), and falls back for
+bands taller than the screen on VSCode (case K).
+
+**Rule:** if a terminal fails case A or case C at `z=-1` and also fails them at
+`z=0` (B and H), the built-in diagram renderer is denied on that terminal (matched on
+`TERM_PROGRAM`, in Step 1 of the Mermaid plan or as a follow-up) and mdcat falls back
+to the existing `mmdc` image or code panel. Cases D, E, F and G (and I–L) tune the
+emission (which `z` to send, whether the text rows may contain plain spaces, whether
+a tall band is safe) rather than gate the feature.
 
 ---
 
@@ -460,6 +536,8 @@ dash workaround above).
 - [ADR 0003 — parallel image conversion jobs](adr/0003-parallel-image-jobs.md): the
   thread pool, deferred slots, and writer thread that convert images in parallel —
   the concurrency that forces the `</dev/null` stdin detach in §3.
+- [ADR 0004 — built-in Mermaid flowcharts](adr/0004-builtin-mermaid-kitty.md): the
+  two-layer (text over one Kitty image) diagram renderer that §10 gates.
 - [gmore rendering notes](gmore-rendering-notes.md): the sixel encode/decode and
   paint-path invariants in `gmore.cpp`.
 

@@ -20,6 +20,15 @@ e.g. `tools/probe-cell-size.sh`.
 | `probe-overshoot.sh` | Does the last 6px sixel band spill into the next text row when cell height isn't a multiple of 6? Does reprinting clean it? | `PROBE_CELL_H=<px>`. Compare the bottom seam before/after the reprinted hash line. |
 | `probe-clear-scrolled-sixel.sh` | Once a TALL sixel has been relocated by scrolling (as gmore's down-scroll does), which clear sequence erases its raster — `ESC[2J`, `+ESC[3J`, soft reset, or `ESC c` (RIS)? | `PROBE_TALL=<px>`, `SCROLL=<lines>`. The first clear whose marker screen shows NO image ghost wins. On VSCode only RIS works; gmore's up-scroll uses it. |
 
+`probe-kitty-text-overlay.sh` is the exception to the sixel/`timg` setup above: it
+needs ImageMagick (`magick`) and `base64`, speaks the Kitty protocol, and builds its
+own PNGs. It checks how text and a transparent Kitty image stack in the same cells,
+in both paint orders (the design behind ADR 0004), one case (A–L) per screen:
+
+| Script | Question it answers | How to read it |
+| --- | --- | --- |
+| `probe-kitty-text-overlay.sh` | Do labels stay visible, and the image survive, when text and a `z=-1` Kitty image share cells — text-then-image, image-then-text, spaces, a coloured background, a 3-screen band, and `C=1` cursor behaviour? | Compare each case's screen to its "You should see" line and fill in the results table in `docs/TERMINAL-GRAPHICS.md` §10. `PROBE_CASES="A C"`, `PROBE_PAUSE=0`, `PROBE_CELL_W/H`, `PROBE_TALL_ROWS`. |
+
 Environment overrides: `PROBE_PNG`, `PROBE_STRATEGY`, `PROBE_CELL_H`, `PROBE_TALL`, `SCROLL`.
 
 These are kept (not throwaway) so the same questions can be re-answered on iTerm,
