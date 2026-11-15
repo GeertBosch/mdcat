@@ -29,7 +29,8 @@
 // common operator and relation symbols, super/subscripts, and \mathrm/\mathbf wrappers; see
 // renderMath and scanMath. A ```mermaid fenced code block is rendered as a diagram via the mermaid
 // CLI (mmdc) when it and a graphics terminal are available; otherwise it falls back to ordinary
-// code. See renderMermaidBlock.
+// code. See renderMermaidBlock. On a Kitty-graphics terminal, a flowchart that mermaid.h
+// understands is drawn by mdcat itself instead: strokes as one PNG, labels as real text.
 //
 // Build:  c++ -std=c++17 -O2 -o mdcat mdcat.cpp
 // Usage:  mdcat [--width N] [--img[=kitty|sixel|none]] [--] [file ...]   (reads standard input when
@@ -69,6 +70,7 @@
 
 #include "gmore_run.h"
 #include "highlight.h"
+#include "mermaid.h"
 #include "tty_guard.h"
 #include "unicode_width.h"
 
@@ -3145,6 +3147,95 @@ void emitImageParagraph(const std::string& image, int rows, std::ostream& out) {
     out << imageParagraphBytes(image, rows);
 }
 
+std::string base64Encode(const std::string& in) {
+    static const char kAlphabet[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve((in.size() + 2) / 3 * 4);
+    for (size_t i = 0; i < in.size(); i += 3) {
+        size_t n = std::min<size_t>(3, in.size() - i);
+        uint32_t v = static_cast<uint32_t>(static_cast<unsigned char>(in[i])) << 16;
+        if (n > 1) v |= static_cast<uint32_t>(static_cast<unsigned char>(in[i + 1])) << 8;
+        if (n > 2) v |= static_cast<uint32_t>(static_cast<unsigned char>(in[i + 2]));
+        out += kAlphabet[(v >> 18) & 63];
+        out += kAlphabet[(v >> 12) & 63];
+        out += n > 1 ? kAlphabet[(v >> 6) & 63] : '=';
+        out += n > 2 ? kAlphabet[v & 63] : '=';
+    }
+    return out;
+}
+
+// A Kitty APC that transmits and displays `png` (f=100) in a `cols` x `rows` cell box, written by
+// mdcat itself rather than by timg (ADR 0004). C=1 leaves the cursor where it was, and z=0 draws
+// the image over the text, which stays readable because the label cells are transparent. The
+// payload is split into chunks of at most 4096 base64 bytes, and every chunk carries q=2 (suppress
+// all replies; see kittyQ2).
+std::string kittyApcFromPng(const std::string& png, int cols, int rows, uint32_t id) {
+    constexpr size_t kChunk = 4096;
+    std::string b64 = base64Encode(png);
+    std::string apc;
+    apc.reserve(b64.size() + b64.size() / kChunk * 16 + 96);
+    for (size_t pos = 0; pos < b64.size() || pos == 0; pos += kChunk) {
+        bool first = pos == 0;
+        bool more = pos + kChunk < b64.size();
+        apc += "\033_G";
+        if (first)
+            apc += "a=T,f=100,i=" + std::to_string(id) + ",q=2,C=1,c=" + std::to_string(cols) +
+                ",r=" + std::to_string(rows) + ",z=0" + (more ? ",m=1" : "");
+        else
+            apc += std::string("q=2,m=") + (more ? "1" : "0");
+        apc += ';';
+        apc.append(b64, pos, kChunk);
+        apc += "\033\\";
+    }
+    return apc;
+}
+
+// Frame a diagram: the image first, anchored at the band's top-left with no cursor-up, then its
+// text rows (docs/plan-mermaid-flowcharts.md, "Emitting the block"). The image takes no cursor
+// movement, so the rows that follow scroll normally and carry it along, however tall the band is.
+// Each row is indented by `pad` spaces. Within a row only the non-space runs are written; every
+// other cell is skipped with a cursor move, because on VSCode spaces written over an image make it
+// disappear (docs/TERMINAL-GRAPHICS.md section 10). The cursor ends at column 1 below the band.
+std::string overlayParagraphBytes(const std::vector<std::string>& textRows,
+                                  const std::string& apc,
+                                  int pad) {
+    std::string s;
+    if (pad > 0) s += "\033[" + std::to_string(pad) + 'C';
+    s += "\0337";
+    s += apc;
+    s += "\0338\r";
+    for (const std::string& row : textRows) {
+        size_t i = 0;
+        bool wrote = false;
+        while (i < row.size()) {
+            if (row[i] == ' ') {
+                size_t j = i;
+                while (j < row.size() && row[j] == ' ') ++j;
+                if (j < row.size()) {  // trailing spaces are never written
+                    if (!wrote) {
+                        s.append(static_cast<size_t>(pad), ' ');
+                        wrote = true;
+                    }
+                    s += "\033[" + std::to_string(j - i) + 'C';
+                }
+                i = j;
+                continue;
+            }
+            size_t j = i;
+            while (j < row.size() && row[j] != ' ') ++j;
+            if (!wrote) {
+                s.append(static_cast<size_t>(pad), ' ');
+                wrote = true;
+            }
+            s.append(row, i, j - i);
+            i = j;
+        }
+        s += '\n';
+    }
+    return s;
+}
+
 // The non-tty output sink, defined near main(). If `out` is backed by one, deferred image slots can
 // be reserved on it (ADR 0003); otherwise (tty buffer, or a recursive ostringstream) images render
 // synchronously inline. Forward-declared (with thin free-function wrappers, defined after the
@@ -3153,6 +3244,41 @@ void emitImageParagraph(const std::string& image, int rows, std::ostream& out) {
 class SlotSink;
 SlotSink* asSlotSink(std::ostream& out);
 void slotDeferImage(SlotSink* sink, std::future<std::string> fut);
+
+// Draw a ```mermaid block with the built-in renderer (mermaid.h) and write it centred. Returns
+// false, writing nothing, when the builtin does not apply: not a Kitty terminal or images are off,
+// the block is inside a list or quote (whose per-line prefixing would break the framing), the
+// diagram is outside the supported subset, or it is too tall for the terminal.
+bool emitBuiltinMermaid(const std::vector<std::string>& body, std::ostream& out) {
+    if (gIndent != 0 || !terminalSupportsGraphics() || graphicsBackend() != GraphicsBackend::Kitty)
+        return false;
+    CellMetrics cm = cellMetrics();
+    mermaid::Env env;
+    env.availCols = terminalWidth();
+    env.cellW = cm.realCellW();
+    env.cellH = cm.realCellH();
+    env.darkTheme = darkBackground();
+    env.width = displayWidth;
+    mermaid::Diagram d;
+    std::string reason;
+    if (!mermaid::render(body, env, d, reason)) return false;
+    // VSCode misplaces the text of a band taller than the screen (field guide section 10, case K).
+    if (const char* tp = std::getenv("TERM_PROGRAM"); tp && std::string(tp) == "vscode") {
+        for (int fd : {STDOUT_FILENO, STDERR_FILENO, STDIN_FILENO}) {
+            struct winsize ws;
+            if (ioctl(fd, TIOCGWINSZ, &ws) == 0 && ws.ws_row > 0) {
+                if (d.rows > ws.ws_row) return false;
+                break;
+            }
+        }
+    }
+    // Under a slot sink the writer assigns document-order ids (kittyRenumberAll); elsewhere mint
+    // one.
+    uint32_t id = asSlotSink(out) ? 1 : nextKittyId();
+    int pad = std::max(0, (terminalWidth() - d.cols) / 2);
+    out << overlayParagraphBytes(d.textRows, kittyApcFromPng(d.png, d.cols, d.rows, id), pad);
+    return true;
+}
 
 // ---------------------------------------------------------------------------
 // Block model
@@ -4432,6 +4558,10 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
                 c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
             int mAvailW = terminalWidth();
             if (mlang == "mermaid") {
+                if (emitBuiltinMermaid(body, out)) {
+                    i = (j < n) ? j + 1 : j;  // skip the closing fence if present
+                    continue;
+                }
                 // The conversion produces the final bytes: the framed diagram on success, else the
                 // ordinary code block (the fallback). Computing both in the worker lets the whole
                 // block be a single deferred slot (ADR 0003). emitCodeBlock is pure here (top-level

@@ -15,7 +15,8 @@
 #     (`a=T,...` first, `m=…` rest) with no q=
 #     (→ q=0, always reply), unlike macOS timg 1.6.3;
 #   - the two images get DISTINCT image ids (a reused i= would make the second
-#     a=T re-lay the first placement and corrupt it — see ADR 0002);
+#     a=T re-lay the first placement and corrupt it — see ADR 0002), and so do two
+#     images with a built-in Mermaid diagram (written by mdcat, not timg) between them;
 #   - no stray cursor-management codes leak (timg's own ESC[?25l / ESC[?25h are
 #     stripped by runTimgKitty, since mdcat positions images itself);
 #   - the `none` backend draws no graphics at all and falls back to text;
@@ -66,9 +67,17 @@ cat > "$tmp/two.md" <<EOF
 <img src="$png" alt="A black chess knight">
 EOF
 
+# The same two images with a built-in Mermaid diagram between them.
+{
+    printf '<img src="%s" alt="A black chess knight">\n\n' "$png"
+    printf '```mermaid\ngraph LR\n    a[One] --> b[Two]\n```\n\n'
+    printf '<img src="%s" alt="A black chess knight">\n' "$png"
+} > "$tmp/three.md"
+
 # Force the backend + cell size so the byte stream is deterministic.
+doc=$tmp/two.md
 render() {  # render PROTO -> bytes on stdout
-    MDCAT_CELL_W=8 MDCAT_CELL_H=16 "$mdcat" --img "$1" "$tmp/two.md" 2>/dev/null
+    MDCAT_CELL_W=8 MDCAT_CELL_H=16 "$mdcat" --img "$1" "$doc" 2>/dev/null
 }
 
 pass() { n=$((n + 1)); }
@@ -104,6 +113,14 @@ pycheck "kitty: every chunk q=2" kitty \
     '(all(b"q=2" in c for c in ctrls), "a chunk (incl. continuation/final m= chunk) is missing q=2")'
 pycheck "kitty: distinct image ids" kitty \
     '(len(set(firstids)) == 2 and len(firstids) == 2, f"expected 2 distinct ids, got {firstids}")'
+doc=$tmp/three.md
+pycheck "kitty: image, diagram, image: 3 images" kitty \
+    '(len([c for c in ctrls if b"a=" in c]) == 3, f"expected 3 images, got {len(firstids)}")'
+pycheck "kitty: image, diagram, image: distinct ids" kitty \
+    '(len(set(firstids)) == 3 and len(firstids) == 3, f"expected 3 distinct ids, got {firstids}")'
+pycheck "kitty: image, diagram, image: every chunk q=2" kitty \
+    '(all(b"q=2" in c for c in ctrls), "a chunk is missing q=2")'
+doc=$tmp/two.md
 pycheck "kitty: no cursor-code leak" kitty \
     '(d.count(b"\x1b[?25l") == 0 and d.count(b"\x1b[?25h") == 0, "stray ESC[?25l/h present")'
 pycheck "kitty: no ;OK reply request" kitty \

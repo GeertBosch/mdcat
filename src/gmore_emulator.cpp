@@ -918,11 +918,23 @@ struct Emulator::Impl {
         img.Pv = ph;
         img.footCols = footCols;
         img.footRows = footRows;
-        img.row = imageAnchor(img.heightCells(cellH));
+        // C=1 on the first chunk: the producer asks that the cursor not move (mdcat's builtin
+        // diagrams, which print their text rows after the image). Anchor at the cursor and leave
+        // it, with no band reservation and no LF to absorb.
+        size_t firstSemi = kittyAcc.find(';');
+        bool cursorStays = firstSemi != std::string::npos &&
+            kittyCtrlInt(kittyAcc.substr(3, firstSemi - 3), "C=") == 1;
+        if (cursorStays) {
+            bandPhase = NO_BAND;
+            img.row = top + static_cast<size_t>(cr);
+        } else {
+            img.row = imageAnchor(img.heightCells(cellH));
+        }
         img.kitty = kittyAcc;
         img.kid = id;
         images.push_back(std::move(img));
         kittyAcc.clear();
+        if (cursorStays) return;
         // Reserve the image's height in cells: the producer's r= when it set one (so the band
         // matches the cells mdcat laid out), else the pixel-derived height. Ceil for the pixel
         // fallback so a fractional last row is not clipped.

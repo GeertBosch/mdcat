@@ -73,3 +73,4 @@ make && COLUMNS=40 ./mdcat tests/tables-wrap.md
 | `images-narrow-col.md`  | Images scaled down to narrow columns; standalone-image regressions |
 | `block-quotes.md`    | Block quotes: nesting, lazy continuation, inner blocks, left rule |
 | `lists.md`           | Bullet/ordered lists: nesting, tight vs loose, multi-block items |
+| `mermaid-basic.md`   | Built-in Mermaid chains drawn as a Kitty image plus text labels; a branching graph still shown as source (checked by `mermaid-kitty.sh`) |

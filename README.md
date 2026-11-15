@@ -192,11 +192,14 @@ expression displayed above stacks.
 
 ### Mermaid diagrams
 
-A fenced code block tagged `mermaid` is rendered as a real diagram when the
+A fenced code block tagged `mermaid` is drawn as a diagram. On a terminal with
+the Kitty graphics protocol, mdcat draws the flowcharts it understands itself —
+shapes and arrows as graphics, labels as real, selectable text — without
+launching anything. Other diagrams are rendered as a real image when the
 [mermaid CLI](https://github.com/mermaid-js/mermaid-cli) (`mmdc`) is installed
-and the terminal supports sixel graphics. Otherwise — `mmdc` missing, or a
-terminal that can't draw graphics — the block falls back to showing its source
-as an ordinary code panel, so the document is never worse off than plain text.
+and the terminal supports graphics. Otherwise — `mmdc` missing, or a terminal
+that can't draw graphics — the block falls back to showing its source as an
+ordinary code panel, so the document is never worse off than plain text.
 
 ```mermaid
 graph LR

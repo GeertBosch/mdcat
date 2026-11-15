@@ -30,8 +30,14 @@ $(B)/gmore_run.o: $(S)/gmore_run.cpp $(S)/gmore_run.h $(S)/gmore_emulator.h $(S)
 $(B)/highlight.o: $(S)/highlight.cpp $(S)/highlight.h | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
 
-$(B)/mdcat: $(S)/mdcat.cpp $(S)/unicode_width.h $(S)/highlight.h $(S)/gmore_run.h $(S)/tty_guard.h $(GMORE_OBJS) $(B)/highlight.o | $(B)
-	$(CXX) $(CXXFLAGS) $(PTHREAD) -I$(S) -o $@ $(S)/mdcat.cpp $(B)/highlight.o $(GMORE_OBJS)
+$(B)/png_write.o: $(S)/png_write.cpp $(S)/png_write.h | $(B)
+	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
+
+$(B)/mermaid.o: $(S)/mermaid.cpp $(S)/mermaid.h $(S)/png_write.h | $(B)
+	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
+
+$(B)/mdcat: $(S)/mdcat.cpp $(S)/unicode_width.h $(S)/highlight.h $(S)/mermaid.h $(S)/gmore_run.h $(S)/tty_guard.h $(GMORE_OBJS) $(B)/highlight.o $(B)/mermaid.o $(B)/png_write.o | $(B)
+	$(CXX) $(CXXFLAGS) $(PTHREAD) -I$(S) -o $@ $(S)/mdcat.cpp $(B)/highlight.o $(B)/mermaid.o $(B)/png_write.o $(GMORE_OBJS)
 
 $(B)/gmore: $(S)/gmore.cpp $(S)/gmore_run.h $(GMORE_OBJS) | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -o $@ $(S)/gmore.cpp $(GMORE_OBJS)
@@ -56,6 +62,7 @@ TESTS := \
 	tests/property-image-assets.sh \
 	tests/unicode-width.sh \
 	tests/mdcat-kitty.sh \
+	tests/mermaid-kitty.sh \
 	tests/mdcat-remote-image.sh \
 	tests/gmore-emulator.sh \
 	tests/gmore-sixel.sh \
@@ -86,6 +93,10 @@ FMT_SRCS := \
 	$(S)/gmore_types.h \
 	$(S)/highlight.cpp \
 	$(S)/highlight.h \
+	$(S)/mermaid.cpp \
+	$(S)/mermaid.h \
+	$(S)/png_write.cpp \
+	$(S)/png_write.h \
 	$(S)/tty_guard.h \
 	$(S)/unicode_width.h \
 	$(S)/mdcat.cpp \
@@ -133,6 +144,8 @@ SRCS := \
 	$(S)/gmore_emulator.cpp \
 	$(S)/gmore_run.cpp \
 	$(S)/highlight.cpp \
+	$(S)/mermaid.cpp \
+	$(S)/png_write.cpp \
 	$(S)/mdcat.cpp \
 	$(S)/gmore.cpp
 
