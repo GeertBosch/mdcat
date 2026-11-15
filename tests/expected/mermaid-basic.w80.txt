@@ -13,10 +13,10 @@ Left to right
 Expected: three boxes in a row joined by arrows. Every arrowhead touches the
 next box's outline, and each label is centred in its box.
 
-                     <kitty c=37 r=3 z=0 C=1 bytes=118580>
-
-                       Parse        Render        Output
-
+image @15,21 c=37 r=3 z=0 C=1 png=370x60
+                     ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄
+                     ▐ Parse ▐▄▄▄▟█ Render ▐▄▄▄▟█ Output ▐
+                     ▐▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▟
 
 Top down
 ────────────────────────────────────────────────────────────────────────────────
@@ -25,61 +25,62 @@ Expected: ten boxes in a column, 48 rows tall (taller than most terminals),
 joined by vertical arrows that all run through one column. In gmore the diagram
 scrolls a row at a time.
 
-                                  <kitty c=11 r=48 z=0 C=1 bytes=564612>
-
-                                     Start
-
-
-
-
-                                    Step 1
-
-
-
-
-                                    Step 2
-
-
-
-
-                                    Step 3
-
-
-
-
-                                    Step 4
-
-
-
-
-                                    Step 5
-
-
-
-
-                                    Step 6
-
-
-
-
-                                    Step 7
-
-
-
-
-                                    Step 8
-
-
-
-
-                                      End
-
+image @26,34 c=11 r=48 z=0 C=1 png=110x960
+                                   ▗▄▄▄▄▄▄▄▄
+                                   ▐ Start ▐
+                                   ▐▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                  ▗▄▄▄▄█▙▄▄▄▄
+                                  ▐ Step 1  ▐
+                                  ▐▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                  ▗▄▄▄▄█▙▄▄▄▄
+                                  ▐ Step 2  ▐
+                                  ▐▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                  ▗▄▄▄▄█▙▄▄▄▄
+                                  ▐ Step 3  ▐
+                                  ▐▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                  ▗▄▄▄▄█▙▄▄▄▄
+                                  ▐ Step 4  ▐
+                                  ▐▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                  ▗▄▄▄▄█▙▄▄▄▄
+                                  ▐ Step 5  ▐
+                                  ▐▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                  ▗▄▄▄▄█▙▄▄▄▄
+                                  ▐ Step 6  ▐
+                                  ▐▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                  ▗▄▄▄▄█▙▄▄▄▄
+                                  ▐ Step 7  ▐
+                                  ▐▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                  ▗▄▄▄▄█▙▄▄▄▄
+                                  ▐ Step 8  ▐
+                                  ▐▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                    ▗▄▄█▙▄▄
+                                    ▐ End ▐
+                                    ▐▄▄▄▄▄▟
 
 Branching
 ────────────────────────────────────────────────────────────────────────────────
 
 Expected: not a simple path, so the source is shown as a code panel.
 
-  graph TD     
-      A --> B  
-      A --> C  
+  graph TD
+      A --> B
+      A --> C
+

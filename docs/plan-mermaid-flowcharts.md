@@ -393,8 +393,8 @@ library only.
   any other cell shows a **quadrant block** (`▘▝▀▖▌▞▛▗▚▐▜▄▙▟█`) according to
   which of its 2×2 sub-cells contain stroke pixels. A reviewer sees the diagram
   directly in a diff.
-- Step 1 predates the previewer, so its golden is the escape-stripped text with
-  each APC replaced by a one-line summary, made with perl.
+- `--labels` prints the text layer only (no headers, no blocks); the harness
+  compares it with `gmore --dump`. `\n` is treated as CR LF, as on a tty.
 
 **Fixtures** are `tests/mermaid-<feature>.md`.
 

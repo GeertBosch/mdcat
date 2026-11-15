@@ -74,3 +74,8 @@ make && COLUMNS=40 ./mdcat tests/tables-wrap.md
 | `block-quotes.md`    | Block quotes: nesting, lazy continuation, inner blocks, left rule |
 | `lists.md`           | Bullet/ordered lists: nesting, tight vs loose, multi-block items |
 | `mermaid-basic.md`   | Built-in Mermaid chains drawn as a Kitty image plus text labels; a branching graph still shown as source (checked by `mermaid-kitty.sh`) |
+
+`kitty-preview.py` turns mdcat's Kitty output into text for goldens: each image's
+strokes become quadrant blocks, and its PNGs are decoded and validated.
+`mermaid-kitty.sh` uses it, and it can be run on its own:
+`MDCAT_CELL_W=10 MDCAT_CELL_H=20 ./mdcat --img kitty doc.md | tests/kitty-preview.py`.
