@@ -486,7 +486,7 @@ the screen first:
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | Ghostty | OK | OK | OK | OK | OK | OK | OK (see note) | OK | OK | OK | OK | OK |
 | iTerm2 | OK | OK | OK | OK | OK | OK | OK (see note) | OK | OK | OK | OK | OK |
-| VSCode | No image | OK | No image | No image | No image | No image | No image | OK | No image | OK | Text shifted downward | OK, but box starts under the ']' character |
+| VSCode | No image | OK | No image | No image | No image | No image | No image | OK | No image | OK | Text shifted downward | OK |
 | Kitty | OK | OK | OK | OK | OK | OK | OK (see note) | OK | OK | OK | OK | OK |
 
 Notes:
