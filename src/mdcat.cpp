@@ -31,10 +31,12 @@
 // CLI (mmdc) when it and a graphics terminal are available; otherwise it falls back to ordinary
 // code. See renderMermaidBlock. On a Kitty-graphics terminal, a flowchart that mermaid.h
 // understands is drawn by mdcat itself instead: strokes as one PNG, labels as real text.
+// --mermaid / $MDCAT_MERMAID picks the chain; $MDCAT_MERMAID_DEBUG=1 reports builtin rejections.
 //
 // Build:  c++ -std=c++17 -O2 -o mdcat mdcat.cpp
-// Usage:  mdcat [--width N] [--img[=kitty|sixel|none]] [--] [file ...]   (reads standard input when
-//         given no file arguments)
+// Usage:  mdcat [--width N] [--img[=kitty|sixel|none]] [--mermaid MODE] [--] [file ...]
+//         (reads standard input when given no file arguments)
+//         --mermaid auto|builtin|image|source picks how ```mermaid blocks render.
 //         --width N forces the render width, overriding $COLUMNS and the terminal size.
 //         --img forces image output even when piped; an optional protocol pins the graphics
 //         backend.
@@ -134,6 +136,12 @@ bool gForceGraphics = false;
 // protocol regardless of terminal or env. Unset (-1) means a bare `--img` with no protocol
 // argument: the historical "force output, default to Kitty when piped" behaviour. Set by main().
 int gForcedBackend = -1;  // -1 = unset; else a GraphicsBackend value
+
+// How a ```mermaid block is rendered (--mermaid, MDCAT_MERMAID): Auto tries the built-in renderer,
+// then mmdc, then the source; Builtin skips mmdc; Image skips the built-in renderer; Source always
+// shows the source. Set by main() before rendering.
+enum class MermaidMode { Auto, Builtin, Image, Source };
+MermaidMode gMermaidMode = MermaidMode::Auto;
 
 // Directory of the file currently being rendered, used to resolve relative image paths.
 // Empty string means the current working directory. Set by main() before each render() call.
@@ -3246,12 +3254,21 @@ SlotSink* asSlotSink(std::ostream& out);
 void slotDeferImage(SlotSink* sink, std::future<std::string> fut);
 
 // Draw a ```mermaid block with the built-in renderer (mermaid.h) and write it centred. Returns
-// false, writing nothing, when the builtin does not apply: not a Kitty terminal or images are off,
-// the block is inside a list or quote (whose per-line prefixing would break the framing), the
-// diagram is outside the supported subset, or it is too tall for the terminal.
-bool emitBuiltinMermaid(const std::vector<std::string>& body, std::ostream& out) {
-    if (gIndent != 0 || !terminalSupportsGraphics() || graphicsBackend() != GraphicsBackend::Kitty)
+// false, writing nothing and setting `reason`, when the builtin does not apply: not a Kitty
+// terminal or images are off, the block is inside a list or quote (whose per-line prefixing would
+// break the framing), the diagram is outside the supported subset, or it is too tall for the
+// terminal.
+bool emitBuiltinMermaid(const std::vector<std::string>& body,
+                        std::ostream& out,
+                        std::string& reason) {
+    if (!terminalSupportsGraphics() || graphicsBackend() != GraphicsBackend::Kitty) {
+        reason = "not kitty";
         return false;
+    }
+    if (gIndent != 0) {
+        reason = "inside list or quote";
+        return false;
+    }
     CellMetrics cm = cellMetrics();
     mermaid::Env env;
     env.availCols = terminalWidth();
@@ -3260,14 +3277,17 @@ bool emitBuiltinMermaid(const std::vector<std::string>& body, std::ostream& out)
     env.darkTheme = darkBackground();
     env.width = displayWidth;
     mermaid::Diagram d;
-    std::string reason;
     if (!mermaid::render(body, env, d, reason)) return false;
     // VSCode misplaces the text of a band taller than the screen (field guide section 10, case K).
     if (const char* tp = std::getenv("TERM_PROGRAM"); tp && std::string(tp) == "vscode") {
         for (int fd : {STDOUT_FILENO, STDERR_FILENO, STDIN_FILENO}) {
             struct winsize ws;
             if (ioctl(fd, TIOCGWINSZ, &ws) == 0 && ws.ws_row > 0) {
-                if (d.rows > ws.ws_row) return false;
+                if (d.rows > ws.ws_row) {
+                    reason = "taller than the terminal: " + std::to_string(d.rows) + " > " +
+                        std::to_string(ws.ws_row);
+                    return false;
+                }
                 break;
             }
         }
@@ -4551,16 +4571,29 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
                     break;  // closing fence
                 body.push_back(lines[j]);
             }
-            // A ```mermaid block renders as a diagram via the mermaid CLI when it (and a graphics
-            // terminal) are available; otherwise it falls through to being shown as ordinary code.
+            // A ```mermaid block renders per gMermaidMode: the built-in renderer, then a diagram
+            // via the mermaid CLI when it (and a graphics terminal) are available, then ordinary
+            // code.
             std::string mlang = lang;
             for (char& c : mlang)
                 c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
             int mAvailW = terminalWidth();
-            if (mlang == "mermaid") {
-                if (emitBuiltinMermaid(body, out)) {
-                    i = (j < n) ? j + 1 : j;  // skip the closing fence if present
-                    continue;
+            if (mlang == "mermaid" && gMermaidMode == MermaidMode::Source) {
+                emitCodeBlock(body, lang, out);
+            } else if (mlang == "mermaid") {
+                if (gMermaidMode != MermaidMode::Image) {
+                    std::string why;
+                    if (emitBuiltinMermaid(body, out, why)) {
+                        i = (j < n) ? j + 1 : j;  // skip the closing fence if present
+                        continue;
+                    }
+                    if (std::getenv("MDCAT_MERMAID_DEBUG"))
+                        std::cerr << "mdcat: mermaid: fallback: " << why << "\n";
+                    if (gMermaidMode == MermaidMode::Builtin) {
+                        emitCodeBlock(body, lang, out);
+                        i = (j < n) ? j + 1 : j;
+                        continue;
+                    }
                 }
                 // The conversion produces the final bytes: the framed diagram on success, else the
                 // ordinary code block (the fallback). Computing both in the worker lets the whole
@@ -4945,8 +4978,30 @@ int main(int argc, char** argv) {
     // a filename may begin with a dash. Option parsing stops at the first non-option operand.
     std::vector<std::string> files;
     auto usage = [&] {
-        std::cerr << "usage: mdcat [--width N] [--img[=kitty|sixel|none]] [--] [file ...]\n";
+        std::cerr << "usage: mdcat [--width N] [--img[=kitty|sixel|none]]\n"
+                     "             [--mermaid auto|builtin|image|source] [--] [file ...]\n";
     };
+    // Map a --mermaid / MDCAT_MERMAID mode name; false for an unrecognized value.
+    auto parseMermaidMode = [](const std::string& s, MermaidMode& m) {
+        if (s == "auto")
+            m = MermaidMode::Auto;
+        else if (s == "builtin")
+            m = MermaidMode::Builtin;
+        else if (s == "image")
+            m = MermaidMode::Image;
+        else if (s == "source")
+            m = MermaidMode::Source;
+        else
+            return false;
+        return true;
+    };
+    if (const char* e = std::getenv("MDCAT_MERMAID")) {
+        if (!parseMermaidMode(e, gMermaidMode)) {
+            std::cerr << "mdcat: invalid MDCAT_MERMAID mode: " << e << "\n";
+            usage();
+            return 2;
+        }
+    }
     // Map a --img protocol argument to a backend, or return -2 for an unrecognized value.
     auto parseBackend = [](const std::string& s) -> int {
         if (s == "kitty") return static_cast<int>(GraphicsBackend::Kitty);
@@ -4986,6 +5041,26 @@ int main(int argc, char** argv) {
             }
             gForceGraphics = true;
             gForcedBackend = b;
+            continue;
+        }
+
+        if (arg == "--mermaid" || arg.rfind("--mermaid=", 0) == 0) {  // flag wins over the env
+            std::string mode;
+            if (arg == "--mermaid") {
+                if (a + 1 >= argc) {
+                    std::cerr << "mdcat: --mermaid requires a mode\n";
+                    usage();
+                    return 2;
+                }
+                mode = argv[++a];
+            } else {
+                mode = arg.substr(10);
+            }
+            if (!parseMermaidMode(mode, gMermaidMode)) {
+                std::cerr << "mdcat: invalid --mermaid mode: " << mode << "\n";
+                usage();
+                return 2;
+            }
             continue;
         }
 

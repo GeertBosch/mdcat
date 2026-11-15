@@ -73,7 +73,8 @@ make && COLUMNS=40 ./mdcat tests/tables-wrap.md
 | `images-narrow-col.md`  | Images scaled down to narrow columns; standalone-image regressions |
 | `block-quotes.md`    | Block quotes: nesting, lazy continuation, inner blocks, left rule |
 | `lists.md`           | Bullet/ordered lists: nesting, tight vs loose, multi-block items |
-| `mermaid-basic.md`   | Built-in Mermaid chains drawn as a Kitty image plus text labels; a branching graph still shown as source (checked by `mermaid-kitty.sh`) |
+| `mermaid-basic.md`   | Built-in Mermaid chains drawn as a Kitty image plus text labels; a branching graph still shown as source. Goldens at widths 80 and 30 (the LR chain is too wide at 30), each with a `.err` golden of the fallback reasons (checked by `mermaid-kitty.sh`) |
+| `mermaid-fallback.md` | A `sequenceDiagram`, a `pie` and a `subgraph` flowchart: all declined by the builtin, shown as source, with `.w80.err` reasons (checked by `mermaid-kitty.sh`) |
 
 `kitty-preview.py` turns mdcat's Kitty output into text for goldens: each image's
 strokes become quadrant blocks, and its PNGs are decoded and validated.

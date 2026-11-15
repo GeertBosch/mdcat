@@ -197,6 +197,11 @@ bool render(const std::vector<std::string>& body,
             Diagram& out,
             std::string& reason) {
     Parser ps;
+    // Name the offending line in the reason, as in `unsupported syntax: subgraph X`.
+    auto syntax = [&](const std::string& line) {
+        reason = "unsupported syntax: " + line;
+        return false;
+    };
     bool td = false;
     bool sawHeader = false;
     int edges = 0;
@@ -229,22 +234,18 @@ bool render(const std::vector<std::string>& body,
         size_t p = 0;
         int from = 0, to = 0;
         if (!ps.parseNode(line, p, from)) {
+            if (ps.reason == "unsupported syntax") return syntax(line);
             reason = ps.reason;
             return false;
         }
-        if (line.compare(p, 3, "-->") != 0) {
-            reason = "unsupported syntax";
-            return false;
-        }
+        if (line.compare(p, 3, "-->") != 0) return syntax(line);
         p += 3;
         if (!ps.parseNode(line, p, to)) {
+            if (ps.reason == "unsupported syntax") return syntax(line);
             reason = ps.reason;
             return false;
         }
-        if (p != line.size()) {
-            reason = "unsupported syntax";
-            return false;
-        }
+        if (p != line.size()) return syntax(line);
         Node& a = ps.nodes[static_cast<size_t>(from)];
         Node& b = ps.nodes[static_cast<size_t>(to)];
         if (from == to || a.out >= 0 || b.in >= 0) {

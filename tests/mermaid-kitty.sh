@@ -3,10 +3,14 @@
 # terminal a simple-chain ```mermaid block is drawn as one transparent PNG (strokes) plus ordinary
 # text rows (labels). Anything else is left to the mmdc / source fallback.
 #
-# Checked here, over tests/mermaid-basic.md:
-#   - tests/kitty-preview.py's rendering of the output (text plus each image as quadrant blocks)
-#     equals tests/expected/mermaid-basic.w80.txt (UPDATE=1 rewrites it). The previewer also fails
-#     on any PNG with a bad signature, CRC, zlib stream or size (cols*cellW x rows*cellH);
+# Checked here, over tests/mermaid-basic.md (widths 80 and 30) and tests/mermaid-fallback.md:
+#   - tests/kitty-preview.py's rendering of the output of `mdcat --mermaid builtin` (text plus each
+#     image as quadrant blocks) equals tests/expected/<fixture>.w<N>.txt, and the
+#     MDCAT_MERMAID_DEBUG=1 stderr equals <fixture>.w<N>.err (UPDATE=1 rewrites both). The
+#     previewer also fails on any PNG with a bad signature, CRC, zlib stream or size
+#     (cols*cellW x rows*cellH);
+#   - --mermaid / MDCAT_MERMAID precedence: source shows the source, the flag beats the variable,
+#     and an invalid mode exits 2;
 #   - every APC's first chunk carries f=100, C=1, c=, r=, z=0 and q=2, and every chunk carries q=2;
 #   - gmore anchors each image where the previewer does, with the same cells footprint, and its
 #     text layer matches the previewer's on every row an image covers;
@@ -27,8 +31,6 @@ here=$(CDPATH= cd "$(dirname "$0")" && pwd)
 root=$(dirname "$here")
 mdcat=${1:-$root/mdcat}
 gmore=$root/gmore
-fixture=$here/mermaid-basic.md
-golden=$here/expected/mermaid-basic.w80.txt
 
 if [ ! -x "$mdcat" ] || [ ! -x "$gmore" ]; then
     echo "mermaid-kitty: mdcat or gmore is not an executable; run 'make' first" >&2
@@ -53,25 +55,48 @@ if PATH=/usr/bin:/bin command -v mmdc >/dev/null 2>&1; then
     exit 0
 fi
 
-mc --img kitty --width 80 "$fixture" > "$tmp/out" 2>/dev/null
-
 preview() { python3 "$here/kitty-preview.py" "$@"; }
 
-if [ "${UPDATE:-}" = 1 ]; then
-    mkdir -p "$(dirname "$golden")"
-    preview "$tmp/out" > "$golden"
-    echo "mermaid-kitty: wrote $golden"
-fi
-if preview "$tmp/out" > "$tmp/summary" 2> "$tmp/preview.err"; then
-    if diff -u "$golden" "$tmp/summary" > "$tmp/diff"; then
-        pass
-    else
-        fail "golden" "output differs from $golden"
-        cat "$tmp/diff" >&2
+# Render <fixture> at <width> with the builtin only, and compare the previewer's text and the
+# debug stderr against tests/expected/<name>.w<width>.{txt,err}. Leaves the output in $tmp/out and
+# its preview in $tmp/summary.
+golden_case() {
+    name=$1
+    width=$2
+    md=$here/$name.md
+    txt=$here/expected/$name.w$width.txt
+    err=$here/expected/$name.w$width.err
+    MDCAT_MERMAID_DEBUG=1 mc --img kitty --mermaid builtin --width "$width" "$md" \
+        > "$tmp/out" 2> "$tmp/err"
+    if [ "${UPDATE:-}" = 1 ]; then
+        mkdir -p "$(dirname "$txt")"
+        preview "$tmp/out" > "$txt"
+        cp "$tmp/err" "$err"
+        echo "mermaid-kitty: wrote $txt and $err"
     fi
-else
-    fail "preview" "$(cat "$tmp/preview.err")"
-fi
+    if preview "$tmp/out" > "$tmp/summary" 2> "$tmp/preview.err"; then
+        if diff -u "$txt" "$tmp/summary" > "$tmp/diff"; then
+            pass
+        else
+            fail "golden $name.w$width" "output differs from $txt"
+            cat "$tmp/diff" >&2
+        fi
+    else
+        fail "preview $name.w$width" "$(cat "$tmp/preview.err")"
+    fi
+    if [ -f "$err" ]; then
+        if diff -u "$err" "$tmp/err" > "$tmp/diff"; then
+            pass
+        else
+            fail "stderr $name.w$width" "debug output differs from $err"
+            cat "$tmp/diff" >&2
+        fi
+    fi
+}
+
+golden_case mermaid-fallback 80
+golden_case mermaid-basic 30
+golden_case mermaid-basic 80
 
 # Structure of every APC. (The previewer has already decoded every PNG: signature, CRC, zlib
 # stream, and size c*cellW x r*cellH.)
@@ -165,6 +190,46 @@ if [ "$(cat "$tmp/info")" = "image 1 @0,34 110x260px 11x13cells" ]; then
 else
     fail "gmore anchor (TD)" "got: $(cat "$tmp/info")"
 fi
+
+# Mode precedence. The chain is supported by the builtin, so only the mode decides what shows.
+src_has() { grep -q 'graph LR' "$1"; }
+mc --img kitty --width 80 --mermaid source "$lr" > "$tmp/m-source" 2>/dev/null
+if src_has "$tmp/m-source" && ! grep -q "$(printf '\033_G')" "$tmp/m-source"; then
+    pass
+else
+    fail "--mermaid source" "expected the source and no image"
+fi
+MDCAT_MERMAID=source mc --img kitty --width 80 --mermaid builtin "$lr" > "$tmp/m-flag" 2>/dev/null
+if grep -q "$(printf '\033_G')" "$tmp/m-flag" && ! src_has "$tmp/m-flag"; then
+    pass
+else
+    fail "flag beats MDCAT_MERMAID" "expected the builtin diagram"
+fi
+MDCAT_MERMAID=source mc --img kitty --width 80 "$lr" > "$tmp/m-env" 2>/dev/null
+if src_has "$tmp/m-env" && ! grep -q "$(printf '\033_G')" "$tmp/m-env"; then
+    pass
+else
+    fail "MDCAT_MERMAID=source" "expected the source and no image"
+fi
+mc --img kitty --mermaid=builtin --width 80 "$lr" 2>/dev/null | grep -q "$(printf '\033_G')" \
+    && pass || fail "--mermaid=builtin" "expected the builtin diagram"
+# image mode never runs the builtin, so with no mmdc on PATH it shows the source.
+mc --img kitty --width 80 --mermaid image "$lr" > "$tmp/m-image" 2>/dev/null
+if src_has "$tmp/m-image" && ! grep -q "$(printf '\033_G')" "$tmp/m-image"; then
+    pass
+else
+    fail "--mermaid image" "expected the source (no mmdc)"
+fi
+mc --mermaid bogus "$lr" > /dev/null 2> "$tmp/bad.err"
+rc=$?
+if [ "$rc" -eq 2 ] && grep -q 'usage:' "$tmp/bad.err"; then
+    pass
+else
+    fail "invalid --mermaid" "exit $rc"
+fi
+MDCAT_MERMAID=bogus mc "$lr" > /dev/null 2>&1
+rc=$?
+if [ "$rc" -eq 2 ]; then pass; else fail "invalid MDCAT_MERMAID" "exit $rc"; fi
 
 # No Kitty APC without --img (piped), nor under --img sixel.
 if mc "$lr" 2>/dev/null | grep -q "$(printf '\033_G')"; then

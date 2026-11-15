@@ -208,19 +208,24 @@ graph LR
 ```
 
 A diagram taller than the terminal isn't shrunk to fit — `gmore` scrolls
-through it like any other content, revealing more of it a row at a time:
+through it like any other content, revealing more of it a row at a time. This
+one is a sequence diagram, which mdcat's own renderer doesn't draw, so it goes
+to `mmdc`:
 
 ```mermaid
-graph TD
-    a[Start] --> b[Step 1]
-    b --> c[Step 2]
-    c --> d[Step 3]
-    d --> e[Step 4]
-    e --> f[Step 5]
-    f --> g[Step 6]
-    g --> h[Step 7]
-    h --> i[Step 8]
-    i --> j[End]
+sequenceDiagram
+    participant U as User
+    participant M as mdcat
+    participant C as mmdc
+    participant T as Terminal
+    U->>M: mdcat README.md
+    M->>M: parse the Markdown
+    M->>C: mermaid source
+    C-->>M: PNG
+    M->>T: image, then text
+    T-->>U: rendered document
+    U->>T: scroll in gmore
+    T-->>U: next rows of the diagram
 ```
 
 ### Unicode 🌍
@@ -297,7 +302,7 @@ Renders Markdown to the terminal with ANSI styling, inline images (Kitty or
 sixel graphics), and OSC 8 hyperlinks.
 
 ```
-mdcat [--width N] [--img[=kitty|sixel|none]] [--] [file ...]
+mdcat [--width N] [--img[=kitty|sixel|none]] [--mermaid MODE] [--] [file ...]
 ```
 
 | Flag | Description |
@@ -305,11 +310,14 @@ mdcat [--width N] [--img[=kitty|sixel|none]] [--] [file ...]
 | `--width N` / `-w N` | Force render width in columns (overrides `$COLUMNS` and terminal size) |
 | `--img` | Emit image output even when stdout is not a TTY (for piping into gmore) |
 | `--img <kitty\|sixel\|none>` | As `--img`, but also force the graphics protocol (`none` = text only). Same effect as `MDCAT_GRAPHICS`. Accepts `--img sixel` or `--img=sixel` |
+| `--mermaid <mode>` | How ```` ```mermaid ```` blocks render: `auto` (default: built-in drawing, then `mmdc`, then source), `builtin` (never runs `mmdc`), `image` (`mmdc` only), or `source` (always the code panel). Accepts `--mermaid source` or `--mermaid=source`; overrides `MDCAT_MERMAID` |
 | `--` | End option parsing (allows filenames starting with `-`) |
 
 | Environment | Description |
 | ----------- | ----------- |
 | `MDCAT_GRAPHICS` | Force the image protocol: `kitty`, `sixel`, or `none` |
+| `MDCAT_MERMAID` | Default for `--mermaid`: `auto`, `builtin`, `image`, or `source` |
+| `MDCAT_MERMAID_DEBUG` | Set to `1` to print `mdcat: mermaid: fallback: <reason>` on stderr whenever the built-in renderer declines a diagram |
 | `MDCAT_CELL_W` / `MDCAT_CELL_H` | Local terminal cell size in pixels (for remote sessions that can't query it) |
 | `MDCAT_AREA_W` / `MDCAT_AREA_H` | Local terminal text-area size in pixels (for an exact pixel↔cell ratio) |
 
