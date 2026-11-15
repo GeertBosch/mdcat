@@ -3,13 +3,14 @@ Mermaid graphs with branches and merges
 
 On a Kitty terminal, the built-in renderer
 draws any acyclic graph of boxes joined by
---> links, as long as the edges between two
-ranks never need more than one track.
-Checked by mermaid-kitty.sh at widths 80 and
-44, with --img kitty and pinned cell sizes.
-The .err goldens name the diagrams that are
-declined, for now, and so are shown as
-source.
+--> links. The graphs here are trees and
+merges that need no more than one track
+between two ranks; mermaid-routing.md covers
+the ones that need more. Checked by
+mermaid-kitty.sh at widths 80 and 44, with
+--img kitty and pinned cell sizes. The .err
+goldens name the diagrams that are declined,
+for now, and so are shown as source.
 
 Where several edges leave one box they share
 its port and split off a common bus; where
@@ -25,7 +26,7 @@ Right, with the bus splitting under Root.
 Left has one child of its own, Leaf,
 directly below it.
 
-image @27,12 c=20 r=14 z=0 C=1 png=200x280
+image @28,12 c=20 r=14 z=0 C=1 png=200x280
                  ▗▄▄▄▄▄▄▄▄
                  ▐ Root  ▐
                  ▐▄▄▄▄▄▄▄▟
@@ -48,7 +49,7 @@ Expected: the same tree turned on its side.
 Root on the left, two children stacked in a
 column, Leaf to the right of Left.
 
-image @49,5 c=33 r=7 z=0 C=1 png=330x140
+image @50,5 c=33 r=7 z=0 C=1 png=330x140
                  ▗▄▄▄▄▄▄▄     ▗▄▄▄▄▄▄▄
               ▗▄▟█ Left ▐▄▄▄▄▟█ Leaf ▐
      ▗▄▄▄▄▄▄▄ ▐  ▐▄▄▄▄▄▄▟     ▐▄▄▄▄▄▄▟
@@ -63,7 +64,7 @@ Fan-in (top down)
 Expected: three boxes at the top merge into
 one arrowhead on Done.
 
-image @63,6 c=31 r=9 z=0 C=1 png=310x180
+image @64,6 c=31 r=9 z=0 C=1 png=310x180
       ▗▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄
       ▐ Build ▐  ▐ Test  ▐  ▐ Lint  ▐
       ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟
@@ -80,7 +81,7 @@ Fan-in (left to right)
 Expected: two sources merge into one
 arrowhead on Sink.
 
-image @79,10 c=24 r=7 z=0 C=1 png=240x140
+image @80,10 c=24 r=7 z=0 C=1 png=240x140
           ▗▄▄▄▄▄▄▄▄▄▄▄
           ▐ Source 1 ▐▄▄
           ▐▄▄▄▄▄▄▄▄▄▄▟ ▐  ▗▄▄▄▄▄▄▄
@@ -95,7 +96,7 @@ Diamond (top down)
 Expected: A splits into B and C, which merge
 again into D; D sits directly below A.
 
-image @93,16 c=12 r=15 z=0 C=1 png=120x300
+image @94,16 c=12 r=15 z=0 C=1 png=120x300
                    ▗▄▄▄▄
                    ▐ A ▐
                    ▐▄▄▄▟
@@ -118,7 +119,7 @@ Diamond (left to right)
 Expected: the same diamond, with D directly
 to the right of A.
 
-image @115,10 c=23 r=7 z=0 C=1 png=230x140
+image @116,10 c=23 r=7 z=0 C=1 png=230x140
                    ▗▄▄▄▄
                 ▗▄▟█ B ▐▄▄
           ▗▄▄▄▄ ▐  ▐▄▄▄▟ ▐  ▗▄▄▄▄
@@ -135,7 +136,7 @@ beside B through a dummy position and comes
 back to C; the arrow into C merges with the
 one from B.
 
-image @131,18 c=8 r=15 z=0 C=1 png=80x300
+image @132,18 c=8 r=15 z=0 C=1 png=80x300
                     ▗▄▄▄▄
                     ▐ A ▐
                     ▐▄▄▄▟
@@ -158,7 +159,7 @@ Skip edge (left to right)
 Expected: the same, with the long edge
 passing under B.
 
-image @153,10 c=23 r=5 z=0 C=1 png=230x100
+image @154,10 c=23 r=5 z=0 C=1 png=230x100
                    ▗▄▄▄▄
           ▗▄▄▄▄ ▗▄▟█ B ▐▄▄
           ▐ A ▐▄█  ▐▄▄▄▟ ▐  ▗▄▄▄▄
@@ -173,7 +174,7 @@ one more rank. Short is one rank below Top,
 Mid two, Far three, and Top stays the only
 box in its rank.
 
-image @167,12 c=20 r=20 z=0 C=1 png=200x400
+image @168,12 c=20 r=20 z=0 C=1 png=200x400
                    ▗▄▄▄▄▄▄
                    ▐ Top ▐
                    ▐▄▄▄▄▄▟
@@ -202,7 +203,7 @@ Expected: the same graph turned on its side.
 The long edges pass through the empty ranks
 as straight lines.
 
-image @195,1 c=42 r=9 z=0 C=1 png=420x180
+image @196,1 c=42 r=9 z=0 C=1 png=420x180
             ▗▄▄▄▄▄▄▄▄
          ▗▄▟█ Short ▐
          ▐  ▐▄▄▄▄▄▄▄▟
@@ -221,7 +222,7 @@ each with its own arrows. A box declared
 after the first graph's boxes still sits
 with its own graph.
 
-image @213,10 c=24 r=14 z=0 C=1 png=240x280
+image @214,10 c=24 r=14 z=0 C=1 png=240x280
             ▗▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄
             ▐ First ▐  ▐ Other ▐
             ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟
@@ -243,7 +244,7 @@ Two components (left to right)
 Expected: the graphs are stacked, one above
 the other.
 
-image @234,3 c=37 r=7 z=0 C=1 png=370x140
+image @235,3 c=37 r=7 z=0 C=1 png=370x140
    ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄     ▗▄▄▄▄▄▄▄▄
    ▐ First ▐▄▄▄▟█ Second ▐▄▄▄▄▟█ Third ▐
    ▐▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▟     ▐▄▄▄▄▄▄▄▟
@@ -259,7 +260,7 @@ Expected: Late starts at the rank just above
 End rather than at the top, so its arrow is
 as short as it can be.
 
-image @249,12 c=19 r=19 z=0 C=1 png=190x380
+image @250,12 c=19 r=19 z=0 C=1 png=190x380
             ▗▄▄▄▄▄▄▄▄
             ▐ Start ▐
             ▐▄▄▄▄▄▄▄▟
@@ -279,21 +280,6 @@ image @249,12 c=19 r=19 z=0 C=1 png=190x380
                   ▗▄▄█▙▄▄
                   ▐ End ▐
                   ▐▄▄▄▄▄▟
-
-Needs two tracks (declined for now)
-────────────────────────────────────────────
-
-Expected: every box in the first row links
-to both boxes in the second, so two edges
-must cross and the edges between the rows
-need two tracks. The builtin declines with
-needs tracks, and the source is shown.
-
-  graph TD
-      A --> C
-      A --> D
-      B --> C
-      B --> D
 
 A cycle (declined for now)
 ────────────────────────────────────────────

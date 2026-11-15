@@ -1,0 +1,2 @@
+mdcat: mermaid: fallback: edges touch
+mdcat: mermaid: fallback: crossings: 3 > 2

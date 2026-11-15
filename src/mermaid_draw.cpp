@@ -121,7 +121,7 @@ struct Raster {
 
 // ---- Strokes -------------------------------------------------------------------------------
 
-std::vector<Stroke> strokesOf(const Graph& g, const Layout& lay) {
+std::vector<Stroke> strokesOf(const Graph& g, const Layout& lay, const std::vector<Pt>& crossings) {
     std::vector<Stroke> strokes;
     for (const CellBox& f : lay.nodeFoot) {
         Stroke st;
@@ -179,6 +179,13 @@ std::vector<Stroke> strokesOf(const Graph& g, const Layout& lay) {
             st.pts = {path[i], path[i + 1]};
             st.round = static_cast<unsigned char>((corners.count(path[i]) ? 1 : 0) |
                                                   (corners.count(path[i + 1]) ? 2 : 0));
+            if (path[i].second == path[i + 1].second) {
+                for (const Pt& x : crossings)
+                    if (x.second == path[i].second &&
+                        x.first > std::min(path[i].first, path[i + 1].first) &&
+                        x.first < std::max(path[i].first, path[i + 1].first))
+                        st.breaks.push_back(x.first);
+            }
             auto same = [&](const Stroke& o) { return o.kind == st.kind && o.pts == st.pts; };
             if (std::none_of(strokes.begin(), strokes.end(), same)) strokes.push_back(st);
         }
@@ -268,10 +275,20 @@ bool rasterize(const std::vector<Stroke>& strokes,
                 reason = "segment too short";
                 return false;
             }
-            if (vertical)
+            if (vertical) {
                 ras.rect(cross - hs, begin, cross - hs + s, end);
-            else
-                ras.rect(begin, cross - hs, end, cross - hs + s);
+            } else {
+                // The run breaks for 2s px on either side of each vertical stroke that crosses it.
+                std::vector<int> breaks = st.breaks;
+                std::sort(breaks.begin(), breaks.end());
+                int at = begin;
+                for (int x : breaks) {
+                    int l = m.px(x) - hs - 2 * s, r = m.px(x) - hs + 3 * s;
+                    if (l > at) ras.rect(at, cross - hs, l, cross - hs + s);
+                    at = std::max(at, r);
+                }
+                if (end > at) ras.rect(at, cross - hs, end, cross - hs + s);
+            }
         } else if (st.kind == Stroke::Corner) {
             Pt v = st.pts[0];
             int vdir = st.pts[1].second < v.second ? -1 : 1;
@@ -371,8 +388,8 @@ bool overlap(Pt a0, Pt a1, Pt b0, Pt b1) {
     return aly == bly && std::max(alx, blx) < std::min(ahx, bhx);
 }
 
-// Whether two perpendicular axis-aligned segments touch or cross.
-bool meet(Pt a0, Pt a1, Pt b0, Pt b1) {
+// Whether two perpendicular axis-aligned segments touch or cross, and where.
+bool meet(Pt a0, Pt a1, Pt b0, Pt b1, Pt& at) {
     bool aVert = a0.first == a1.first;
     if (aVert == (b0.first == b1.first)) return false;
     if (!aVert) {
@@ -380,6 +397,7 @@ bool meet(Pt a0, Pt a1, Pt b0, Pt b1) {
         std::swap(a1, b1);
     }
     int x = a0.first, y = b0.second;
+    at = {x, y};
     return std::min(a0.second, a1.second) <= y && y <= std::max(a0.second, a1.second) &&
         std::min(b0.first, b1.first) <= x && x <= std::max(b0.first, b1.first);
 }
@@ -390,6 +408,7 @@ bool validate(const Graph& g,
               const Layout& lay,
               const std::vector<Stroke>& strokes,
               const Grid& grid,
+              const std::vector<Pt>& crossings,
               std::string& reason) {
     // No edge passes through a node or label, except at its own endpoints.
     for (size_t k = 0; k < g.edges.size(); ++k) {
@@ -409,7 +428,8 @@ bool validate(const Graph& g,
             }
         }
     }
-    // No two edges with different sources and different targets share a segment or touch.
+    // No two edges with different sources and different targets share a segment or touch. They may
+    // cross, where one of them bridges the other.
     for (size_t j = 0; j < g.edges.size(); ++j) {
         for (size_t k = j + 1; k < g.edges.size(); ++k) {
             if (g.edges[j].from == g.edges[k].from || g.edges[j].to == g.edges[k].to) continue;
@@ -420,8 +440,10 @@ bool validate(const Graph& g,
                         reason = "edges share a segment";
                         return false;
                     }
-                    if (meet(pj[a], pj[a + 1], pk[b], pk[b + 1])) {
-                        reason = "edges cross";
+                    Pt at;
+                    if (meet(pj[a], pj[a + 1], pk[b], pk[b + 1], at) &&
+                        !std::binary_search(crossings.begin(), crossings.end(), at)) {
+                        reason = "edges touch";
                         return false;
                     }
                 }
@@ -465,7 +487,8 @@ bool validate(const Graph& g,
 bool drawDiagram(
     const Graph& g, const Layout& lay, const Env& env, Diagram& out, std::string& reason) {
     const Metrics m(env);
-    std::vector<Stroke> strokes = strokesOf(g, lay);
+    const std::vector<Pt> crossings = crossingPoints(lay);
+    std::vector<Stroke> strokes = strokesOf(g, lay, crossings);
 
     Grid grid(lay.cols, lay.rows);
     for (const CellBox& f : lay.nodeFoot)
@@ -483,7 +506,7 @@ bool drawDiagram(
         });
     }
 
-    if (!validate(g, lay, strokes, grid, reason)) return false;
+    if (!validate(g, lay, strokes, grid, crossings, reason)) return false;
 
     Raster ras(lay.cols * m.cw, lay.rows * m.ch);
     if (!rasterize(strokes, m, ras, reason)) return false;

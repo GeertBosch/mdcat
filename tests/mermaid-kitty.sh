@@ -4,8 +4,8 @@
 # PNG (strokes) plus ordinary text rows (labels). Anything else is left to the mmdc / source
 # fallback.
 #
-# Checked here, over tests/mermaid-basic.md (widths 80 and 30), tests/mermaid-dag.md (80 and 44) and
-# tests/mermaid-fallback.md:
+# Checked here, over tests/mermaid-basic.md (widths 80 and 30), tests/mermaid-dag.md (80 and 44),
+# tests/mermaid-routing.md (80) and tests/mermaid-fallback.md:
 #   - tests/kitty-preview.py's rendering of the output of `mdcat --mermaid builtin` (text plus each
 #     image as quadrant blocks) equals tests/expected/<fixture>.w<N>.txt, and the
 #     MDCAT_MERMAID_DEBUG=1 stderr equals <fixture>.w<N>.err (UPDATE=1 rewrites both). The
@@ -99,6 +99,7 @@ golden_case() {
 golden_case mermaid-fallback 80
 golden_case mermaid-dag 44
 golden_case mermaid-dag 80
+golden_case mermaid-routing 80
 golden_case mermaid-basic 30
 golden_case mermaid-basic 80
 

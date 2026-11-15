@@ -212,6 +212,19 @@ Several edges leaving a box split off one bus, and several arriving merge into o
 arrowhead. Extra dashes make a link span more ranks: `a ---> b` puts `b` two steps
 after `a`, and `a ----> b` three.
 
+When edges interleave, each bus gets a track of its own between the ranks. An
+edge that has to cross another passes over it on a bridge, and only a dot marks a
+join:
+
+```mermaid
+graph TD
+    src[Source] --> lex[Lexer]
+    src --> doc[Document]
+    cfg[Config] --> lex
+    cfg --> doc
+    ext[Extensions] --> lex
+```
+
 A diagram taller than the terminal isn't shrunk to fit — `gmore` scrolls
 through it like any other content, revealing more of it a row at a time. This
 one is a sequence diagram, which mdcat's own renderer doesn't draw, so it goes

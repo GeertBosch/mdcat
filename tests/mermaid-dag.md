@@ -1,10 +1,11 @@
 # Mermaid graphs with branches and merges
 
 On a Kitty terminal, the built-in renderer draws any acyclic graph of boxes joined
-by `-->` links, as long as the edges between two ranks never need more than one
-track. Checked by `mermaid-kitty.sh` at widths 80 and 44, with `--img kitty` and
-pinned cell sizes. The `.err` goldens name the diagrams that are declined, for
-now, and so are shown as source.
+by `-->` links. The graphs here are trees and merges that need no more than one
+track between two ranks; `mermaid-routing.md` covers the ones that need more.
+Checked by `mermaid-kitty.sh` at widths 80 and 44, with `--img kitty` and pinned
+cell sizes. The `.err` goldens name the diagrams that are declined, for now, and
+so are shown as source.
 
 Where several edges leave one box they share its port and split off a common bus;
 where several arrive they merge into one arrowhead. A dot marks each split or
@@ -161,20 +162,6 @@ graph TD
     m1 --> m2[Two]
     m2 --> e[End]
     late[Late] --> e
-```
-
-## Needs two tracks (declined for now)
-
-Expected: every box in the first row links to both boxes in the second, so two
-edges must cross and the edges between the rows need two tracks. The builtin
-declines with `needs tracks`, and the source is shown.
-
-```mermaid
-graph TD
-    A --> C
-    A --> D
-    B --> C
-    B --> D
 ```
 
 ## A cycle (declined for now)

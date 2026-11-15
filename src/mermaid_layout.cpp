@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <climits>
 #include <functional>
+#include <map>
 #include <set>
 
 #include "mermaid_model.h"
@@ -62,10 +63,125 @@ void placeRank(std::vector<Item>& items,
     }
 }
 
-// Whether the closed intervals [a0, a1] and [b0, b1], each given in either order, share a point.
-bool intervalsMeet(int a0, int a1, int b0, int b1) {
-    return std::max(std::min(a0, a1), std::min(b0, b1)) <=
-        std::min(std::max(a0, a1), std::max(b0, b1));
+// An edge segment between two adjacent ranks: the items at its ends, and where they are across the
+// flow, in half-cell units.
+struct GapSeg {
+    int from, to, xa, xb;
+};
+
+// Choose the track each segment of one gap jogs along, numbered from the source rank; a straight
+// segment gets -1. Returns the number of tracks.
+//
+// Segments that jog are grouped into nets. All the jogging segments of a source with two or more
+// of them form one net, a bus that splits off a common track. The rest are grouped by target, so
+// that a fan-in merges. A net occupies one track, over the span of its ends.
+//
+// A net whose stub (the vertical run from its source to its track, or from its track to its
+// target) lies within another net's span must be on the near side of that net's track, or the stub
+// would cross the other net's run. Those constraints are met by longest-path layering of the nets;
+// nets that do not constrain each other share a track. Where the constraints form a cycle, one
+// net's are reversed, so the crossing is a bridge, not a touch.
+int assignTracks(const std::vector<GapSeg>& segs, std::vector<int>& trackOf) {
+    const size_t count = segs.size();
+    trackOf.assign(count, -1);
+    std::vector<int> netOf(count, -1);
+    std::map<int, int> perSource, outNet, inNet;
+    for (const GapSeg& s : segs)
+        if (s.xa != s.xb) ++perSource[s.from];
+    int nets = 0;
+    for (size_t i = 0; i < count; ++i) {
+        if (segs[i].xa == segs[i].xb || perSource[segs[i].from] < 2) continue;
+        netOf[i] = outNet.emplace(segs[i].from, nets).first->second;
+        nets = std::max(nets, netOf[i] + 1);
+    }
+    for (size_t i = 0; i < count; ++i) {
+        if (segs[i].xa == segs[i].xb || netOf[i] >= 0) continue;
+        netOf[i] = inNet.emplace(segs[i].to, nets).first->second;
+        nets = std::max(nets, netOf[i] + 1);
+    }
+    if (nets == 0) return 0;
+
+    const size_t n = static_cast<size_t>(nets);
+    std::vector<int> lo(n, INT_MAX), hi(n, INT_MIN);
+    std::vector<std::vector<size_t>> members(n);
+    std::vector<std::set<int>> sources(n), targets(n);
+    for (size_t i = 0; i < count; ++i) {
+        if (netOf[i] < 0) continue;
+        size_t p = static_cast<size_t>(netOf[i]);
+        lo[p] = std::min({lo[p], segs[i].xa, segs[i].xb});
+        hi[p] = std::max({hi[p], segs[i].xa, segs[i].xb});
+        members[p].push_back(i);
+        sources[p].insert(segs[i].from);
+        targets[p].insert(segs[i].to);
+    }
+
+    // above[p][q] > 0: p must be above q. The weight is 1 where breaking the constraint makes a
+    // crossing, and large where it makes two edges touch.
+    std::vector<std::vector<int>> above(n, std::vector<int>(n, 0));
+    auto cost = [](int x, int l, int h) { return x > l && x < h ? 1 : 1000; };
+    for (size_t i = 0; i < count; ++i) {
+        if (netOf[i] < 0) continue;
+        size_t p = static_cast<size_t>(netOf[i]);
+        for (size_t q = 0; q < n; ++q) {
+            if (q == p) continue;
+            if (segs[i].xa >= lo[q] && segs[i].xa <= hi[q] && !sources[q].count(segs[i].from))
+                above[p][q] = std::max(above[p][q], cost(segs[i].xa, lo[q], hi[q]));
+            if (segs[i].xb >= lo[q] && segs[i].xb <= hi[q] && !targets[q].count(segs[i].to))
+                above[q][p] = std::max(above[q][p], cost(segs[i].xb, lo[q], hi[q]));
+        }
+    }
+    // Nets whose runs would overlap on one track need different tracks even when no stub forces an
+    // order, unless they only meet where they share a port.
+    for (size_t p = 0; p < n; ++p) {
+        for (size_t q = p + 1; q < n; ++q) {
+            if (above[p][q] || above[q][p]) continue;
+            int l = std::max(lo[p], lo[q]), h = std::min(hi[p], hi[q]);
+            if (l > h) continue;
+            bool shared = false;
+            for (size_t i : members[p])
+                for (size_t j : members[q])
+                    shared = shared ||
+                        (l == h && segs[i].from == segs[j].from && segs[i].xa == l) ||
+                        (l == h && segs[i].to == segs[j].to && segs[i].xb == l);
+            if (!shared) above[p][q] = 1;
+        }
+    }
+
+    std::vector<char> done(n, 0);
+    std::vector<int> level(n, 0);
+    for (size_t step = 0; step < n; ++step) {
+        size_t pick = n;
+        for (size_t x = 0; x < n && pick == n; ++x) {
+            if (done[x]) continue;
+            bool free = true;
+            for (size_t y = 0; y < n; ++y) free = free && (done[y] || !above[y][x]);
+            if (free) pick = x;
+        }
+        if (pick == n) {
+            long best = LONG_MAX;
+            for (size_t x = 0; x < n; ++x) {
+                if (done[x]) continue;
+                long sum = 0;
+                for (size_t y = 0; y < n; ++y)
+                    if (!done[y]) sum += above[y][x];
+                if (sum < best) {
+                    best = sum;
+                    pick = x;
+                }
+            }
+            for (size_t y = 0; y < n; ++y) {
+                if (done[y] || !above[y][pick]) continue;
+                above[pick][y] = std::max(above[pick][y], above[y][pick]);
+                above[y][pick] = 0;
+            }
+        }
+        for (size_t y = 0; y < n; ++y)
+            if (done[y] && above[y][pick]) level[pick] = std::max(level[pick], level[y] + 1);
+        done[pick] = 1;
+    }
+    for (size_t i = 0; i < count; ++i)
+        if (netOf[i] >= 0) trackOf[i] = level[static_cast<size_t>(netOf[i])];
+    return *std::max_element(level.begin(), level.end()) + 1;
 }
 
 }  // namespace
@@ -250,39 +366,30 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
     }
 
     // Position along the flow. A rank is as thick as its thickest node (1 when it holds only
-    // dummies). Between two ranks lies a gap with at most one track, the line along which edges
-    // jog sideways; it is the second cell of the gap. Two edges with different sources and
-    // different targets must not have jogs that overlap, or they would need separate tracks.
+    // dummies). Between two ranks lies a gap that holds one cell for each track, the lines along
+    // which edges jog sideways, plus one cell where the edges leave and one where they arrive.
     std::vector<int> thick(ranks, 1);
     for (size_t i = 0; i < n; ++i) {
         size_t r = static_cast<size_t>(rank[i]);
         thick[r] = std::max(thick[r], td ? tune::kNodeRows : nodeW[i]);
     }
-    std::vector<std::vector<std::pair<int, int>>> gapSegs(ranks);
+    std::vector<std::vector<GapSeg>> gapSegs(ranks);
     for (const std::vector<int>& c : chain)
         for (size_t i = 0; i + 1 < c.size(); ++i)
             gapSegs[static_cast<size_t>(items[static_cast<size_t>(c[i])].rank)].push_back(
-                {c[i], c[i + 1]});
+                {c[i], c[i + 1], centre(c[i]), centre(c[i + 1])});
     std::vector<int> start(ranks, 0);
+    std::map<std::pair<int, int>, int> trackOf;  // by the items at a segment's ends
     for (size_t r = 0; r + 1 < ranks; ++r) {
-        const auto& segs = gapSegs[r];
-        bool jog = false;
-        for (size_t j = 0; j < segs.size(); ++j) {
-            int ja = centre(segs[j].first), jb = centre(segs[j].second);
-            jog = jog || ja != jb;
-            for (size_t k = j + 1; k < segs.size(); ++k) {
-                if (segs[j].first == segs[k].first || segs[j].second == segs[k].second) continue;
-                if (intervalsMeet(ja, jb, centre(segs[k].first), centre(segs[k].second))) {
-                    reason = "needs tracks";
-                    return false;
-                }
-            }
-        }
-        int gap = !td ? tune::kGapLr : jog ? tune::kGapTdTrack : tune::kGapTd;
+        std::vector<int> tracks;
+        int used = assignTracks(gapSegs[r], tracks);
+        for (size_t j = 0; j < tracks.size(); ++j)
+            if (tracks[j] >= 0) trackOf[{gapSegs[r][j].from, gapSegs[r][j].to}] = tracks[j];
+        int gap = td ? tune::kGapTd + used : std::max(tune::kGapLr, used + 2);
         start[r + 1] = start[r] + thick[r] + gap;
     }
     const int along = start[ranks - 1] + thick[ranks - 1];
-    auto track = [&](size_t r) { return 2 * (start[r] + thick[r] + 1) + 1; };  // hu
+    auto track = [&](size_t r, int t) { return 2 * (start[r] + thick[r] + 1 + t) + 1; };  // hu
     auto point = [&](int cross, int flow) { return td ? Pt{cross, flow} : Pt{flow, cross}; };
 
     lay.cols = td ? across : along;
@@ -319,7 +426,8 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
         for (size_t i = 0; i + 1 < c.size(); ++i) {
             int a = centre(c[i]), b = centre(c[i + 1]);
             if (a == b) continue;
-            int t = track(static_cast<size_t>(items[static_cast<size_t>(c[i])].rank));
+            int t = track(static_cast<size_t>(items[static_cast<size_t>(c[i])].rank),
+                          trackOf.at({c[i], c[i + 1]}));
             path.push_back(point(a, t));
             path.push_back(point(b, t));
         }
@@ -337,7 +445,37 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
             out.push_back(p);
         }
     }
+    const size_t crossings = crossingPoints(lay).size();
+    if (crossings > static_cast<size_t>(tune::kMaxCrossings)) {
+        reason =
+            "crossings: " + std::to_string(crossings) + " > " + std::to_string(tune::kMaxCrossings);
+        return false;
+    }
     return true;
+}
+
+std::vector<Pt> crossingPoints(const Layout& lay) {
+    std::set<Pt> found;
+    for (size_t j = 0; j < lay.edgePath.size(); ++j) {
+        for (size_t k = j + 1; k < lay.edgePath.size(); ++k) {
+            const std::vector<Pt>&pj = lay.edgePath[j], &pk = lay.edgePath[k];
+            for (size_t a = 0; a + 1 < pj.size(); ++a) {
+                for (size_t b = 0; b + 1 < pk.size(); ++b) {
+                    Pt h0 = pj[a], h1 = pj[a + 1], v0 = pk[b], v1 = pk[b + 1];
+                    if (h0.second != h1.second) {
+                        std::swap(h0, v0);
+                        std::swap(h1, v1);
+                    }
+                    if (h0.second != h1.second || v0.first != v1.first) continue;
+                    int x = v0.first, y = h0.second;
+                    if (x > std::min(h0.first, h1.first) && x < std::max(h0.first, h1.first) &&
+                        y > std::min(v0.second, v1.second) && y < std::max(v0.second, v1.second))
+                        found.insert({x, y});
+                }
+            }
+        }
+    }
+    return std::vector<Pt>(found.begin(), found.end());
 }
 
 }  // namespace mermaid
