@@ -33,11 +33,13 @@ $(B)/highlight.o: $(S)/highlight.cpp $(S)/highlight.h | $(B)
 $(B)/png_write.o: $(S)/png_write.cpp $(S)/png_write.h | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
 
-$(B)/mermaid.o: $(S)/mermaid.cpp $(S)/mermaid.h $(S)/png_write.h | $(B)
+MERMAID_OBJS = $(B)/mermaid.o $(B)/mermaid_parse.o $(B)/mermaid_layout.o $(B)/mermaid_draw.o
+
+$(MERMAID_OBJS): $(B)/%.o: $(S)/%.cpp $(S)/mermaid.h $(S)/mermaid_model.h $(S)/png_write.h | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
 
-$(B)/mdcat: $(S)/mdcat.cpp $(S)/unicode_width.h $(S)/highlight.h $(S)/mermaid.h $(S)/gmore_run.h $(S)/tty_guard.h $(GMORE_OBJS) $(B)/highlight.o $(B)/mermaid.o $(B)/png_write.o | $(B)
-	$(CXX) $(CXXFLAGS) $(PTHREAD) -I$(S) -o $@ $(S)/mdcat.cpp $(B)/highlight.o $(B)/mermaid.o $(B)/png_write.o $(GMORE_OBJS)
+$(B)/mdcat: $(S)/mdcat.cpp $(S)/unicode_width.h $(S)/highlight.h $(S)/mermaid.h $(S)/gmore_run.h $(S)/tty_guard.h $(GMORE_OBJS) $(B)/highlight.o $(MERMAID_OBJS) $(B)/png_write.o | $(B)
+	$(CXX) $(CXXFLAGS) $(PTHREAD) -I$(S) -o $@ $(S)/mdcat.cpp $(B)/highlight.o $(MERMAID_OBJS) $(B)/png_write.o $(GMORE_OBJS)
 
 $(B)/gmore: $(S)/gmore.cpp $(S)/gmore_run.h $(GMORE_OBJS) | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -o $@ $(S)/gmore.cpp $(GMORE_OBJS)
@@ -95,6 +97,10 @@ FMT_SRCS := \
 	$(S)/highlight.h \
 	$(S)/mermaid.cpp \
 	$(S)/mermaid.h \
+	$(S)/mermaid_draw.cpp \
+	$(S)/mermaid_layout.cpp \
+	$(S)/mermaid_model.h \
+	$(S)/mermaid_parse.cpp \
 	$(S)/png_write.cpp \
 	$(S)/png_write.h \
 	$(S)/tty_guard.h \
@@ -145,6 +151,9 @@ SRCS := \
 	$(S)/gmore_run.cpp \
 	$(S)/highlight.cpp \
 	$(S)/mermaid.cpp \
+	$(S)/mermaid_draw.cpp \
+	$(S)/mermaid_layout.cpp \
+	$(S)/mermaid_parse.cpp \
 	$(S)/png_write.cpp \
 	$(S)/mdcat.cpp \
 	$(S)/gmore.cpp
