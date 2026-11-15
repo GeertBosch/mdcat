@@ -35,7 +35,7 @@ touch. The steps form a dependency chain:
 | ---- | ----- | ----- |
 | 0 | Probe: text over a Kitty image (user-run) | — |
 | 1 | Render the README's two diagrams | — (0's results refine it) |
-| 2 | Previewer, PNG compression | 1 |
+| 2 | Previewer | 1 |
 | 3 | Override flag, fallback reasons, fallback fixture | 1 |
 | 4 | Restructure into model / parse / layout / draw | 2, 3 |
 | 5 | Trees, merges, multi-rank edges | 4 |
@@ -329,10 +329,9 @@ struct Stroke {                                   // what the rasterizer consume
 
 - `src/png_write.{h,cpp}` (Step 1): `std::string encodePngRgba(int w, int h, const
   std::vector<uint32_t>& rgba)` writes colour type 6 at 8 bits per channel.
-  - Step 1 emits *stored* (uncompressed) deflate blocks.
-  - Step 2 switches to fixed-Huffman deflate behind the same API: filter *Up* on
-    every row but the first, greedy matches at distance 1 and distance 4, lengths
-    3–258.
+  - It emits *stored* (uncompressed) deflate blocks. Compression is deliberately
+    not implemented: the image is local pixels, and the bytes are only a size
+    cost, not a correctness one.
   - CRC-32 and Adler-32 are hand-written. There is no zlib dependency.
 - `src/mermaid.h` (Step 1): the public API, independent of mdcat internals.
 
@@ -497,7 +496,7 @@ Step 1 does not need to wait for the results.
 
 **Goal:** the smallest change that draws the README's existing diagrams with
 Kitty strokes and text labels. There is no flag, no debug output, no previewer,
-no compression and no general layout yet. These two diagrams are the whole spec:
+no general layout yet. These two diagrams are the whole spec:
 
 ````
 ```mermaid
@@ -590,28 +589,21 @@ Work:
    diagrams still go to `mmdc`, and otherwise show as source. Keep the "taller
    than the terminal" sentence true. Leave the diagrams unchanged.
 
-**Out of scope:** the previewer, compression, flags, reasons, and
+**Out of scope:** the previewer, flags, reasons, and
 anything beyond a simple path.
 
 **Done when:** `make check` passes, and the user sees both README diagrams
 correctly in a Kitty terminal, directly (`./mdcat --img kitty README.md | cat`)
 and in `gmore` while scrolling through the tall TD chain.
 
-## Step 2 — Previewer, PNG compression
+## Step 2 — Previewer
 
-**Assumes:** Step 1. Both items here are small and independent; together they
-finish the Kitty infrastructure.
+**Assumes:** Step 1.
 
-Work:
-
-1. **`tests/kitty-preview.py`**, as specified under *Testing approach*. Switch
-   `tests/mermaid-kitty.sh` to it and drop the perl APC summary. Regenerate
-   `mermaid-basic.w80.txt` and check that it shows both chains, with arrowheads
-   touching the boxes.
-2. **Compression** in `src/png_write.cpp`, as specified under *Code structure*.
-   The preview golden must stay **identical**, because the pixels do not change.
-   Add a harness assertion that the README TD chain's PNG is under 8 KB at
-   10×20 cells.
+Work: **`tests/kitty-preview.py`**, as specified under *Testing approach*. Switch
+`tests/mermaid-kitty.sh` to it and drop the perl APC summary. Regenerate
+`mermaid-basic.w80.txt` and check that it shows both chains, with arrowheads
+touching the boxes.
 
 **Out of scope:** any rendering change.
 
