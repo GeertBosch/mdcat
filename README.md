@@ -204,8 +204,13 @@ ordinary code panel, so the document is never worse off than plain text.
 ```mermaid
 graph LR
     parse[Parse] --> render[Render]
-    render --> output[Output]
+    render --> terminal[Terminal]
+    render --> pager[Pager]
 ```
+
+Several edges leaving a box split off one bus, and several arriving merge into one
+arrowhead. Extra dashes make a link span more ranks: `a ---> b` puts `b` two steps
+after `a`, and `a ----> b` three.
 
 A diagram taller than the terminal isn't shrunk to fit — `gmore` scrolls
 through it like any other content, revealing more of it a row at a time. This

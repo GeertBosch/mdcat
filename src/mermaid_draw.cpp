@@ -1,6 +1,8 @@
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstdlib>
+#include <set>
 
 #include "mermaid_model.h"
 #include "png_write.h"
@@ -16,6 +18,7 @@ struct Metrics {
     int hs;        // half the stroke width
     int headLen;   // arrowhead length
     int headHalf;  // arrowhead half-width
+    int ri;        // inner radius of a rounded corner, at most
     uint32_t rgb;
 
     explicit Metrics(const Env& env)
@@ -25,6 +28,7 @@ struct Metrics {
           hs(s / 2),
           headLen(std::max(6, cw)),
           headHalf(std::max(3, (45 * cw + 50) / 100)),  // round(0.45 * cw)
+          ri(std::max(2, std::min(cw / 2, ch / 4))),
           rgb(env.darkTheme ? 0xc8c8c8u : 0x505050u) {}
 
     int px(int hu) const { return hu * cw / 2; }  // half-cell units -> pixels
@@ -50,6 +54,42 @@ struct Raster {
     void rect(int x0, int y0, int x1, int y1) {
         for (int y = y0; y < y1; ++y)
             for (int x = x0; x < x1; ++x) plot(x, y, 255);
+    }
+
+    // The part of a ring around the pixel corner (ox, oy), between radii ri and ro px, that lies
+    // toward (qx, qy), each +1 or -1. Each pixel is sampled 4x4.
+    void arc(int ox, int oy, int qx, int qy, int ri, int ro) {
+        for (int y = oy - ro - 1; y < oy + ro + 2; ++y) {
+            for (int x = ox - ro - 1; x < ox + ro + 2; ++x) {
+                int hits = 0;
+                for (int j = 0; j < 4; ++j) {
+                    for (int i = 0; i < 4; ++i) {
+                        long dx = 8L * x + 2 * i + 1 - 8L * ox, dy = 8L * y + 2 * j + 1 - 8L * oy;
+                        long d2 = dx * dx + dy * dy;
+                        if (dx * qx > 0 && dy * qy > 0 && d2 >= 64L * ri * ri &&
+                            d2 <= 64L * ro * ro)
+                            ++hits;
+                    }
+                }
+                if (hits) plot(x, y, (hits * 255 + 8) / 16);
+            }
+        }
+    }
+
+    // A filled disc centred at (cx8, cy8), in eighths of a pixel, of radius r8 eighths.
+    void disc(int cx8, int cy8, int r8) {
+        for (int y = cy8 / 8 - r8 / 8 - 1; y <= cy8 / 8 + r8 / 8 + 1; ++y) {
+            for (int x = cx8 / 8 - r8 / 8 - 1; x <= cx8 / 8 + r8 / 8 + 1; ++x) {
+                int hits = 0;
+                for (int j = 0; j < 4; ++j) {
+                    for (int i = 0; i < 4; ++i) {
+                        long dx = 8L * x + 2 * i + 1 - cx8, dy = 8L * y + 2 * j + 1 - cy8;
+                        if (dx * dx + dy * dy <= static_cast<long>(r8) * r8) ++hits;
+                    }
+                }
+                if (hits) plot(x, y, (hits * 255 + 8) / 16);
+            }
+        }
     }
 
     // A filled triangle with its tip at (tipX8, tipY8), in eighths of a pixel, pointing down
@@ -90,6 +130,46 @@ std::vector<Stroke> strokesOf(const Graph& g, const Layout& lay) {
                   {2 * (f.col + f.cols) - 1, 2 * (f.row + f.rows) - 1}};
         strokes.push_back(st);
     }
+
+    // Where edges bend, and which bends are junctions. Edges that leave one port, or arrive at one,
+    // share runs, so a bend of one edge can lie on another's straight run. A bend where exactly two
+    // directions meet is a corner and is rounded. Where three or more meet, a bus splits or merges:
+    // the ends stay square and a dot marks the junction.
+    std::vector<std::pair<Pt, Pt>> runs;
+    std::set<Pt> bends;
+    for (const std::vector<Pt>& path : lay.edgePath) {
+        for (size_t i = 0; i + 1 < path.size(); ++i) runs.push_back({path[i], path[i + 1]});
+        for (size_t i = 1; i + 1 < path.size(); ++i) bends.insert(path[i]);
+    }
+    std::set<Pt> corners;
+    for (const Pt& v : bends) {
+        std::array<bool, 4> dir{};  // up, down, left, right
+        for (const auto& run : runs) {
+            Pt a = run.first, b = run.second;
+            bool vertical = a.first == b.first;
+            int fixed = vertical ? a.first : a.second, at = vertical ? v.first : v.second;
+            int lo = vertical ? std::min(a.second, b.second) : std::min(a.first, b.first);
+            int hi = vertical ? std::max(a.second, b.second) : std::max(a.first, b.first);
+            int pos = vertical ? v.second : v.first;
+            if (fixed != at || pos < lo || pos > hi) continue;
+            if (pos > lo) dir[vertical ? 0 : 2] = true;
+            if (pos < hi) dir[vertical ? 1 : 3] = true;
+        }
+        int count = static_cast<int>(std::count(dir.begin(), dir.end(), true));
+        Stroke st;
+        if (count >= 3) {
+            st.kind = Stroke::Dot;
+            st.pts = {v};
+        } else {
+            st.kind = Stroke::Corner;
+            st.pts = {v,
+                      {v.first, v.second + (dir[0] ? -1 : 1)},
+                      {v.first + (dir[2] ? -1 : 1), v.second}};
+            corners.insert(v);
+        }
+        strokes.push_back(st);
+    }
+
     for (size_t k = 0; k < g.edges.size(); ++k) {
         const std::vector<Pt>& path = lay.edgePath[k];
         for (size_t i = 0; i + 1 < path.size(); ++i) {
@@ -97,20 +177,42 @@ std::vector<Stroke> strokesOf(const Graph& g, const Layout& lay) {
             st.kind = Stroke::Segment;
             st.line = g.edges[k].line;
             st.pts = {path[i], path[i + 1]};
-            strokes.push_back(st);
+            st.round = static_cast<unsigned char>((corners.count(path[i]) ? 1 : 0) |
+                                                  (corners.count(path[i + 1]) ? 2 : 0));
+            auto same = [&](const Stroke& o) { return o.kind == st.kind && o.pts == st.pts; };
+            if (std::none_of(strokes.begin(), strokes.end(), same)) strokes.push_back(st);
         }
         if (g.edges[k].head == End::Arrow && path.size() >= 2) {
             Stroke st;
             st.kind = Stroke::Arrowhead;
             st.line = g.edges[k].line;
             st.pts = {path.back(), path[path.size() - 2]};
-            strokes.push_back(st);
+            auto same = [&](const Stroke& o) { return o.kind == st.kind && o.pts[0] == st.pts[0]; };
+            if (std::none_of(strokes.begin(), strokes.end(), same)) strokes.push_back(st);
         }
     }
     return strokes;
 }
 
 // ---- Rasterizer ----------------------------------------------------------------------------
+
+// The inner radius of the rounded corner at v: the usual one, made smaller where a run between two
+// corners is too short for both arcs.
+int cornerRadius(const std::vector<Stroke>& strokes, const Metrics& m, Pt v) {
+    int r = m.ri;
+    for (const Stroke& st : strokes) {
+        if (st.kind != Stroke::Segment) continue;
+        for (int end = 0; end < 2; ++end) {
+            if (st.pts[static_cast<size_t>(end)] != v || !(st.round & (1 << end))) continue;
+            Pt far = st.pts[static_cast<size_t>(1 - end)];
+            bool farRounded = st.round & (2 >> end);
+            int len = std::abs(m.px(far.first) - m.px(v.first)) +
+                std::abs(m.py(far.second) - m.py(v.second));
+            r = std::min(r, farRounded ? (len - m.s) / 2 : len);
+        }
+    }
+    return r;
+}
 
 // Draw the strokes. Arrows run from one outline to the next; a shaft stops where its arrowhead
 // begins, and the head's tip touches the target's outline.
@@ -129,28 +231,64 @@ bool rasterize(const std::vector<Stroke>& strokes,
             ras.rect(r - hs, t - hs, r - hs + s, b - hs + s);
         } else if (st.kind == Stroke::Segment) {
             Pt a = st.pts[0], b = st.pts[1];
+            bool roundA = st.round & 1, roundB = st.round & 2;
+            bool vertical = a.first == b.first;
+            if (vertical ? b.second < a.second : b.first < a.first) {
+                std::swap(a, b);
+                std::swap(roundA, roundB);
+            }
             bool tipped = std::any_of(strokes.begin(), strokes.end(), [&](const Stroke& h) {
                 return h.kind == Stroke::Arrowhead && h.pts[0] == b;
             });
-            bool vertical = a.first == b.first;
-            int cross = vertical ? m.px(a.first) : m.py(a.second);
-            int from = vertical ? m.py(a.second) : m.px(a.first);
-            int to = vertical ? m.py(b.second) : m.px(b.first);
-            if (to < from) {
+            bool tippedBack = std::any_of(strokes.begin(), strokes.end(), [&](const Stroke& h) {
+                return h.kind == Stroke::Arrowhead && h.pts[0] == a;
+            });
+            if (tippedBack) {
                 reason = "unsupported stroke direction";
                 return false;
             }
-            // The shaft clears the source outline and ends at the target's outer edge, or where the
-            // head begins.
-            int end = tipped ? to - hs - m.headLen : to - hs + s;
-            if (tipped && end < from - hs + s) {
+            int cross = vertical ? m.px(a.first) : m.py(a.second);
+            int from = vertical ? m.py(a.second) : m.px(a.first);
+            int to = vertical ? m.py(b.second) : m.px(b.first);
+            // A run starts at its source outline's outer edge, or where a corner's arc ends. It
+            // ends where its arrowhead begins, at a corner's arc, or at the far edge of the stroke.
+            int roA = roundA ? cornerRadius(strokes, m, a) + s : 0;
+            int roB = roundB ? cornerRadius(strokes, m, b) + s : 0;
+            if ((roundA && roA <= s) || (roundB && roB <= s)) {
+                reason = "segment too short";
+                return false;
+            }
+            int begin = roundA ? from - hs + roA : from - hs;
+            int end = roundB ? to - hs + s - roB : tipped ? to - hs - m.headLen : to - hs + s;
+            if (tipped && end < begin + s) {
                 reason = "arrow too short";
                 return false;
             }
+            if (end < begin) {
+                reason = "segment too short";
+                return false;
+            }
             if (vertical)
-                ras.rect(cross - hs, from - hs, cross - hs + s, end);
+                ras.rect(cross - hs, begin, cross - hs + s, end);
             else
-                ras.rect(from - hs, cross - hs, end, cross - hs + s);
+                ras.rect(begin, cross - hs, end, cross - hs + s);
+        } else if (st.kind == Stroke::Corner) {
+            Pt v = st.pts[0];
+            int vdir = st.pts[1].second < v.second ? -1 : 1;
+            int hdir = st.pts[2].first < v.first ? -1 : 1;
+            int ri = cornerRadius(strokes, m, v), ro = ri + s;
+            if (ri < 1) {
+                reason = "segment too short";
+                return false;
+            }
+            int xv = m.px(v.first) - hs, yh = m.py(v.second) - hs;
+            int ox = hdir > 0 ? xv + ro : xv + s - ro;
+            int oy = vdir > 0 ? yh + ro : yh + s - ro;
+            ras.arc(ox, oy, -hdir, -vdir, ri, ro);
+        } else if (st.kind == Stroke::Dot) {
+            ras.disc(8 * (m.px(st.pts[0].first) - hs) + 4 * s,
+                     8 * (m.py(st.pts[0].second) - hs) + 4 * s,
+                     12 * s);
         } else if (st.kind == Stroke::Arrowhead) {
             Pt tip = st.pts[0], base = st.pts[1];
             bool down = tip.first == base.first;
@@ -233,6 +371,19 @@ bool overlap(Pt a0, Pt a1, Pt b0, Pt b1) {
     return aly == bly && std::max(alx, blx) < std::min(ahx, bhx);
 }
 
+// Whether two perpendicular axis-aligned segments touch or cross.
+bool meet(Pt a0, Pt a1, Pt b0, Pt b1) {
+    bool aVert = a0.first == a1.first;
+    if (aVert == (b0.first == b1.first)) return false;
+    if (!aVert) {
+        std::swap(a0, b0);
+        std::swap(a1, b1);
+    }
+    int x = a0.first, y = b0.second;
+    return std::min(a0.second, a1.second) <= y && y <= std::max(a0.second, a1.second) &&
+        std::min(b0.first, b1.first) <= x && x <= std::max(b0.first, b1.first);
+}
+
 // Turn layout bugs into fallbacks instead of misleading pictures. Reads the occupancy grid and the
 // stroke list, not the pixels.
 bool validate(const Graph& g,
@@ -258,7 +409,7 @@ bool validate(const Graph& g,
             }
         }
     }
-    // No two edges with different sources and different targets share a segment.
+    // No two edges with different sources and different targets share a segment or touch.
     for (size_t j = 0; j < g.edges.size(); ++j) {
         for (size_t k = j + 1; k < g.edges.size(); ++k) {
             if (g.edges[j].from == g.edges[k].from || g.edges[j].to == g.edges[k].to) continue;
@@ -267,6 +418,10 @@ bool validate(const Graph& g,
                 for (size_t b = 0; b + 1 < pk.size(); ++b) {
                     if (overlap(pj[a], pj[a + 1], pk[b], pk[b + 1])) {
                         reason = "edges share a segment";
+                        return false;
+                    }
+                    if (meet(pj[a], pj[a + 1], pk[b], pk[b + 1])) {
+                        reason = "edges cross";
                         return false;
                     }
                 }

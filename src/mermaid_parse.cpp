@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cctype>
 #include <map>
 
@@ -136,18 +137,23 @@ struct Parser {
         return true;
     }
 
-    // Parse `node --> node`, the only statement understood so far.
+    // Parse `node --> node`, the only statement understood so far. Each dash beyond the two before
+    // the head makes the link span one more rank: `-->` is 1, `--->` is 2.
     bool parseStatement(const std::string& line) {
         size_t p = 0;
         int from = 0, to = 0;
         if (!parseNode(line, p, from)) return false;
-        if (line.compare(p, 3, "-->") != 0) return fail(kUnsupportedSyntax);
-        p += 3;
+        size_t dashes = 0;
+        while (p + dashes < line.size() && line[p + dashes] == '-') ++dashes;
+        if (dashes < 2 || p + dashes >= line.size() || line[p + dashes] != '>')
+            return fail(kUnsupportedSyntax);
+        p += dashes + 1;
         if (!parseNode(line, p, to)) return false;
         if (p != line.size()) return fail(kUnsupportedSyntax);
         Edge e;
         e.from = from;
         e.to = to;
+        e.minlen = static_cast<int>(std::min<size_t>(dashes - 1, tune::kMaxRanks));
         g.edges.push_back(e);
         return true;
     }
@@ -170,7 +176,7 @@ bool parseFlowchart(const std::vector<std::string>& body, Graph& g, std::string&
         }
     }
     if (!sawHeader) {
-        reason = "not a simple path";
+        reason = "empty diagram";
         return false;
     }
     g = std::move(ps.g);

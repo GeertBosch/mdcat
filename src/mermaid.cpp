@@ -11,7 +11,7 @@ bool render(const std::vector<std::string>& body,
     Graph g;
     if (!parseFlowchart(body, g, reason)) return false;
     Layout lay;
-    if (!layoutChain(g, env, lay, reason)) return false;
+    if (!layoutGraph(g, env, lay, reason)) return false;
     if (lay.cols > env.availCols) {
         reason = "too wide: " + std::to_string(lay.cols) + " > " + std::to_string(env.availCols);
         return false;

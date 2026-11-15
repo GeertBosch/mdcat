@@ -1,0 +1,3 @@
+mdcat: mermaid: fallback: needs tracks
+mdcat: mermaid: fallback: cycle
+mdcat: mermaid: fallback: parallel edges

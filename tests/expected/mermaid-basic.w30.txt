@@ -4,8 +4,8 @@ Mermaid flowcharts drawn by mdcat
 On a terminal with the Kitty
 graphics protocol, a
 ```mermaid  block holding a
-simple chain of boxes is drawn
-by mdcat itself: the boxes and
+flowchart of boxes is drawn by
+mdcat itself: the boxes and
 arrows are one transparent
 image, and the labels are
 ordinary text in the cells
@@ -15,7 +15,8 @@ renders it with --img kitty
 and pinned cell sizes. Other
 terminals, and every diagram
 outside this subset, behave as
-before.
+before. mermaid-dag.md covers
+the branching shapes in depth.
 
 Left to right
 ──────────────────────────────
@@ -41,7 +42,7 @@ run through one column. In
 gmore the diagram scrolls a
 row at a time.
 
-image @43,9 c=11 r=48 z=0 C=1 png=110x960
+image @44,9 c=11 r=48 z=0 C=1 png=110x960
           ▗▄▄▄▄▄▄▄▄
           ▐ Start ▐
           ▐▄▄▄▄▄▄▄▟
@@ -94,11 +95,18 @@ image @43,9 c=11 r=48 z=0 C=1 png=110x960
 Branching
 ──────────────────────────────
 
-Expected: not a simple path,
-so the source is shown as a
-code panel.
+Expected: A above B and C,
+with one arrow from A
+splitting into two.
 
-  graph TD
-      A --> B
-      A --> C
+image @100,9 c=12 r=9 z=0 C=1 png=120x180
+            ▗▄▄▄▄
+            ▐ A ▐
+            ▐▄▄▄▟
+              ▐
+           ▗▄▄█▄▄▄▄
+           ▐      ▐
+         ▗▄█▙▄  ▗▄█▙▄
+         ▐ B ▐  ▐ C ▐
+         ▐▄▄▄▟  ▐▄▄▄▟
 

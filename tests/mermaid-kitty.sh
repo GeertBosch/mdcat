@@ -1,9 +1,11 @@
 #!/bin/sh
 # mdcat's built-in Mermaid flowcharts (docs/plan-mermaid-flowcharts.md, ADR 0004): on a Kitty
-# terminal a simple-chain ```mermaid block is drawn as one transparent PNG (strokes) plus ordinary
-# text rows (labels). Anything else is left to the mmdc / source fallback.
+# terminal an acyclic ```mermaid flowchart of boxes joined by --> links is drawn as one transparent
+# PNG (strokes) plus ordinary text rows (labels). Anything else is left to the mmdc / source
+# fallback.
 #
-# Checked here, over tests/mermaid-basic.md (widths 80 and 30) and tests/mermaid-fallback.md:
+# Checked here, over tests/mermaid-basic.md (widths 80 and 30), tests/mermaid-dag.md (80 and 44) and
+# tests/mermaid-fallback.md:
 #   - tests/kitty-preview.py's rendering of the output of `mdcat --mermaid builtin` (text plus each
 #     image as quadrant blocks) equals tests/expected/<fixture>.w<N>.txt, and the
 #     MDCAT_MERMAID_DEBUG=1 stderr equals <fixture>.w<N>.err (UPDATE=1 rewrites both). The
@@ -18,7 +20,7 @@
 #   - neither piped output without --img nor --img sixel contains a Kitty APC.
 #
 # Cell metrics are pinned (MDCAT_CELL_W/H) so the PNG bytes are deterministic. mmdc is hidden from
-# PATH so the branching diagram falls back to its source regardless of the machine.
+# PATH so a declined diagram falls back to its source regardless of the machine.
 #
 # Needs python3 (SKIP otherwise).
 #
@@ -95,6 +97,8 @@ golden_case() {
 }
 
 golden_case mermaid-fallback 80
+golden_case mermaid-dag 44
+golden_case mermaid-dag 80
 golden_case mermaid-basic 30
 golden_case mermaid-basic 80
 
@@ -118,8 +122,8 @@ for c in chunks:
             sys.exit("first chunk lacks %s=%s: %r" % (k.decode(), v.decode(), ctrl))
     if b"c" not in keys or b"r" not in keys:
         sys.exit("first chunk lacks c=/r=")
-if firsts != 2:
-    sys.exit("expected 2 images, got %d" % firsts)
+if firsts != 3:
+    sys.exit("expected 3 images, got %d" % firsts)
 PY
 ); then
     pass

@@ -2,10 +2,11 @@ Mermaid flowcharts drawn by mdcat
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 On a terminal with the Kitty graphics protocol, a  ```mermaid  block holding a
-simple chain of boxes is drawn by mdcat itself: the boxes and arrows are one
+flowchart of boxes is drawn by mdcat itself: the boxes and arrows are one
 transparent image, and the labels are ordinary text in the cells over it.
 Checked by mermaid-kitty.sh, which renders it with --img kitty and pinned cell
 sizes. Other terminals, and every diagram outside this subset, behave as before.
+mermaid-dag.md covers the branching shapes in depth.
 
 Left to right
 ────────────────────────────────────────────────────────────────────────────────
@@ -13,7 +14,7 @@ Left to right
 Expected: three boxes in a row joined by arrows. Every arrowhead touches the
 next box's outline, and each label is centred in its box.
 
-image @15,21 c=37 r=3 z=0 C=1 png=370x60
+image @16,21 c=37 r=3 z=0 C=1 png=370x60
                      ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄
                      ▐ Parse ▐▄▄▄▟█ Render ▐▄▄▄▟█ Output ▐
                      ▐▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▟
@@ -25,7 +26,7 @@ Expected: ten boxes in a column, 48 rows tall (taller than most terminals),
 joined by vertical arrows that all run through one column. In gmore the diagram
 scrolls a row at a time.
 
-image @26,34 c=11 r=48 z=0 C=1 png=110x960
+image @27,34 c=11 r=48 z=0 C=1 png=110x960
                                    ▗▄▄▄▄▄▄▄▄
                                    ▐ Start ▐
                                    ▐▄▄▄▄▄▄▄▟
@@ -78,9 +79,16 @@ image @26,34 c=11 r=48 z=0 C=1 png=110x960
 Branching
 ────────────────────────────────────────────────────────────────────────────────
 
-Expected: not a simple path, so the source is shown as a code panel.
+Expected: A above B and C, with one arrow from A splitting into two.
 
-  graph TD
-      A --> B
-      A --> C
+image @81,34 c=12 r=9 z=0 C=1 png=120x180
+                                     ▗▄▄▄▄
+                                     ▐ A ▐
+                                     ▐▄▄▄▟
+                                       ▐
+                                    ▗▄▄█▄▄▄▄
+                                    ▐      ▐
+                                  ▗▄█▙▄  ▗▄█▙▄
+                                  ▐ B ▐  ▐ C ▐
+                                  ▐▄▄▄▟  ▐▄▄▄▟
 
