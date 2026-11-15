@@ -23,7 +23,7 @@ headings: ***italics*** and `code` render correctly.
 *Italic*, **bold**, `code spans`, and [hyperlinks](https://example.com) all
 render with appropriate terminal styling — markup characters are consumed,
 not printed. Hyperlinks use OSC 8 escape sequences, which are clickable in
-iTerm2, Kitty, WezTerm, and most modern terminals.
+iTerm2, Kitty, and most modern terminals.
 
 ### Tables
 
@@ -58,7 +58,7 @@ column width while preserving aspect ratio. Supported formats: **PNG**, **JPEG**
 | ![example.png (PNG)](tests/img/example.png) | <img src="tests/img/joan-mitchell.jpg" alt="Joan Mitchell (JPEG)"> | <img src="tests/img/sunflower.gif" alt="Sunflower (GIF)"> | <img src="tests/img/chessboard.svg" alt="Chessboard (SVG)"> |
 
 mdcat chooses a graphics protocol automatically: the **Kitty graphics protocol**
-on terminals that support it (VSCode, iTerm2, Ghostty/Orbstack, Kitty, WezTerm),
+on terminals that support it (VSCode, iTerm2, Ghostty/Orbstack, Kitty),
 falling back to **sixel** elsewhere. Kitty is preferred because it sizes images
 in character cells, so they lay out correctly **over SSH** — the remote host
 needn't know the local terminal's pixel geometry. On terminals without any
