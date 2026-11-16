@@ -445,6 +445,92 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
             if (find(j) == root && inE[j].empty()) visit(j);
     }
 
+    // Ports. The edges leaving a node through one port share their first run, and those arriving
+    // through one share their last, so strokes joined that way can be followed from any of their
+    // ends to any other. That must not show a link the graph does not have. A split (one source,
+    // several targets) or a merge (several sources, one target) is safe: the only ends to reach are
+    // the real targets, or, against the arrows, other sources. Anything more is not: A->B, A->C and
+    // B->C all sharing ports would show B->B, and even a complete A,B->C,D lets A's strokes climb
+    // into B's bus and up to B. So the edges are split into stars, each a split or a merge, and a
+    // star gets a port of its own on each of its nodes. Greedily, the next star is the largest
+    // left, ties going to the one holding the earliest-declared edge, then to splits. A node's
+    // first port on each side is centred.
+    const size_t m = g.edges.size();
+    struct Port {
+        std::vector<int> edges;  // in declaration order
+    };
+    std::vector<Port> ports;
+    std::vector<std::vector<int>> outPorts(n), inPorts(n);
+    std::vector<int> outPort(m), inPort(m);
+    lay.edgeGroup.assign(m, 0);
+    {
+        std::map<std::pair<int, int>, int> edgeOf;
+        for (size_t k = 0; k < m; ++k)
+            edgeOf[{g.edges[k].from, g.edges[k].to}] = static_cast<int>(k);
+        std::vector<std::set<int>> outLeft(n), inLeft(n);
+        for (const Edge& e : g.edges) {
+            outLeft[static_cast<size_t>(e.from)].insert(e.to);
+            inLeft[static_cast<size_t>(e.to)].insert(e.from);
+        }
+        for (size_t placed = 0, groups = 0; placed < m; ++groups) {
+            std::set<int> bestS, bestT;
+            size_t bestSize = 0;
+            int bestFirst = INT_MAX;
+            for (int side = 0; side < 2; ++side) {
+                for (size_t v = 0; v < n; ++v) {
+                    const std::set<int>& far = (side == 0 ? outLeft : inLeft)[v];
+                    if (far.empty()) continue;
+                    const std::set<int> near = {static_cast<int>(v)};
+                    const std::set<int>& s = side == 0 ? near : far;
+                    const std::set<int>& t = side == 0 ? far : near;
+                    int first = INT_MAX;
+                    for (int a : s)
+                        for (int b : t) first = std::min(first, edgeOf.at({a, b}));
+                    size_t size = s.size() * t.size();
+                    if (size > bestSize || (size == bestSize && first < bestFirst)) {
+                        bestS = s;
+                        bestT = t;
+                        bestSize = size;
+                        bestFirst = first;
+                    }
+                }
+            }
+            std::map<int, int> outOf, inOf;
+            for (int a : bestS) {
+                outOf[a] = static_cast<int>(ports.size());
+                outPorts[static_cast<size_t>(a)].push_back(static_cast<int>(ports.size()));
+                ports.push_back({});
+            }
+            for (int b : bestT) {
+                inOf[b] = static_cast<int>(ports.size());
+                inPorts[static_cast<size_t>(b)].push_back(static_cast<int>(ports.size()));
+                ports.push_back({});
+            }
+            for (int a : bestS) {
+                for (int b : bestT) {
+                    size_t k = static_cast<size_t>(edgeOf.at({a, b}));
+                    outLeft[static_cast<size_t>(a)].erase(b);
+                    inLeft[static_cast<size_t>(b)].erase(a);
+                    outPort[k] = outOf[a];
+                    inPort[k] = inOf[b];
+                    lay.edgeGroup[k] = static_cast<int>(groups);
+                    ports[static_cast<size_t>(outOf[a])].edges.push_back(static_cast<int>(k));
+                    ports[static_cast<size_t>(inOf[b])].edges.push_back(static_cast<int>(k));
+                    ++placed;
+                }
+            }
+        }
+        for (Port& p : ports) std::sort(p.edges.begin(), p.edges.end());
+        // A node's first port is the one holding its earliest-declared edge.
+        auto byFirstEdge = [&](int a, int b) {
+            return ports[static_cast<size_t>(a)].edges[0] < ports[static_cast<size_t>(b)].edges[0];
+        };
+        for (size_t v = 0; v < n; ++v) {
+            std::sort(outPorts[v].begin(), outPorts[v].end(), byFirstEdge);
+            std::sort(inPorts[v].begin(), inPorts[v].end(), byFirstEdge);
+        }
+    }
+
     std::vector<std::vector<int>> preds(items.size()), succs(items.size());
     for (const std::vector<int>& c : chain) {
         for (size_t i = 0; i + 1 < c.size(); ++i) {
@@ -554,6 +640,59 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
         across = std::max(across, it.left + it.ext);
     }
 
+    // Where each port sits on its side, as an offset from the centre in hu. The ports of one side
+    // are ordered by where their edges' far ends lie, so that their runs do not cross, and spaced a
+    // cell apart in TD and half a cell in LR; the first port stays centred where there is room.
+    std::vector<int> portOff(ports.size(), 0);
+    for (size_t side = 0; side < 2; ++side) {
+        for (size_t v = 0; v < n; ++v) {
+            const std::vector<int>& list = (side == 0 ? outPorts : inPorts)[v];
+            if (list.size() < 2) continue;
+            std::vector<std::pair<long, int>> far;  // mean far-end centre (x size), port
+            for (int p : list) {
+                const std::vector<int>& es = ports[static_cast<size_t>(p)].edges;
+                long sum = 0;
+                for (int k : es) {
+                    const std::vector<int>& c = chain[static_cast<size_t>(k)];
+                    sum += centre(side == 0 ? c[1] : c[c.size() - 2]);
+                }
+                far.push_back({sum * 1000 / static_cast<long>(es.size()), p});
+            }
+            std::stable_sort(far.begin(), far.end(), [](const auto& a, const auto& b) {
+                return a.first < b.first;
+            });
+            const int step = td ? 2 : 1;
+            const int lim = td ? nodeW[v] - 3 : tune::kNodeRows - 2;  // keeps clear of the corners
+            int first = 0;
+            for (size_t i = 0; i < far.size(); ++i)
+                if (far[i].second == list[0]) first = static_cast<int>(i);
+            int lo = -first * step, hi = (static_cast<int>(far.size()) - 1 - first) * step;
+            int shift = hi > lim ? lim - hi : lo < -lim ? -lim - lo : 0;
+            if (lo + shift < -lim || hi + shift > lim) {
+                reason = "too many ports";
+                return false;
+            }
+            for (size_t i = 0; i < far.size(); ++i)
+                portOff[static_cast<size_t>(far[i].second)] =
+                    lo + shift + static_cast<int>(i) * step;
+        }
+    }
+    // An edge end, as the GapSeg sees it: a port of a real node (numbered after the items), or a
+    // dummy, and where it lies across the flow in hu.
+    auto endId = [&](size_t k, size_t i) {
+        const std::vector<int>& c = chain[k];
+        if (i == 0) return static_cast<int>(items.size()) + outPort[k];
+        if (i + 1 == c.size()) return static_cast<int>(items.size()) + inPort[k];
+        return c[i];
+    };
+    auto endX = [&](size_t k, size_t i) {
+        const std::vector<int>& c = chain[k];
+        int x = centre(c[i]);
+        if (i == 0) x += portOff[static_cast<size_t>(outPort[k])];
+        if (i + 1 == c.size()) x += portOff[static_cast<size_t>(inPort[k])];
+        return x;
+    };
+
     // Position along the flow. A rank is as thick as its thickest node (1 when it holds only
     // dummies). Between two ranks lies a gap that holds one cell for each track, the lines along
     // which edges jog sideways, plus one cell where the edges leave and one where they arrive.
@@ -563,12 +702,14 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
         thick[r] = std::max(thick[r], td ? tune::kNodeRows : nodeW[i]);
     }
     std::vector<std::vector<GapSeg>> gapSegs(ranks);
-    for (const std::vector<int>& c : chain)
+    for (size_t k = 0; k < m; ++k) {
+        const std::vector<int>& c = chain[k];
         for (size_t i = 0; i + 1 < c.size(); ++i)
             gapSegs[static_cast<size_t>(items[static_cast<size_t>(c[i])].rank)].push_back(
-                {c[i], c[i + 1], centre(c[i]), centre(c[i + 1])});
+                {endId(k, i), endId(k, i + 1), endX(k, i), endX(k, i + 1)});
+    }
     std::vector<int> start(ranks, 0);
-    std::map<std::pair<int, int>, int> trackOf;  // by the items at a segment's ends
+    std::map<std::pair<int, int>, int> trackOf;  // by the ends of a segment
     for (size_t r = 0; r + 1 < ranks; ++r) {
         std::vector<int> tracks;
         int used = assignTracks(gapSegs[r], tracks);
@@ -602,7 +743,7 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
 
     // Each edge leaves its source's outline at the middle of the side facing the flow, jogs along
     // the track of every gap where its ends differ, and arrives at the middle of its target's
-    // facing side. All the edges leaving a node share one port, and all those arriving share one.
+    // facing side, each through its port.
     lay.edgeLabel.assign(g.edges.size(), CellBox());
     lay.edgePath.assign(g.edges.size(), std::vector<Pt>());
     for (size_t k = 0; k < g.edges.size(); ++k) {
@@ -611,16 +752,16 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
         std::vector<Pt> path;
         int leave =
             2 * (start[static_cast<size_t>(rank[from])] + (td ? tune::kNodeRows : nodeW[from])) - 1;
-        path.push_back(point(centre(c.front()), leave));
+        path.push_back(point(endX(k, 0), leave));
         for (size_t i = 0; i + 1 < c.size(); ++i) {
-            int a = centre(c[i]), b = centre(c[i + 1]);
+            int a = endX(k, i), b = endX(k, i + 1);
             if (a == b) continue;
             int t = track(static_cast<size_t>(items[static_cast<size_t>(c[i])].rank),
-                          trackOf.at({c[i], c[i + 1]}));
+                          trackOf.at({endId(k, i), endId(k, i + 1)}));
             path.push_back(point(a, t));
             path.push_back(point(b, t));
         }
-        path.push_back(point(centre(c.back()), 2 * start[static_cast<size_t>(rank[to])] + 1));
+        path.push_back(point(endX(k, c.size() - 1), 2 * start[static_cast<size_t>(rank[to])] + 1));
         // Drop the points that lie on a straight run.
         std::vector<Pt>& out = lay.edgePath[k];
         for (const Pt& p : path) {
@@ -644,6 +785,11 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
 }
 
 std::vector<Pt> crossingPoints(const Layout& lay) {
+    // Where a path bends, edges sharing a port split or merge: a junction, not a crossing, even
+    // where another edge of the bus runs straight through it.
+    std::set<Pt> bends;
+    for (const std::vector<Pt>& path : lay.edgePath)
+        for (size_t i = 1; i + 1 < path.size(); ++i) bends.insert(path[i]);
     std::set<Pt> found;
     for (size_t j = 0; j < lay.edgePath.size(); ++j) {
         for (size_t k = j + 1; k < lay.edgePath.size(); ++k) {
@@ -658,7 +804,8 @@ std::vector<Pt> crossingPoints(const Layout& lay) {
                     if (h0.second != h1.second || v0.first != v1.first) continue;
                     int x = v0.first, y = h0.second;
                     if (x > std::min(h0.first, h1.first) && x < std::max(h0.first, h1.first) &&
-                        y > std::min(v0.second, v1.second) && y < std::max(v0.second, v1.second))
+                        y > std::min(v0.second, v1.second) && y < std::max(v0.second, v1.second) &&
+                        !bends.count({x, y}))
                         found.insert({x, y});
                 }
             }

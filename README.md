@@ -214,7 +214,11 @@ after `a`, and `a ----> b` three.
 
 When edges interleave, each bus gets a track of its own between the ranks. An
 edge that has to cross another passes over it on a bridge, and only a dot marks a
-join:
+join. Edges share strokes only in a split from one box or a merge into one box,
+so a drawing never suggests a link that isn't there: below, `Lexer` and `Document`
+each merge their own sources, and `Source` and `Config` each leave through two
+ports, one per merge, instead of joining buses that would lead from one source up
+into another:
 
 ```mermaid
 graph TD

@@ -7,13 +7,17 @@ so a crossing never looks like a join. Checked by `mermaid-kitty.sh` at width 80
 with `--img kitty` and pinned cell sizes. The `.err` golden names the diagrams
 that are declined, and so are shown as source.
 
-A dot always marks a split or a merge. A bridge has no dot.
+A dot always marks a split or a merge. A bridge has no dot. Edges only share
+strokes in a split (one source) or a merge (one target), so no run of strokes can
+be followed from one source into another's bus, and the picture never shows a
+link the graph does not have.
 
 ## Two tracks (top down)
 
 Expected: both boxes in the first row link to both boxes in the second. `A` and
-`B` each split a bus on their own track, and `C` and `D` each merge the two. No
-bridge: the buses are nested so that no edge crosses another.
+`B` each split a bus on their own track, and `C` and `D` each take two arrowheads
+side by side. The buses do not join: joined, `A`'s strokes would lead up into
+`B`. So they cross twice, each time on a bridge.
 
 ```mermaid
 graph TD
@@ -25,8 +29,9 @@ graph TD
 
 ## Three tracks (top down)
 
-Expected: three boxes link to the two below. Each of the three sources has its own
-track, stacked between the rows, and `D` and `E` merge all three. No bridge.
+Expected: three boxes link to the two below. `D` and `E` each merge all three on
+a track of their own, and each source leaves through two ports, one per merge.
+Three edges cross another, each on a bridge, the fewest this graph allows.
 
 ```mermaid
 graph TD
@@ -40,8 +45,8 @@ graph TD
 
 ## Three tracks (left to right)
 
-Expected: the same graph turned on its side. Each source's bus runs along a column
-of its own between the two ranks.
+Expected: the same graph turned on its side. Each merge runs along a column of
+its own between the two ranks.
 
 ```mermaid
 graph LR
@@ -53,12 +58,12 @@ graph LR
     C --> E
 ```
 
-## One crossing (top down)
+## Two splits sharing targets (top down)
 
-Expected: `A` and `B` both link to `C` and `D`, and `B` also links to `E`. The
-crossing sweeps find no order without a crossing: one of `B`'s edges crosses one of
-`A`'s, so the horizontal run from `B` breaks where the other edge passes, with no
-dot.
+Expected: `A` and `B` both link to `C` and `D`, and `B` also links to `E`. `A`
+and `B` each split a bus of their own, and `C` and `D` each take two arrowheads
+side by side, so nothing suggests that `A` links to `E`. One edge crosses the
+other bus on a bridge.
 
 ```mermaid
 graph TD
@@ -69,10 +74,10 @@ graph TD
     B --> E
 ```
 
-## One crossing (left to right)
+## Two splits sharing targets (left to right)
 
-Expected: the same graph turned on its side. A horizontal stroke breaks where it
-crosses a vertical track.
+Expected: the same graph turned on its side. `C` and `D` each take two arrowheads
+half a row apart.
 
 ```mermaid
 graph LR
@@ -83,11 +88,44 @@ graph LR
     B --> E
 ```
 
+## Crossings (top down)
+
+Expected: six edges link three boxes to three in a ring (`A`–`D`–`B`–`F`–`C`–`E`),
+which cannot be drawn between two rows without a crossing. Each edge into a box
+has its own arrowhead, since no two sources share both targets. The two
+crossings are bridges, with no dot.
+
+```mermaid
+graph TD
+    A --> D
+    A --> E
+    B --> D
+    B --> F
+    C --> E
+    C --> F
+```
+
+## Crossings (left to right)
+
+Expected: the same graph turned on its side. A horizontal stroke breaks where it
+crosses a vertical track.
+
+```mermaid
+graph LR
+    A --> D
+    A --> E
+    B --> D
+    B --> F
+    C --> E
+    C --> F
+```
+
 ## Two buses sharing a target (top down)
 
 Expected: `Left` fans out to `Out` and `Far`, and `Right` fans out to `Out` and
-`Mid`, so `Out` merges two arrows. `Out` sits between the other two, so no edge
-has to cross another and there is no bridge.
+`Mid`. The two buses do not merge at `Out`, which would show `Left` linking to
+`Mid` and `Right` to `Far`: each arrives through its own arrowhead, side by side.
+`Out` sits between the other two, so no edge has to cross another.
 
 ```mermaid
 graph TD
@@ -97,11 +135,11 @@ graph TD
     r --> o
 ```
 
-## Aligned boxes (declined for now)
+## Aligned boxes (left to right)
 
-Expected: in this orientation `A` and `C`, and `B` and `D`, line up, so the
-straight edges between them and the jogs between the two buses would meet. The
-builtin declines with `edges touch`, and the source is shown.
+Expected: in this orientation `A` and `C`, and `B` and `D`, line up. `A` and `B`
+each split a bus, the two buses cross once on a bridge, and `C` and `D` each take
+two arrowheads.
 
 ```mermaid
 graph LR
@@ -113,16 +151,19 @@ graph LR
 
 ## Too many crossings (declined for now)
 
-Expected: three of these edges cross others, which is more than the builtin
-allows, even after the boxes are reordered. It declines with `crossings: 3 > 2`, and
-the source is shown.
+Expected: each of three boxes links to each of three others. Without shared
+buses that takes eight crossings, more than the builtin allows. It declines with
+`crossings: 8 > 3`, and the source is shown.
 
 ```mermaid
 graph TD
-    C --> E
-    A --> F
-    A --> G
+    A --> D
     A --> E
+    A --> F
+    B --> D
     B --> E
-    B --> H
+    B --> F
+    C --> D
+    C --> E
+    C --> F
 ```

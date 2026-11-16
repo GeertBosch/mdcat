@@ -12,16 +12,18 @@ Untangled by the sweeps (top down)
 
 Expected: A links to C and D, and B links to C. Declared in this order, C would
 come first and B's edge would have to cross the one into D. D comes first
-instead, so C sits between A and B and no edge crosses another.
+instead, so C sits between A and B and no edge crosses another. B's arrow into C
+sits beside A's instead of merging with A's bus, which would show B linking to
+D.
 
-image @16,33 c=13 r=9 z=0 C=1 png=130x180
+image @18,33 c=13 r=9 z=0 C=1 png=130x180
                                   ▗▄▄▄▄  ▗▄▄▄▄
                                   ▐ A ▐  ▐ B ▐
                                   ▐▄▄▄▟  ▐▄▄▄▟
                                     ▐      ▐
-                                   ▗█▄▄▄▄▄█▛
-                                   ▐      ▐
-                                 ▗▄█▙▄  ▗▄█▙▄
+                                   ▗█▄▄▄▄▄▄▐
+                                   ▐      ▐▐
+                                 ▗▄█▙▄  ▗▄██▙
                                  ▐ D ▐  ▐ C ▐
                                  ▐▄▄▄▟  ▐▄▄▄▟
 
@@ -29,10 +31,11 @@ Three ranks, sources reordered (top down)
 ────────────────────────────────────────────────────────────────────────────────
 
 Expected: A and C both link to D, and B links to E; D and E both link to F and
-G. B ends up to the right of C, so that B's edge does not cross C's, and none of
-the edges cross.
+G. B ends up to the right of C, so that B's edge does not cross C's. Below, D
+and E each split a bus to F and G; buses never join, so one bridges the other,
+the only crossing.
 
-image @33,30 c=19 r=16 z=0 C=1 png=190x320
+image @36,30 c=19 r=16 z=0 C=1 png=190x320
                               ▗▄▄▄▄  ▗▄▄▄▄  ▗▄▄▄▄
                               ▐ A ▐  ▐ C ▐  ▐ B ▐
                               ▐▄▄▄▟  ▐▄▄▄▟  ▐▄▄▄▟
@@ -44,9 +47,9 @@ image @33,30 c=19 r=16 z=0 C=1 png=190x320
                                    ▐▄▄▄▟  ▐▄▄▄▟
                                      ▐      ▐
                                     ▗█▄▄▄▄▄▄▐
-                                    █▄▄▄▄▄▄█▛
-                                    ▐      ▐
-                                  ▗▄█▙▄  ▗▄█▙▄
+                                    ▐▗▄▄▄▄▄▟█
+                                    ▐▐     ▐▐
+                                  ▗▄██▙  ▗▄██▙
                                   ▐ F ▐  ▐ G ▐
                                   ▐▄▄▄▟  ▐▄▄▄▟
 
@@ -54,22 +57,24 @@ Three ranks, two layers reordered (top down)
 ────────────────────────────────────────────────────────────────────────────────
 
 Expected: A and B link to C, A also links to D, C links to E and F, and D links
-to F. D comes before C, and F before E, so that no edge crosses another.
+to F. D comes before C, and F before E, so that no edge crosses another. C and F
+each take two arrowheads side by side, as their two sources do not link to the
+same targets.
 
-image @56,33 c=14 r=15 z=0 C=1 png=140x300
+image @61,33 c=14 r=15 z=0 C=1 png=140x300
                                   ▗▄▄▄▄  ▗▄▄▄▄
                                   ▐ A ▐  ▐ B ▐
                                   ▐▄▄▄▟  ▐▄▄▄▟
                                     ▐      ▐
-                                   ▗█▄▄▄▄▄█▛
-                                   ▐      ▐
-                                 ▗▄█▙▄  ▗▄█▙▄
+                                   ▗█▄▄▄▄▄▄▐
+                                   ▐      ▐▐
+                                 ▗▄█▙▄  ▗▄██▙
                                  ▐ D ▐  ▐ C ▐
                                  ▐▄▄▄▟  ▐▄▄▄▟
                                    ▐      ▐
-                                   ▐▄█▄▄▄▄█▄▄
-                                     ▐      ▐
-                                   ▗▄█▙▄  ▗▄█▙▄
+                                   ▐▄▗▄▄▄▄█▄▄
+                                    ▐▐      ▐
+                                   ▗██▙▄  ▗▄█▙▄
                                    ▐ F ▐  ▐ E ▐
                                    ▐▄▄▄▟  ▐▄▄▄▟
 
@@ -80,7 +85,7 @@ Expected: A links to D over three ranks, passing to the right of B, C and E. The
 long edge runs as one straight line through the ranks it passes, with a single
 jog where it arrives.
 
-image @79,32 c=15 r=21 z=0 C=1 png=150x420
+image @84,32 c=15 r=21 z=0 C=1 png=150x420
                                         ▗▄▄▄▄
                                         ▐ A ▐
                                         ▐▄▄▄▟
@@ -97,9 +102,9 @@ image @79,32 c=15 r=21 z=0 C=1 png=150x420
                                 ▐ C ▐  ▐ E ▐  ▐
                                 ▐▄▄▄▟  ▐▄▄▄▟  ▐
                                   ▐           ▐
-                                  ▐▄▄▄▄▄▄▄▄▄█▄▛
-                                            ▐
-                                          ▗▄█▙▄
+                                  ▐▄▄▄▄▄▄▄▄▄▄▗▛
+                                            ▐▐
+                                          ▗▄██▙
                                           ▐ D ▐
                                           ▐▄▄▄▟
 
@@ -108,9 +113,10 @@ Short links (top down)
 
 Expected: m is reached from a, and links to d and e, which sit two ranks below
 a. m is moved down next to c, so that its edges to d and e are short and the
-edge from a is the long one.
+edge from a is the long one. c and m each split a bus to d and e, so two edges
+cross on bridges.
 
-image @108,33 c=13 r=22 z=0 C=1 png=130x440
+image @114,33 c=13 r=22 z=0 C=1 png=130x440
                                       ▗▄▄▄▄
                                       ▐ a ▐
                                       ▐▄▄▄▟
@@ -127,10 +133,10 @@ image @108,33 c=13 r=22 z=0 C=1 png=130x440
                                  ▐ c ▐  ▐ m ▐
                                  ▐▄▄▄▟  ▐▄▄▄▟
                                    ▐      ▐
-                                   ▐▗▄▄▄▄▄█▄
-                                   ▐█▄▄▄▄▄▄█
-                                    ▐      ▐
-                                  ▗▄█▙▄  ▗▄█▙▄
+                                   ▐█▄▄▄▄▄▟▄
+                                    ▐▗▄▄▄▄█▟▄
+                                    ▐▐     ▐▐
+                                  ▗▄██▙  ▗▄██▙
                                   ▐ d ▐  ▐ e ▐
                                   ▐▄▄▄▟  ▐▄▄▄▟
 
@@ -140,17 +146,18 @@ From the Mermaid docs (top down)
 The Mermaid documentation draws A & B --> C & D. Written out edge by edge:
 
 Expected: both boxes in the first row link to both boxes in the second. As in
-mermaid-routing.md, the buses are nested, so there is no bridge.
+mermaid-routing.md, each source splits its own bus, and they cross twice on
+bridges.
 
-image @139,33 c=13 r=10 z=0 C=1 png=130x200
+image @146,33 c=13 r=10 z=0 C=1 png=130x200
                                  ▗▄▄▄▄  ▗▄▄▄▄
                                  ▐ A ▐  ▐ B ▐
                                  ▐▄▄▄▟  ▐▄▄▄▟
                                    ▐      ▐
-                                   ▐▗▄▄▄▄▄█▄
-                                   ▐█▄▄▄▄▄▄█
-                                    ▐      ▐
-                                  ▗▄█▙▄  ▗▄█▙▄
+                                   ▐█▄▄▄▄▄▟▄
+                                    ▐▗▄▄▄▄█▟▄
+                                    ▐▐     ▐▐
+                                  ▗▄██▙  ▗▄██▙
                                   ▐ C ▐  ▐ D ▐
                                   ▐▄▄▄▟  ▐▄▄▄▟
 

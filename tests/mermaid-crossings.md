@@ -11,6 +11,8 @@ with `--img kitty` and pinned cell sizes.
 Expected: `A` links to `C` and `D`, and `B` links to `C`. Declared in this order,
 `C` would come first and `B`'s edge would have to cross the one into `D`. `D`
 comes first instead, so `C` sits between `A` and `B` and no edge crosses another.
+`B`'s arrow into `C` sits beside `A`'s instead of merging with `A`'s bus, which
+would show `B` linking to `D`.
 
 ```mermaid
 graph TD
@@ -23,7 +25,8 @@ graph TD
 
 Expected: `A` and `C` both link to `D`, and `B` links to `E`; `D` and `E` both link
 to `F` and `G`. `B` ends up to the right of `C`, so that `B`'s edge does not cross
-`C`'s, and none of the edges cross.
+`C`'s. Below, `D` and `E` each split a bus to `F` and `G`; buses never join, so
+one bridges the other, the only crossing.
 
 ```mermaid
 graph TD
@@ -40,7 +43,8 @@ graph TD
 
 Expected: `A` and `B` link to `C`, `A` also links to `D`, `C` links to `E` and
 `F`, and `D` links to `F`. `D` comes before `C`, and `F` before `E`, so that no
-edge crosses another.
+edge crosses another. `C` and `F` each take two arrowheads side by side, as their
+two sources do not link to the same targets.
 
 ```mermaid
 graph TD
@@ -71,7 +75,8 @@ graph TD
 
 Expected: `m` is reached from `a`, and links to `d` and `e`, which sit two ranks
 below `a`. `m` is moved down next to `c`, so that its edges to `d` and `e` are
-short and the edge from `a` is the long one.
+short and the edge from `a` is the long one. `c` and `m` each split a bus to `d`
+and `e`, so two edges cross on bridges.
 
 ```mermaid
 graph TD
@@ -89,7 +94,8 @@ graph TD
 The Mermaid documentation draws `A & B --> C & D`. Written out edge by edge:
 
 Expected: both boxes in the first row link to both boxes in the second. As in
-`mermaid-routing.md`, the buses are nested, so there is no bridge.
+`mermaid-routing.md`, each source splits its own bus, and they cross twice on
+bridges.
 
 ```mermaid
 flowchart TB

@@ -428,11 +428,11 @@ bool validate(const Graph& g,
             }
         }
     }
-    // No two edges with different sources and different targets share a segment or touch. They may
-    // cross, where one of them bridges the other.
+    // No two edges of different groups share a segment or touch, or the picture would join edges
+    // the graph does not. They may cross, where one of them bridges the other.
     for (size_t j = 0; j < g.edges.size(); ++j) {
         for (size_t k = j + 1; k < g.edges.size(); ++k) {
-            if (g.edges[j].from == g.edges[k].from || g.edges[j].to == g.edges[k].to) continue;
+            if (lay.edgeGroup[j] == lay.edgeGroup[k]) continue;
             const std::vector<Pt>&pj = lay.edgePath[j], &pk = lay.edgePath[k];
             for (size_t a = 0; a + 1 < pj.size(); ++a) {
                 for (size_t b = 0; b + 1 < pk.size(); ++b) {

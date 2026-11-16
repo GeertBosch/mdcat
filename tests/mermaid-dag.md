@@ -84,7 +84,9 @@ graph LR
 ## Skip edge (top down)
 
 Expected: `A --> C` skips a rank, so it runs beside `B` through a dummy position
-and comes back to `C`; the arrow into `C` merges with the one from `B`.
+and comes back to `C`. It splits off `A`'s bus but arrives at `C` through its own
+arrowhead: merging it with the one from `B` would show a path from `B` back up
+into `B`.
 
 ```mermaid
 graph TD
@@ -95,7 +97,8 @@ graph TD
 
 ## Skip edge (left to right)
 
-Expected: the same, with the long edge passing under `B`.
+Expected: the same, with the long edge passing under `B` and arriving at `C`
+below the arrow from `B`.
 
 ```mermaid
 graph LR

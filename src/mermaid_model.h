@@ -70,6 +70,10 @@ struct Layout {  // cells for boxes, half-cell units for paths
     std::vector<CellBox> nodeFoot, nodeLabel;  // per node
     std::vector<CellBox> edgeLabel;            // per edge (cols == 0 if none)
     std::vector<std::vector<Pt>> edgePath;     // per edge, orthogonal hu polyline
+    // Per edge: its group, a split (edges from one source) or a merge (edges into one target) whose
+    // edges share a port on each of their nodes. Only edges of one group may share or touch
+    // strokes.
+    std::vector<int> edgeGroup;
 };
 
 struct Stroke {  // what the rasterizer consumes, in hu
@@ -102,7 +106,7 @@ constexpr int kGapTd =
 constexpr int kGapLr = 4;  // columns between two ranks, at least; with many tracks, tracks + 2
 constexpr int kSepTd = 2;  // columns between neighbouring footprints in a rank
 constexpr int kSepLr = 1;  // rows between neighbouring footprints in a rank
-constexpr int kMaxCrossings = 2;  // edge crossings (bridges) a diagram may have
+constexpr int kMaxCrossings = 3;  // edge crossings (bridges) a diagram may have
 }  // namespace tune
 
 // Parse the body of a ```mermaid block. On failure `reason` is one of the stable fallback reasons.
@@ -115,7 +119,8 @@ bool parseFlowchart(const std::vector<std::string>& body, Graph& g, std::string&
 bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reason);
 
 // The points, in half-cell units, where one edge's path crosses another's without either path
-// ending or bending there. Edges that share a port or an arrowhead meet at bends, never here.
+// ending or bending there. Where one edge bends off a run that another passes straight along, the
+// two share a port and the point is a junction, not a crossing.
 std::vector<Pt> crossingPoints(const Layout& lay);
 
 // Turn a layout into strokes, a text layer and a PNG, validating it on the way.

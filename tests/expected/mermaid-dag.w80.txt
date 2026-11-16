@@ -120,9 +120,11 @@ Skip edge (top down)
 ────────────────────────────────────────────────────────────────────────────────
 
 Expected: A --> C skips a rank, so it runs beside B through a dummy position and
-comes back to C; the arrow into C merges with the one from B.
+comes back to C. It splits off A's bus but arrives at C through its own
+arrowhead: merging it with the one from B would show a path from B back up into
+B.
 
-image @118,35 c=9 r=15 z=0 C=1 png=90x300
+image @120,35 c=9 r=15 z=0 C=1 png=90x300
                                        ▗▄▄▄▄
                                        ▐ A ▐
                                        ▐▄▄▄▟
@@ -133,23 +135,24 @@ image @118,35 c=9 r=15 z=0 C=1 png=90x300
                                    ▐ B ▐  ▐
                                    ▐▄▄▄▟  ▐
                                      ▐    ▐
-                                     ▐▄▄█▄▛
-                                        ▐
-                                      ▗▄█▙▄
+                                     ▐▄▄▄▗▛
+                                        ▐▐
+                                      ▗▄██▙
                                       ▐ C ▐
                                       ▐▄▄▄▟
 
 Skip edge (left to right)
 ────────────────────────────────────────────────────────────────────────────────
 
-Expected: the same, with the long edge passing under B.
+Expected: the same, with the long edge passing under B and arriving at C below
+the arrow from B.
 
-image @139,28 c=23 r=6 z=0 C=1 png=230x120
+image @142,28 c=23 r=6 z=0 C=1 png=230x120
                                      ▗▄▄▄▄
                                   ▗▄▟█ B ▐▄▄
                                   ▐  ▐▄▄▄▟ ▐  ▗▄▄▄▄
-                            ▗▄▄▄▄ ▐        █▄▟█ C ▐
-                            ▐ A ▐▄█▄▄▄▄▄▄▄▄▛  ▐▄▄▄▟
+                            ▗▄▄▄▄ ▐        ▐▄▟█ C ▐
+                            ▐ A ▐▄█▄▄▄▄▄▄▄▄▛▀▀▜▄▄▄▟
                             ▐▄▄▄▟
 
 Long links (top down)
@@ -158,7 +161,7 @@ Long links (top down)
 Expected: each extra dash makes a link span one more rank. Short is one rank
 below Top, Mid two, Far three, and Top stays the only box in its rank.
 
-image @152,29 c=21 r=19 z=0 C=1 png=210x380
+image @155,29 c=21 r=19 z=0 C=1 png=210x380
                                      ▗▄▄▄▄▄▄
                                      ▐ Top ▐
                                      ▐▄▄▄▄▄▟
@@ -185,7 +188,7 @@ Long links (left to right)
 Expected: the same graph turned on its side. The long edges pass through the
 empty ranks as straight lines.
 
-image @178,19 c=42 r=9 z=0 C=1 png=420x180
+image @181,19 c=42 r=9 z=0 C=1 png=420x180
                               ▗▄▄▄▄▄▄▄▄
                            ▗▄▟█ Short ▐
                            ▐  ▐▄▄▄▄▄▄▄▟
@@ -202,7 +205,7 @@ Two components (top down)
 Expected: two unrelated graphs side by side, each with its own arrows. A box
 declared after the first graph's boxes still sits with its own graph.
 
-image @194,28 c=24 r=13 z=0 C=1 png=240x260
+image @197,28 c=24 r=13 z=0 C=1 png=240x260
                              ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄
                              ▐ First ▐    ▐ Other ▐
                              ▐▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▟
@@ -222,7 +225,7 @@ Two components (left to right)
 
 Expected: the graphs are stacked, one above the other.
 
-image @213,21 c=37 r=7 z=0 C=1 png=370x140
+image @216,21 c=37 r=7 z=0 C=1 png=370x140
                      ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄     ▗▄▄▄▄▄▄▄▄
                      ▐ First ▐▄▄▄▟█ Second ▐▄▄▄▄▟█ Third ▐
                      ▐▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▟     ▐▄▄▄▄▄▄▄▟
@@ -237,7 +240,7 @@ A source that starts late (top down)
 Expected: Late starts at the rank just above End rather than at the top, so its
 arrow is as short as it can be.
 
-image @227,30 c=19 r=19 z=0 C=1 png=190x380
+image @230,30 c=19 r=19 z=0 C=1 png=190x380
                               ▗▄▄▄▄▄▄▄▄
                               ▐ Start ▐
                               ▐▄▄▄▄▄▄▄▟

@@ -266,8 +266,8 @@ Graphics make the route easier to read:
 - A parse error, an unknown statement, or an unsupported construct.
 - The laid-out width exceeds the available width. That is `terminalWidth()`,
   which already accounts for list and quote indentation via `gIndent`.
-- More edge crossings than `kMaxCrossings` (2 at first; recalibrated in
-  Step 16).
+- More edge crossings than `kMaxCrossings` (2 at first, 3 once buses stopped
+  joining, so that K₃,₂ renders; recalibrated in Step 16).
 - More back edges than `kMaxBackEdges` (introduced in Step 14; 0 before that).
 - More real nodes than `kMaxNodes` (60 at first). This bounds layout cost and
   clutter.
@@ -697,6 +697,20 @@ Work, in `mermaid_layout.cpp` unless stated:
      in LR. So a fan-out is a **bus**.
    - All in-edges share one target port, so a fan-in **merges** into one
      arrowhead.
+   - **Except** where sharing would show a link the graph does not have. Strokes
+     joined through shared ports can be followed from any end to any other, so
+     only a split (one source) or a merge (one target) may share them: even a
+     complete A,B→C,D drawn as joined buses lets A's strokes climb into B's bus
+     and up to B. The edges are partitioned into such stars, greedily taking the
+     largest left and breaking ties toward the earliest-declared edge, then
+     toward splits. Each star gets its own port on each of its nodes. A node's first port
+     stays centred; the others sit 1 cell apart in TD (½ cell in LR), ordered by
+     where their far ends lie. If a side runs out of room ⇒ fallback (`too many
+     ports`). So in A→B, B→C, A→C, the skip edge splits off A's bus but arrives
+     at C through its own arrowhead: merging it with B's would draw B→B.
+   - Only edges of one group may share or touch strokes. A point where one edge
+     bends off a run that another passes straight along is a junction, not a
+     crossing.
    - A *net* is a group of edge segments in one gap that share a source port, or
      share a target port.
 6. **Routing**:
