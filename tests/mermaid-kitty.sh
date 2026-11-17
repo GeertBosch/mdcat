@@ -5,8 +5,8 @@
 # fallback.
 #
 # Checked here, over tests/mermaid-basic.md (widths 80 and 30), tests/mermaid-dag.md (80 and 44),
-# tests/mermaid-routing.md (80), tests/mermaid-crossings.md (80), tests/mermaid-syntax.md (80) and
-# tests/mermaid-fallback.md:
+# tests/mermaid-routing.md (80), tests/mermaid-crossings.md (80), tests/mermaid-syntax.md (80),
+# tests/mermaid-links.md (80) and tests/mermaid-fallback.md:
 #   - tests/kitty-preview.py's rendering of the output of `mdcat --mermaid builtin` (text plus each
 #     image as quadrant blocks) equals tests/expected/<fixture>.w<N>.txt, and the
 #     MDCAT_MERMAID_DEBUG=1 stderr equals <fixture>.w<N>.err (UPDATE=1 rewrites both). The
@@ -103,8 +103,54 @@ golden_case mermaid-dag 80
 golden_case mermaid-routing 80
 golden_case mermaid-crossings 80
 golden_case mermaid-syntax 80
+golden_case mermaid-links 80
 golden_case mermaid-basic 30
 golden_case mermaid-basic 80
+
+# The quadrant previews are too coarse to show the dashes of a dotted link (a dash is 3s px, under
+# half a cell), so read the pixels: along a dotted link every dash but the first and last is 3s px
+# long and 3s px or more apart, and a dotted run starts and ends on a dash.
+dots="$tmp/dots.md"
+printf '```mermaid\ngraph TD\n    a[Top] -.- b[Bottom]\n```\n' > "$dots"
+mc --img kitty --mermaid builtin --width 80 "$dots" > "$tmp/dots.out" 2>/dev/null
+if msg=$(python3 - "$here/kitty-preview.py" "$tmp/dots.out" <<'PY'
+import base64, importlib.util, re, sys
+sys.dont_write_bytecode = True
+spec = importlib.util.spec_from_file_location("kp", sys.argv[1])
+kp = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(kp)
+d = open(sys.argv[2], "rb").read()
+chunks = re.findall(rb"\x1b_G[^;]*;(.*?)\x1b\\", d, re.S)
+w, h, rows = kp.decode_png(base64.b64decode(b"".join(chunks)))
+best = []
+for x in range(w):
+    col = [rows[y][4 * x + 3] > 0 for y in range(h)]
+    runs, y = [], 0
+    while y < h:
+        if col[y]:
+            e = y
+            while e < h and col[e]:
+                e += 1
+            runs.append((y, e))
+            y = e
+        else:
+            y += 1
+    if len(runs) > len(best):
+        best = runs
+if len(best) < 5:
+    sys.exit("expected a dashed column, got %d runs" % len(best))
+for (a, b) in best[1:-1]:
+    if b - a != 3:
+        sys.exit("a dash is %d px, expected 3: %r" % (b - a, best))
+for (_, b), (a, _) in zip(best, best[1:]):
+    if a - b < 3:
+        sys.exit("a gap is %d px, expected at least 3: %r" % (a - b, best))
+PY
+); then
+    pass
+else
+    fail "dotted link dashes" "$msg"
+fi
 
 # Structure of every APC. (The previewer has already decoded every PNG: signature, CRC, zlib
 # stream, and size c*cellW x r*cellH.)

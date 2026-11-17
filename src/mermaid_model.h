@@ -72,8 +72,8 @@ struct Layout {  // cells for boxes, half-cell units for paths
     std::vector<CellBox> edgeLabel;            // per edge (cols == 0 if none)
     std::vector<std::vector<Pt>> edgePath;     // per edge, orthogonal hu polyline
     // Per edge: its group, a split (edges from one source) or a merge (edges into one target) whose
-    // edges share a port on each of their nodes. Only edges of one group may share or touch
-    // strokes.
+    // edges share a port on each of their nodes, and have one style. Only edges of one group may
+    // share or touch strokes. An invisible edge has no group (-1) and an empty path.
     std::vector<int> edgeGroup;
 };
 

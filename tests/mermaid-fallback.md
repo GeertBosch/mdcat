@@ -53,11 +53,11 @@ graph TD
     A --> end
 ```
 
-## Circle link
+## Mismatched link ends
 
 ```mermaid
 graph LR
-    A---oB
+    A o--> B
 ```
 
 ## Unknown direction

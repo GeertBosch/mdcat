@@ -48,11 +48,11 @@ Reserved word as an id
   graph TD
       A --> end
 
-Circle link
+Mismatched link ends
 ────────────────────────────────────────────────────────────────────────────────
 
   graph LR
-      A---oB
+      A o--> B
 
 Unknown direction
 ────────────────────────────────────────────────────────────────────────────────

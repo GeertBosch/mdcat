@@ -4,5 +4,5 @@ mdcat: mermaid: fallback: unsupported syntax: subgraph one
 mdcat: mermaid: fallback: unsupported syntax: subgraph one
 mdcat: mermaid: fallback: unsupported syntax: direction LR
 mdcat: mermaid: fallback: unsupported syntax: A --> end
-mdcat: mermaid: fallback: unsupported syntax: A---oB
+mdcat: mermaid: fallback: unsupported syntax: A o--> B
 mdcat: mermaid: fallback: unsupported direction

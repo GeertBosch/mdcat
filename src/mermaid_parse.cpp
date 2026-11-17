@@ -334,8 +334,74 @@ struct Parser {
         return true;
     }
 
-    // A chain `group link group link ...`, where a link is `-->`, with each dash beyond the two
-    // before the head making the link span one more rank (`-->` is 1, `--->` is 2), possibly
+    // The link at s[p], as Mermaid reads it: an optional end marker (`<`, `o` or `x`), a stroke,
+    // and an end (`>`, `o`, `x`, or none for an open link). The stroke is two or more `-`, `=` or
+    // `~` (with `.` in `-.-` for a dotted one); a link is as many ranks long as it has extra
+    // characters, so `-->` is 1, `--->` is 2, `---` is 1 and `----` is 2, and a dotted link counts
+    // its dots. Markers at both ends must agree (`<-->`, `o--o`, `x--x`); Mermaid reads others as
+    // something else, so they are declined.
+    bool parseLink(const std::string& s, size_t& p, Edge& edge) {
+        auto at = [&](size_t i) { return i < s.size() ? s[i] : '\0'; };
+        auto marker = [](char c) {
+            return c == 'o'            ? End::Circle
+                : c == 'x'             ? End::Cross
+                : c == '>' || c == '<' ? End::Arrow
+                                       : End::None;
+        };
+        char left = '\0';
+        if ((at(p) == 'o' || at(p) == 'x' || at(p) == '<') &&
+            (at(p + 1) == '-' || at(p + 1) == '=')) {
+            left = s[p];
+            ++p;
+        }
+        size_t len = 0;
+        char right = '\0';
+        Line line = Line::Solid;
+        if (at(p) == '~') {
+            if (left) return fail(kUnsupportedSyntax);
+            size_t tildes = 0;
+            while (at(p + tildes) == '~') ++tildes;
+            if (tildes < 3) return fail(kUnsupportedSyntax);
+            p += tildes;
+            len = tildes - 2;
+            line = Line::Invisible;
+        } else if (at(p) == '-' && at(p + 1) == '.') {
+            size_t dots = 0;
+            while (at(p + 1 + dots) == '.') ++dots;
+            if (at(p + 1 + dots) != '-') return fail(kUnsupportedSyntax);
+            p += dots + 2;
+            if (at(p) == '>' || at(p) == 'o' || at(p) == 'x') right = s[p++];
+            len = dots;
+            line = Line::Dotted;
+        } else if (at(p) == '-' || at(p) == '=') {
+            const char stroke = s[p];
+            size_t count = 0;
+            while (at(p + count) == stroke) ++count;
+            if (count < 2) return fail(kUnsupportedSyntax);
+            p += count;
+            char end = at(p);
+            if (end == '>' || end == 'o' || end == 'x') {
+                right = end;
+                ++p;
+                len = count - 1;
+            } else {
+                if (count < 3) return fail(kUnsupportedSyntax);
+                len = count - 2;
+            }
+            if (stroke == '=') line = Line::Thick;
+        } else {
+            return fail(kUnsupportedSyntax);
+        }
+        if (left && !(left == right || (left == '<' && right == '>')))
+            return fail(kUnsupportedSyntax);
+        edge.line = line;
+        edge.head = marker(right);
+        edge.tail = marker(left);
+        edge.minlen = static_cast<int>(std::min<size_t>(len, tune::kMaxRanks));
+        return true;
+    }
+
+    // A chain `group link group link ...`, where a link is as parseLink reads it, possibly
     // preceded by an edge id (`e1@-->`). A group is `node & node ...`, and every node of a group
     // is joined to every node of the next. A lone group just declares its nodes.
     bool parseChain(const std::string& s) {
@@ -348,20 +414,16 @@ struct Parser {
                 edgeIds.insert(s.substr(p, e - p));
                 p = e + 1;
             }
-            size_t dashes = 0;
-            while (p + dashes < s.size() && s[p + dashes] == '-') ++dashes;
-            if (dashes < 2 || p + dashes >= s.size() || s[p + dashes] != '>')
-                return fail(kUnsupportedSyntax);
-            p += dashes + 1;
+            Edge link;
+            if (!parseLink(s, p, link)) return false;
             if (!parseGroup(s, p, to)) return false;
             for (int a : from) {
                 for (int b : to) {
                     if (g.edges.size() >= static_cast<size_t>(tune::kMaxNodes * tune::kMaxNodes))
                         return fail("too many edges");
-                    Edge edge;
+                    Edge edge = link;
                     edge.from = a;
                     edge.to = b;
-                    edge.minlen = static_cast<int>(std::min<size_t>(dashes - 1, tune::kMaxRanks));
                     g.edges.push_back(edge);
                 }
             }

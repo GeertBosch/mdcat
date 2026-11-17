@@ -487,7 +487,9 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
     // the real targets, or, against the arrows, other sources. Anything more is not: A->B, A->C and
     // B->C all sharing ports would show B->B, and even a complete A,B->C,D lets A's strokes climb
     // into B's bus and up to B. So the edges are split into stars, each a split or a merge, and a
-    // star gets a port of its own on each of its nodes. Greedily, the next star is the largest
+    // star gets a port of its own on each of its nodes. A star's edges all have one style, so
+    // edges of different styles never share a bus. Invisible links have no ports: they rank and
+    // order the nodes but are not routed. Greedily, the next star is the largest
     // left, ties going to the one holding the earliest-declared edge, then to splits. A node's
     // first port on each side is centred.
     const size_t m = g.edges.size();
@@ -497,36 +499,54 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
     std::vector<Port> ports;
     std::vector<std::vector<int>> outPorts(n), inPorts(n);
     std::vector<int> outPort(m), inPort(m);
-    lay.edgeGroup.assign(m, 0);
+    lay.edgeGroup.assign(m, -1);
     {
         std::map<std::pair<int, int>, int> edgeOf;
-        for (size_t k = 0; k < m; ++k)
-            edgeOf[{g.edges[k].from, g.edges[k].to}] = static_cast<int>(k);
+        size_t routed = 0;
         std::vector<std::set<int>> outLeft(n), inLeft(n);
-        for (const Edge& e : g.edges) {
+        for (size_t k = 0; k < m; ++k) {
+            const Edge& e = g.edges[k];
+            if (e.line == Line::Invisible) continue;
+            edgeOf[{e.from, e.to}] = static_cast<int>(k);
             outLeft[static_cast<size_t>(e.from)].insert(e.to);
             inLeft[static_cast<size_t>(e.to)].insert(e.from);
+            ++routed;
         }
-        for (size_t placed = 0, groups = 0; placed < m; ++groups) {
+        auto styleOf = [&](int a, int b) {
+            const Edge& e = g.edges[static_cast<size_t>(edgeOf.at({a, b}))];
+            return (static_cast<int>(e.line) * 4 + static_cast<int>(e.head)) * 4 +
+                static_cast<int>(e.tail);
+        };
+        for (size_t placed = 0, groups = 0; placed < routed; ++groups) {
             std::set<int> bestS, bestT;
             size_t bestSize = 0;
             int bestFirst = INT_MAX;
             for (int side = 0; side < 2; ++side) {
                 for (size_t v = 0; v < n; ++v) {
-                    const std::set<int>& far = (side == 0 ? outLeft : inLeft)[v];
-                    if (far.empty()) continue;
-                    const std::set<int> near = {static_cast<int>(v)};
-                    const std::set<int>& s = side == 0 ? near : far;
-                    const std::set<int>& t = side == 0 ? far : near;
-                    int first = INT_MAX;
-                    for (int a : s)
-                        for (int b : t) first = std::min(first, edgeOf.at({a, b}));
-                    size_t size = s.size() * t.size();
-                    if (size > bestSize || (size == bestSize && first < bestFirst)) {
-                        bestS = s;
-                        bestT = t;
-                        bestSize = size;
-                        bestFirst = first;
+                    const std::set<int>& all = (side == 0 ? outLeft : inLeft)[v];
+                    std::set<int> styles;
+                    for (int w : all)
+                        styles.insert(side == 0 ? styleOf(static_cast<int>(v), w)
+                                                : styleOf(w, static_cast<int>(v)));
+                    for (int style : styles) {
+                        std::set<int> far;
+                        for (int w : all)
+                            if ((side == 0 ? styleOf(static_cast<int>(v), w)
+                                           : styleOf(w, static_cast<int>(v))) == style)
+                                far.insert(w);
+                        const std::set<int> near = {static_cast<int>(v)};
+                        const std::set<int>& s = side == 0 ? near : far;
+                        const std::set<int>& t = side == 0 ? far : near;
+                        int first = INT_MAX;
+                        for (int a : s)
+                            for (int b : t) first = std::min(first, edgeOf.at({a, b}));
+                        size_t size = s.size() * t.size();
+                        if (size > bestSize || (size == bestSize && first < bestFirst)) {
+                            bestS = s;
+                            bestT = t;
+                            bestSize = size;
+                            bestFirst = first;
+                        }
                     }
                 }
             }
@@ -738,6 +758,7 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
     }
     std::vector<std::vector<GapSeg>> gapSegs(ranks);
     for (size_t k = 0; k < m; ++k) {
+        if (g.edges[k].line == Line::Invisible) continue;
         const std::vector<int>& c = chain[k];
         for (size_t i = 0; i + 1 < c.size(); ++i)
             gapSegs[static_cast<size_t>(items[static_cast<size_t>(c[i])].rank)].push_back(
@@ -782,6 +803,7 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
     lay.edgeLabel.assign(g.edges.size(), CellBox());
     lay.edgePath.assign(g.edges.size(), std::vector<Pt>());
     for (size_t k = 0; k < g.edges.size(); ++k) {
+        if (g.edges[k].line == Line::Invisible) continue;
         const std::vector<int>& c = chain[k];
         size_t from = static_cast<size_t>(g.edges[k].from), to = static_cast<size_t>(g.edges[k].to);
         std::vector<Pt> path;

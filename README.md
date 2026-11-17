@@ -212,6 +212,21 @@ Several edges leaving a box split off one bus, and several arriving merge into o
 arrowhead. Extra dashes make a link span more ranks: `a ---> b` puts `b` two steps
 after `a`, and `a ----> b` three.
 
+Link styles are drawn as they are in Mermaid: `-->` has an arrowhead, `---` is open,
+`-.->` is dotted, `==>` is thick, `--o` and `--x` end in a circle or a cross,
+`<-->`, `o--o` and `x--x` mark both ends, and `~~~` draws nothing but still places
+the boxes. Edges of different styles never share a bus, so below `Build` leaves
+through one port for its dotted link and another for its plain one:
+
+```mermaid
+graph LR
+    src[Source] ==> build[Build]
+    build -.-> docs[Docs]
+    build --> test[Test]
+    test <--> ci[CI]
+    build --x lint[Lint]
+```
+
 When edges interleave, each bus gets a track of its own between the ranks. An
 edge that has to cross another passes over it on a bridge, and only a dot marks a
 join. Edges share strokes only in a split from one box or a merge into one box,

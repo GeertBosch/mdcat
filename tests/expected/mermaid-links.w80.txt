@@ -1,0 +1,303 @@
+Mermaid link types and lengths
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+On a Kitty terminal, the built-in renderer draws every Mermaid link style:
+arrows and open links, dotted and thick ones, invisible ones that only place
+boxes, circle and cross ends, and markers at both ends. Checked by
+mermaid-kitty.sh at width 80, with --img kitty and pinned cell sizes; the
+quadrant preview is too coarse to show dashes, so mermaid-kitty.sh also reads a
+dotted link's pixels.
+
+Every link style (top down)
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: each pair is joined as its label says. --> has a filled arrowhead and
+--- has none; -.-> and -.- are dashed, the first with an arrowhead; ==> and ===
+are thick, the first with a larger arrowhead; --o ends in a filled circle and
+--x in an X. Nothing is drawn for ~~~, but its two boxes still sit one rank
+apart.
+
+image @19,11 c=57 r=8 z=0 C=1 png=570x160
+           ▗▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄
+           ▐ arrow ▐  ▐ open  ▐  ▐ dotted  ▐  ▐ dotted  ▐  ▐ thick ▐
+           ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟
+               ▐          ▐           ▐            ▐           █
+               ▐          ▐           ▐            ▐          ▗█▖
+           ▗▄▄▄█▙▄▄▄  ▗▄▄▄▟▄▄▄▄   ▗▄▄▄█▙▄▄▄    ▗▄▄▄▟▄▄▄▄   ▗▄▄▄█▄▄▄▄
+           ▐ head  ▐  ▐ none  ▐   ▐ arrow ▐    ▐ open  ▐   ▐ arrow ▐
+           ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟   ▐▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▟   ▐▄▄▄▄▄▄▄▟
+
+image @28,16 c=48 r=8 z=0 C=1 png=480x160
+                ▗▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄▄▄▄▄
+                ▐ thick ▐  ▐ circle  ▐  ▐ cross ▐  ▐ invisible ▐
+                ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▄▄▟
+                    █           ▐           ▐
+                    █           ▐           ▐
+                ▗▄▄▄█▄▄▄▄    ▗▄▄█▄▄▄     ▗▄▄█▄▄▄     ▗▄▄▄▄▄▄▄▄
+                ▐ open  ▐    ▐ end ▐     ▐ end ▐     ▐ link  ▐
+                ▐▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▟     ▐▄▄▄▄▄▟     ▐▄▄▄▄▄▄▄▟
+
+Every link style (left to right)
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the same links turned on their side.
+
+image @42,27 c=26 r=35 z=0 C=1 png=260x700
+                           ▗▄▄▄▄▄▄▄▄        ▗▄▄▄▄▄▄▄
+                           ▐ arrow ▐▄▄▄▄▄▄▄▟█ head ▐
+                           ▐▄▄▄▄▄▄▄▟        ▐▄▄▄▄▄▄▟
+
+                           ▗▄▄▄▄▄▄▄         ▗▄▄▄▄▄▄▄
+                           ▐ open ▐▄▄▄▄▄▄▄▄▄▟ none ▐
+                           ▐▄▄▄▄▄▄▟         ▐▄▄▄▄▄▄▟
+
+                           ▗▄▄▄▄▄▄▄▄▄       ▗▄▄▄▄▄▄▄▄
+                           ▐ dotted ▐▄▄▄▄▄▄▟█ arrow ▐
+                           ▐▄▄▄▄▄▄▄▄▟       ▐▄▄▄▄▄▄▄▟
+
+                           ▗▄▄▄▄▄▄▄▄▄       ▗▄▄▄▄▄▄▄
+                           ▐ dotted ▐▄▄▄▄▄▄▄▟ open ▐
+                           ▐▄▄▄▄▄▄▄▄▟       ▐▄▄▄▄▄▄▟
+
+                           ▗▄▄▄▄▄▄▄▄        ▗▄▄▄▄▄▄▄▄
+                           ▐ thick ▐█████████ arrow ▐
+                           ▐▄▄▄▄▄▄▄▟        ▐▄▄▄▄▄▄▄▟
+
+                           ▗▄▄▄▄▄▄▄▄        ▗▄▄▄▄▄▄▄
+                           ▐ thick ▐█████████ open ▐
+                           ▐▄▄▄▄▄▄▄▟        ▐▄▄▄▄▄▄▟
+
+                           ▗▄▄▄▄▄▄▄▄▄       ▗▄▄▄▄▄▄
+                           ▐ circle ▐▄▄▄▄▄▄▄█ end ▐
+                           ▐▄▄▄▄▄▄▄▄▟       ▐▄▄▄▄▄▟
+
+                           ▗▄▄▄▄▄▄▄▄        ▗▄▄▄▄▄▄
+                           ▐ cross ▐▄▄▄▄▄▄▄▟█ end ▐
+                           ▐▄▄▄▄▄▄▄▟        ▐▄▄▄▄▄▟
+
+                           ▗▄▄▄▄▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄
+                           ▐ invisible ▐    ▐ link ▐
+                           ▐▄▄▄▄▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▟
+
+Markers at both ends (top down)
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: a marker at each end of every link, sitting on the outline of its box:
+arrowheads for <-->, circles for o--o and X's for x--x, then the dotted and
+thick forms.
+
+image @85,12 c=56 r=8 z=0 C=1 png=560x160
+             ▗▄▄▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄▄   ▗▄▄▄▄▄▄▄▄▄▄
+             ▐ arrows  ▐    ▐ circles ▐    ▐ crosses ▐   ▐ dotted  ▐
+             ▐▄▄▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▄▟   ▐▄▄▄▄▄▄▄▄▄▟
+                  ▜▘             ▐              ▐             ▜▘
+                  ▐              ▐              ▐             ▐
+            ▗▄▄▄▄▄█▙▄▄▄▄▄  ▗▄▄▄▄▄█▄▄▄▄▄▄  ▗▄▄▄▄▄█▄▄▄▄▄▄  ▗▄▄▄▄█▙▄▄▄▄
+            ▐ both ways ▐  ▐ both ends ▐  ▐ both ends ▐  ▐ arrows  ▐
+            ▐▄▄▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▟
+
+image @94,21 c=37 r=8 z=0 C=1 png=370x160
+                      ▗▄▄▄▄▄▄▄▄   ▗▄▄▄▄▄▄▄▄▄▄   ▗▄▄▄▄▄▄▄▄
+                      ▐ thick ▐   ▐ dotted  ▐   ▐ thick ▐
+                      ▐▄▄▄▄▄▄▄▟   ▐▄▄▄▄▄▄▄▄▄▟   ▐▄▄▄▄▄▄▄▟
+                         ▝█▘           ▐            █
+                         ▗█▖           ▐            █
+                     ▗▄▄▄▄█▄▄▄▄▄  ▗▄▄▄▄█▄▄▄▄▄  ▗▄▄▄▄█▄▄▄▄▄
+                     ▐ arrows  ▐  ▐ circles ▐  ▐ crosses ▐
+                     ▐▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▟
+
+Markers at both ends (left to right)
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the same links turned on their side.
+
+image @108,26 c=28 r=27 z=0 C=1 png=280x540
+                          ▗▄▄▄▄▄▄▄▄▄     ▗▄▄▄▄▄▄▄▄▄▄▄▄
+                          ▐ arrows ▐█▄▄▄▟█ both ways ▐
+                          ▐▄▄▄▄▄▄▄▄▟     ▐▄▄▄▄▄▄▄▄▄▄▄▟
+
+                          ▗▄▄▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄▄▄▄
+                          ▐ circles ▐▄▄▄▄█ both ends ▐
+                          ▐▄▄▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▄▄▄▟
+
+                          ▗▄▄▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄▄▄▄
+                          ▐ crosses ▐▙▄▄▟█ both ends ▐
+                          ▐▄▄▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▄▄▄▟
+
+                          ▗▄▄▄▄▄▄▄▄▄     ▗▄▄▄▄▄▄▄▄▄
+                          ▐ dotted ▐█▄▄▄▟█ arrows ▐
+                          ▐▄▄▄▄▄▄▄▄▟     ▐▄▄▄▄▄▄▄▄▟
+
+                          ▗▄▄▄▄▄▄▄▄      ▗▄▄▄▄▄▄▄▄▄
+                          ▐ thick ▐███████ arrows ▐
+                          ▐▄▄▄▄▄▄▄▟      ▐▄▄▄▄▄▄▄▄▟
+
+                          ▗▄▄▄▄▄▄▄▄▄     ▗▄▄▄▄▄▄▄▄▄▄
+                          ▐ dotted ▐▄▄▄▄▄█ circles ▐
+                          ▐▄▄▄▄▄▄▄▄▟     ▐▄▄▄▄▄▄▄▄▄▟
+
+                          ▗▄▄▄▄▄▄▄▄      ▗▄▄▄▄▄▄▄▄▄▄
+                          ▐ thick ▐███████ crosses ▐
+                          ▐▄▄▄▄▄▄▄▟      ▐▄▄▄▄▄▄▄▄▄▟
+
+Lengths
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: a link spans one rank more for each extra character. --> spans one
+rank, ---> and -..-> and ===> two, and ----> three; the open link ---- spans
+two. Each long link keeps its style, dashes or thickness, along the whole way.
+
+image @143,32 c=15 r=51 z=0 C=1 png=150x1020
+                                   ▗▄▄▄▄▄▄▄▄
+                                   ▐ Start ▐
+                                   ▐▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                 ▗▄▄▄▄▄█▙▄▄▄▄▄
+                                 ▐ One rank  ▐
+                                 ▐▄▄▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                       ▐
+                                       ▐
+                                       ▐
+                                 ▗▄▄▄▄▄█▙▄▄▄▄▄
+                                 ▐ Two ranks ▐
+                                 ▐▄▄▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                       ▐
+                                       ▐
+                                       ▐
+                                ▗▄▄▄▄▄▄█▙▄▄▄▄▄▄
+                                ▐ Dotted, two ▐
+                                ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                                       █
+                                       █
+                                       █
+                                       █
+                                      ▗█▖
+                                ▗▄▄▄▄▄▄█▄▄▄▄▄▄▄
+                                ▐ Thick, two  ▐
+                                ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                       ▐
+                                       ▐
+                                       ▐
+                                       ▐
+                                       ▐
+                                       ▐
+                                ▗▄▄▄▄▄▄█▙▄▄▄▄▄▄
+                                ▐ Three ranks ▐
+                                ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                       ▐
+                                       ▐
+                                       ▐
+                                 ▗▄▄▄▄▄▟▄▄▄▄▄▄
+                                 ▐ Open, two ▐
+                                 ▐▄▄▄▄▄▄▄▄▄▄▄▟
+
+Styles fanning out of one box
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: Source leaves through a port for each style, so a dotted, a thick and
+a plain arrow do not share a bus, and no stroke joins two edges of different
+styles. The two plain arrows do share one.
+
+image @202,16 c=48 r=10 z=0 C=1 png=480x200
+                                   ▗▄▄▄▄▄▄▄▄▄▄
+                                   ▐ Source  ▐
+                                   ▐▄▄▄▄▄▄▄▄▄▟
+                                        ▐▐█
+                    ▗▄▄▄▄▄▄▄▄▄▄▄▄█▄▄▄▄▄▄▛▐▜████████████████▙
+                    ▐            ▐       ▐▄▄▄▄▄▄           █
+                    ▐            ▐             ▐          ▗█▖
+                ▗▄▄▄█▙▄▄▄  ▗▄▄▄▄▄█▙▄▄▄▄▄  ▗▄▄▄▄█▙▄▄▄▄  ▗▄▄▄█▄▄▄▄
+                ▐ Plain ▐  ▐ Plain too ▐  ▐ Dotted  ▐  ▐ Thick ▐
+                ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟
+
+Styles merging into one box
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the same for a merge: each style arrives at Sink through its own port,
+with its own arrowhead.
+
+image @219,29 c=22 r=11 z=0 C=1 png=220x220
+                             ▗▄▄▄▄▄▄▄▄
+                             ▐ Plain ▐▄▄▄
+                             ▐▄▄▄▄▄▄▄▟  ▐
+                                        ▐
+                             ▗▄▄▄▄▄▄▄▄▄ ▐ ▗▄▄▄▄▄▄▄▄
+                             ▐ Dotted ▐▄▟███ Sink ▐
+                             ▐▄▄▄▄▄▄▄▄▟ █▀▀▜▄▄▄▄▄▄▟
+                                        █
+                             ▗▄▄▄▄▄▄▄▄  █
+                             ▐ Thick ▐██▛
+                             ▐▄▄▄▄▄▄▄▟
+
+An invisible link places boxes
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: Left and Right are linked by ~~~ alone, so they sit in two ranks,
+Right below Left, with nothing drawn between them. Right also receives an arrow
+from Top, which crosses the gap without touching anything.
+
+image @238,33 c=14 r=15 z=0 C=1 png=140x300
+                                        ▗▄▄▄▄▄▄
+                                        ▐ Top ▐
+                                        ▐▄▄▄▄▄▟
+                                           ▐
+                                     ▗▄▄▄▄▄█▄
+                                     ▐      ▐
+                                 ▗▄▄▄█▙▄▄▄  ▐
+                                 ▐ Left  ▐  ▐
+                                 ▐▄▄▄▄▄▄▄▟  ▐
+                                            ▐
+                                         ▗▄▄▛
+                                         ▐
+                                     ▗▄▄▄█▙▄▄▄
+                                     ▐ Right ▐
+                                     ▐▄▄▄▄▄▄▄▟
+
+An invisible link longer than one rank
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: ~~~~ makes Far sit two ranks below Near, and nothing joins them.
+
+image @259,31 c=17 r=14 z=0 C=1 png=170x280
+                                       ▗▄▄▄▄▄▄▄▄
+                                       ▐ Near  ▐
+                                       ▐▄▄▄▄▄▄▄▟
+                                           ▐
+                                    ▗▄▄▄▄▄▄▛
+                                    ▐
+                               ▗▄▄▄▄█▙▄▄▄▄
+                               ▐ Middle  ▐
+                               ▐▄▄▄▄▄▄▄▄▄▟
+
+
+                                         ▗▄▄▄▄▄▄
+                                         ▐ Far ▐
+                                         ▐▄▄▄▄▄▟
+
+Dotted links that bend and cross
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: dashes restart on every straight stretch, and a dashed edge passes
+over a plain one on a bridge.
+
+image @280,33 c=13 r=10 z=0 C=1 png=130x200
+                                 ▗▄▄▄▄  ▗▄▄▄▄
+                                 ▐ A ▐  ▐ B ▐
+                                 ▐▄▄▄▟  ▐▄▄▄▟
+                                   ▐      ▐
+                                   ▐█▄▄▄▄▄▟▄
+                                    ▐▗▄▄▄▄█▟▄
+                                    ▐▐     ▐▐
+                                  ▗▄██▙  ▗▄██▙
+                                  ▐ C ▐  ▐ D ▐
+                                  ▐▄▄▄▟  ▐▄▄▄▟
+

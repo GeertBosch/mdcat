@@ -2,6 +2,7 @@
 #include <array>
 #include <cstdint>
 #include <cstdlib>
+#include <map>
 #include <set>
 
 #include "mermaid_model.h"
@@ -19,6 +20,7 @@ struct Metrics {
     int headLen;   // arrowhead length
     int headHalf;  // arrowhead half-width
     int ri;        // inner radius of a rounded corner, at most
+    int dash;      // length of a dash and of the gap after it, on a dotted link
     uint32_t rgb;
 
     explicit Metrics(const Env& env)
@@ -29,7 +31,26 @@ struct Metrics {
           headLen(std::max(6, cw)),
           headHalf(std::max(3, (45 * cw + 50) / 100)),  // round(0.45 * cw)
           ri(std::max(2, std::min(cw / 2, ch / 4))),
+          dash(3 * s),
           rgb(env.darkTheme ? 0xc8c8c8u : 0x505050u) {}
+
+    // The stroke width of a link, and the arrowhead on it: thick links get a larger one.
+    int width(Line l) const { return l == Line::Thick ? 2 * s : s; }
+    int len(Line l) const { return l == Line::Thick ? (5 * headLen + 2) / 4 : headLen; }
+    int half(Line l) const { return l == Line::Thick ? (5 * headHalf + 2) / 4 : headHalf; }
+    int circleR() const { return 2 * s; }   // radius of a circle end
+    int crossArm() const { return 3 * s; }  // reach of an X end, along each axis
+
+    // How far a marker reaches along its link from the outline it touches to where the shaft stops:
+    // the base of an arrowhead, or the centre of a circle or an X.
+    int shaftStop(const Stroke& st) const {
+        switch (st.kind) {
+        case Stroke::Arrowhead: return len(st.line);
+        case Stroke::CircleEnd: return circleR();
+        case Stroke::CrossEnd: return crossArm();
+        default: return -1;
+        }
+    }
 
     int px(int hu) const { return hu * cw / 2; }  // half-cell units -> pixels
     int py(int hu) const { return hu * ch / 2; }
@@ -113,9 +134,89 @@ struct Raster {
             }
         }
     }
+
+    // A line from (ax8, ay8) to (bx8, by8), in eighths of a pixel, w8 eighths wide with round
+    // ends; each pixel is sampled 4x4.
+    void line(int ax8, int ay8, int bx8, int by8, int w8) {
+        const long r2 = static_cast<long>(w8) * w8 / 4;
+        const long dx = bx8 - ax8, dy = by8 - ay8, len2 = dx * dx + dy * dy;
+        const int pad = w8 / 16 + 2;
+        for (int y = std::min(ay8, by8) / 8 - pad; y <= std::max(ay8, by8) / 8 + pad; ++y) {
+            for (int x = std::min(ax8, bx8) / 8 - pad; x <= std::max(ax8, bx8) / 8 + pad; ++x) {
+                int hits = 0;
+                for (int j = 0; j < 4; ++j) {
+                    for (int i = 0; i < 4; ++i) {
+                        long ex = 8L * x + 2 * i + 1 - ax8, ey = 8L * y + 2 * j + 1 - ay8;
+                        long t = len2 == 0 ? 0 : std::clamp(ex * dx + ey * dy, 0L, len2);
+                        // The point of the line nearest the sample, scaled by len2.
+                        long fx = ex * len2 - t * dx, fy = ey * len2 - t * dy;
+                        if (static_cast<double>(fx) * fx + static_cast<double>(fy) * fy <=
+                            static_cast<double>(r2) * len2 * len2)
+                            ++hits;
+                    }
+                }
+                if (hits) plot(x, y, (hits * 255 + 8) / 16);
+            }
+        }
+    }
 };
 
 // ---- Strokes -------------------------------------------------------------------------------
+
+// Dotted runs that overlap or meet along a line, as the edges of one bus do, become one run, so
+// that the dashes of the edges line up instead of filling each other's gaps.
+void mergeDotted(std::vector<Stroke>& strokes) {
+    auto fixedOf = [](const Stroke& st) {
+        bool vertical = st.pts[0].first == st.pts[1].first;
+        return std::make_pair(vertical, vertical ? st.pts[0].first : st.pts[0].second);
+    };
+    auto lowEnd = [](const Stroke& st) {  // index of the end with the smaller coordinate
+        bool vertical = st.pts[0].first == st.pts[1].first;
+        return (vertical ? st.pts[0].second < st.pts[1].second : st.pts[0].first < st.pts[1].first)
+            ? 0
+            : 1;
+    };
+    auto coord = [](const Stroke& st, size_t end) {
+        bool vertical = st.pts[0].first == st.pts[1].first;
+        return vertical ? st.pts[end].second : st.pts[end].first;
+    };
+    auto dotted = [](const Stroke& st) {
+        return st.kind == Stroke::Segment && st.line == Line::Dotted;
+    };
+    for (bool merged = true; merged;) {
+        merged = false;
+        for (size_t i = 0; i < strokes.size() && !merged; ++i) {
+            if (!dotted(strokes[i])) continue;
+            for (size_t j = i + 1; j < strokes.size() && !merged; ++j) {
+                if (!dotted(strokes[j]) || fixedOf(strokes[i]) != fixedOf(strokes[j])) continue;
+                const Stroke &a = strokes[i], &b = strokes[j];
+                size_t al = static_cast<size_t>(lowEnd(a)), bl = static_cast<size_t>(lowEnd(b));
+                int alo = coord(a, al), ahi = coord(a, 1 - al);
+                int blo = coord(b, bl), bhi = coord(b, 1 - bl);
+                if (std::max(alo, blo) > std::min(ahi, bhi)) continue;
+                // The merged run takes each end, and its rounding, from the stroke that reaches
+                // farther, and either one's where they end together.
+                auto roundOf = [](const Stroke& st, size_t end) { return (st.round >> end) & 1; };
+                int loRound = alo < blo ? roundOf(a, al)
+                    : blo < alo         ? roundOf(b, bl)
+                                        : roundOf(a, al) | roundOf(b, bl);
+                int hiRound = ahi > bhi ? roundOf(a, 1 - al)
+                    : bhi > ahi         ? roundOf(b, 1 - bl)
+                                        : roundOf(a, 1 - al) | roundOf(b, 1 - bl);
+                Stroke u = a;
+                u.pts[0] = alo <= blo ? a.pts[al] : b.pts[bl];
+                u.pts[1] = ahi >= bhi ? a.pts[1 - al] : b.pts[1 - bl];
+                u.round = static_cast<unsigned char>(loRound | (hiRound << 1));
+                u.breaks.insert(u.breaks.end(), b.breaks.begin(), b.breaks.end());
+                std::sort(u.breaks.begin(), u.breaks.end());
+                u.breaks.erase(std::unique(u.breaks.begin(), u.breaks.end()), u.breaks.end());
+                strokes[i] = u;
+                strokes.erase(strokes.begin() + static_cast<long>(j));
+                merged = true;
+            }
+        }
+    }
+}
 
 std::vector<Stroke> strokesOf(const Graph& g, const Layout& lay, const std::vector<Pt>& crossings) {
     std::vector<Stroke> strokes;
@@ -132,13 +233,14 @@ std::vector<Stroke> strokesOf(const Graph& g, const Layout& lay, const std::vect
     // directions meet is a corner and is rounded. Where three or more meet, a bus splits or merges:
     // the ends stay square and a dot marks the junction.
     std::vector<std::pair<Pt, Pt>> runs;
-    std::set<Pt> bends;
-    for (const std::vector<Pt>& path : lay.edgePath) {
+    std::map<Pt, Line> bends;  // with the style of the edge that bends there
+    for (size_t k = 0; k < lay.edgePath.size(); ++k) {
+        const std::vector<Pt>& path = lay.edgePath[k];
         for (size_t i = 0; i + 1 < path.size(); ++i) runs.push_back({path[i], path[i + 1]});
-        for (size_t i = 1; i + 1 < path.size(); ++i) bends.insert(path[i]);
+        for (size_t i = 1; i + 1 < path.size(); ++i) bends.emplace(path[i], g.edges[k].line);
     }
     std::set<Pt> corners;
-    for (const Pt& v : bends) {
+    for (const auto& [v, line] : bends) {
         std::array<bool, 4> dir{};  // up, down, left, right
         for (const auto& run : runs) {
             Pt a = run.first, b = run.second;
@@ -153,6 +255,7 @@ std::vector<Stroke> strokesOf(const Graph& g, const Layout& lay, const std::vect
         }
         int count = static_cast<int>(std::count(dir.begin(), dir.end(), true));
         Stroke st;
+        st.line = line;
         if (count >= 3) {
             st.kind = Stroke::Dot;
             st.pts = {v};
@@ -185,15 +288,23 @@ std::vector<Stroke> strokesOf(const Graph& g, const Layout& lay, const std::vect
             auto same = [&](const Stroke& o) { return o.kind == st.kind && o.pts == st.pts; };
             if (std::none_of(strokes.begin(), strokes.end(), same)) strokes.push_back(st);
         }
-        if (g.edges[k].head == End::Arrow && path.size() >= 2) {
+        // The markers at the two ends of the edge, each pointing from the next point of the path
+        // to the end.
+        for (int atTail = 0; atTail < 2 && path.size() >= 2; ++atTail) {
+            End end = atTail ? g.edges[k].tail : g.edges[k].head;
+            if (end == End::None) continue;
             Stroke st;
-            st.kind = Stroke::Arrowhead;
+            st.kind = end == End::Arrow ? Stroke::Arrowhead
+                : end == End::Circle    ? Stroke::CircleEnd
+                                        : Stroke::CrossEnd;
             st.line = g.edges[k].line;
-            st.pts = {path.back(), path[path.size() - 2]};
+            st.pts = atTail ? std::vector<Pt>{path.front(), path[1]}
+                            : std::vector<Pt>{path.back(), path[path.size() - 2]};
             auto same = [&](const Stroke& o) { return o.kind == st.kind && o.pts[0] == st.pts[0]; };
             if (std::none_of(strokes.begin(), strokes.end(), same)) strokes.push_back(st);
         }
     }
+    mergeDotted(strokes);
     return strokes;
 }
 
@@ -211,7 +322,7 @@ int cornerRadius(const std::vector<Stroke>& strokes, const Metrics& m, Pt v) {
             bool farRounded = st.round & (2 >> end);
             int len = std::abs(m.px(far.first) - m.px(v.first)) +
                 std::abs(m.py(far.second) - m.py(v.second));
-            r = std::min(r, farRounded ? (len - m.s) / 2 : len);
+            r = std::min(r, farRounded ? (len - m.width(st.line)) / 2 : len);
         }
     }
     return r;
@@ -225,6 +336,7 @@ bool rasterize(const std::vector<Stroke>& strokes,
                std::string& reason) {
     const int s = m.s, hs = m.hs;
     for (const Stroke& st : strokes) {
+        const int w = m.width(st.line), hw = w / 2;
         if (st.kind == Stroke::Outline) {
             int l = m.px(st.pts[0].first), t = m.py(st.pts[0].second);
             int r = m.px(st.pts[1].first), b = m.py(st.pts[1].second);
@@ -240,34 +352,46 @@ bool rasterize(const std::vector<Stroke>& strokes,
                 std::swap(a, b);
                 std::swap(roundA, roundB);
             }
-            // An arrowhead on this segment's end `p`: it points along the segment, away from it
-            // (`forward`) or back toward the other end.
-            auto headAt = [&](Pt p, bool forward) {
-                return std::any_of(strokes.begin(), strokes.end(), [&](const Stroke& h) {
-                    if (h.kind != Stroke::Arrowhead || h.pts[0] != p) return false;
-                    if ((h.pts[0].first == h.pts[1].first) != vertical) return false;
+            // How far the shaft stops short of this segment's end `p` because of a marker there:
+            // the marker points along the segment, away from it (`forward`) or back toward the
+            // other end. -1 if there is none.
+            auto markerAt = [&](Pt p, bool forward) {
+                for (const Stroke& h : strokes) {
+                    if (m.shaftStop(h) < 0 || h.pts[0] != p) continue;
+                    if ((h.pts[0].first == h.pts[1].first) != vertical) continue;
                     bool ahead = vertical ? h.pts[0].second > h.pts[1].second
                                           : h.pts[0].first > h.pts[1].first;
-                    return ahead == forward;
+                    if (ahead == forward) return m.shaftStop(h);
+                }
+                return -1;
+            };
+            auto dotAt = [&](Pt p) {
+                return std::any_of(strokes.begin(), strokes.end(), [&](const Stroke& d) {
+                    return d.kind == Stroke::Dot && d.pts[0] == p;
                 });
             };
-            bool tipped = headAt(b, true), tippedBack = headAt(a, false);
+            int stopB = markerAt(b, true), stopA = markerAt(a, false);
             int cross = vertical ? m.px(a.first) : m.py(a.second);
             int from = vertical ? m.py(a.second) : m.px(a.first);
             int to = vertical ? m.py(b.second) : m.px(b.first);
             // A run starts at its source outline's outer edge, or where a corner's arc ends. It
-            // ends where its arrowhead begins, at a corner's arc, or at the far edge of the stroke.
-            int roA = roundA ? cornerRadius(strokes, m, a) + s : 0;
-            int roB = roundB ? cornerRadius(strokes, m, b) + s : 0;
-            if ((roundA && roA <= s) || (roundB && roB <= s)) {
+            // ends where its arrowhead begins, at a corner's arc, or at the far edge of the stroke;
+            // at a junction dot it reaches across the other strokes.
+            int roA = roundA ? cornerRadius(strokes, m, a) + w : 0;
+            int roB = roundB ? cornerRadius(strokes, m, b) + w : 0;
+            if ((roundA && roA <= w) || (roundB && roB <= w)) {
                 reason = "segment too short";
                 return false;
             }
-            int begin = roundA ? from - hs + roA
-                : tippedBack   ? from - hs + s + m.headLen
+            int begin = roundA ? from - hw + roA
+                : stopA >= 0   ? from - hs + s + stopA
+                : dotAt(a)     ? from - hw
                                : from - hs;
-            int end = roundB ? to - hs + s - roB : tipped ? to - hs - m.headLen : to - hs + s;
-            if ((tipped || tippedBack) && end < begin + s) {
+            int end = roundB ? to - hw + w - roB
+                : stopB >= 0 ? to - hs - stopB
+                : dotAt(b)   ? to - hw + w
+                             : to - hs + s;
+            if ((stopA >= 0 || stopB >= 0) && end < begin + s) {
                 reason = "arrow too short";
                 return false;
             }
@@ -275,42 +399,60 @@ bool rasterize(const std::vector<Stroke>& strokes,
                 reason = "segment too short";
                 return false;
             }
-            if (vertical) {
-                ras.rect(cross - hs, begin, cross - hs + s, end);
-            } else {
-                // The run breaks for 2s px on either side of each vertical stroke that crosses it.
-                std::vector<int> breaks = st.breaks;
-                std::sort(breaks.begin(), breaks.end());
-                int at = begin;
+            // Paint the stretch [lo, hi) of the run. A horizontal run breaks for 2s px on either
+            // side of each vertical stroke that crosses it.
+            std::vector<int> breaks = st.breaks;
+            std::sort(breaks.begin(), breaks.end());
+            auto paint = [&](int lo, int hi) {
+                if (vertical) {
+                    ras.rect(cross - hw, lo, cross - hw + w, hi);
+                    return;
+                }
+                int at = lo;
                 for (int x : breaks) {
                     int l = m.px(x) - hs - 2 * s, r = m.px(x) - hs + 3 * s;
-                    if (l > at) ras.rect(at, cross - hs, l, cross - hs + s);
+                    if (l > at) ras.rect(at, cross - hw, std::min(l, hi), cross - hw + w);
                     at = std::max(at, r);
                 }
-                if (end > at) ras.rect(at, cross - hs, end, cross - hs + s);
+                if (hi > at) ras.rect(at, cross - hw, hi, cross - hw + w);
+            };
+            if (st.line == Line::Dotted) {
+                // Dashes of m.dash, a first at the start of the run and a last at its end, with
+                // gaps at least as long between them, so each straight run begins and ends on one.
+                int run = end - begin, n = (run + m.dash) / (2 * m.dash);
+                if (n < 2) {
+                    paint(begin, end);
+                } else {
+                    for (int i = 0; i < n; ++i) {
+                        int at = begin + i * (run - m.dash) / (n - 1);
+                        paint(at, at + m.dash);
+                    }
+                }
+            } else {
+                paint(begin, end);
             }
         } else if (st.kind == Stroke::Corner) {
             Pt v = st.pts[0];
             int vdir = st.pts[1].second < v.second ? -1 : 1;
             int hdir = st.pts[2].first < v.first ? -1 : 1;
-            int ri = cornerRadius(strokes, m, v), ro = ri + s;
+            int ri = cornerRadius(strokes, m, v), ro = ri + w;
             if (ri < 1) {
                 reason = "segment too short";
                 return false;
             }
-            int xv = m.px(v.first) - hs, yh = m.py(v.second) - hs;
-            int ox = hdir > 0 ? xv + ro : xv + s - ro;
-            int oy = vdir > 0 ? yh + ro : yh + s - ro;
+            int xv = m.px(v.first) - hw, yh = m.py(v.second) - hw;
+            int ox = hdir > 0 ? xv + ro : xv + w - ro;
+            int oy = vdir > 0 ? yh + ro : yh + w - ro;
             ras.arc(ox, oy, -hdir, -vdir, ri, ro);
         } else if (st.kind == Stroke::Dot) {
-            ras.disc(8 * (m.px(st.pts[0].first) - hs) + 4 * s,
-                     8 * (m.py(st.pts[0].second) - hs) + 4 * s,
-                     12 * s);
-        } else if (st.kind == Stroke::Arrowhead) {
+            ras.disc(8 * (m.px(st.pts[0].first) - hw) + 4 * w,
+                     8 * (m.py(st.pts[0].second) - hw) + 4 * w,
+                     12 * w);
+        } else if (m.shaftStop(st) >= 0) {
             Pt tip = st.pts[0], base = st.pts[1];
             bool vertical = tip.first == base.first;
             int sign = (vertical ? tip.second > base.second : tip.first > base.first) ? 1 : -1;
-            // The tip touches the outer edge of the target's outline stroke.
+            // The tip touches the outer edge of the outline stroke of the node it points at.
             int x = 8 * (m.px(tip.first) - hs), y = 8 * (m.py(tip.second) - hs);
             if (vertical) {
                 x += 4 * s;
@@ -319,7 +461,17 @@ bool rasterize(const std::vector<Stroke>& strokes,
                 y += 4 * s;
                 if (sign < 0) x += 8 * s;
             }
-            ras.arrowhead(x, y, vertical ? 0 : sign, vertical ? sign : 0, m.headLen, m.headHalf);
+            int ux = vertical ? 0 : sign, uy = vertical ? sign : 0;
+            if (st.kind == Stroke::Arrowhead) {
+                ras.arrowhead(x, y, ux, uy, m.len(st.line), m.half(st.line));
+            } else if (st.kind == Stroke::CircleEnd) {
+                ras.disc(x - 8 * ux * m.circleR(), y - 8 * uy * m.circleR(), 8 * m.circleR());
+            } else {
+                int cx = x - 8 * ux * m.crossArm(), cy = y - 8 * uy * m.crossArm();
+                int arm = 8 * m.crossArm();
+                ras.line(cx - arm, cy - arm, cx + arm, cy + arm, 8 * s);
+                ras.line(cx - arm, cy + arm, cx + arm, cy - arm, 8 * s);
+            }
         }
     }
     return true;
@@ -451,15 +603,22 @@ bool validate(const Graph& g,
             }
         }
     }
-    // Every arrowhead touches its target outline.
+    // Every marker touches the outline of the node it is at.
     for (size_t k = 0; k < g.edges.size(); ++k) {
-        if (g.edges[k].head != End::Arrow || lay.edgePath[k].empty()) continue;
-        if (!onOutline(lay.nodeFoot[static_cast<size_t>(g.edges[k].to)], lay.edgePath[k].back())) {
+        if (lay.edgePath[k].empty()) continue;
+        if (g.edges[k].head != End::None &&
+            !onOutline(lay.nodeFoot[static_cast<size_t>(g.edges[k].to)], lay.edgePath[k].back())) {
             reason = "arrowhead misses its target";
             return false;
         }
+        if (g.edges[k].tail != End::None &&
+            !onOutline(lay.nodeFoot[static_cast<size_t>(g.edges[k].from)],
+                       lay.edgePath[k].front())) {
+            reason = "arrowhead misses its source";
+            return false;
+        }
     }
-    // No stroke falls inside a label cell. An arrowhead reaches back one cell from its tip.
+    // No stroke falls inside a label cell. A marker reaches back one cell from its tip.
     bool ok = true;
     auto check = [&](int c, int r) {
         if (grid.get(c, r) == Occ::Label) ok = false;
@@ -469,7 +628,8 @@ bool validate(const Graph& g,
             outlineCells(st.pts[0], st.pts[1], check);
         } else if (st.kind == Stroke::Segment) {
             segmentCells(st.pts[0], st.pts[1], check);
-        } else if (st.kind == Stroke::Arrowhead) {
+        } else if (st.kind == Stroke::Arrowhead || st.kind == Stroke::CircleEnd ||
+                   st.kind == Stroke::CrossEnd) {
             Pt tip = st.pts[0], base = st.pts[1];
             bool vertical = tip.first == base.first;
             int sign = (vertical ? tip.second > base.second : tip.first > base.first) ? 1 : -1;
