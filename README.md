@@ -227,6 +227,21 @@ graph LR
     build --x lint[Lint]
 ```
 
+Edges can carry text: `a -->|yes| b`, `a -- yes --> b`, `a -. yes .-> b` and
+`a == yes ==> b`. The label is ordinary, selectable text that sits on its edge,
+halfway between the boxes, and the edge stops just short of it on either side.
+It gets a rank of its own, so diagrams with labels are spaced out twice as far, and
+a labelled edge has a port of its own and never joins a bus:
+
+```mermaid
+graph TD
+    input[Input] --> check[Valid?]
+    check -->|yes| build[Build]
+    check -->|no| report[Report]
+    build == all green ==> ship[Ship]
+    report -.-> ship
+```
+
 When edges interleave, each bus gets a track of its own between the ranks. An
 edge that has to cross another passes over it on a bridge, and only a dot marks a
 join. Edges share strokes only in a split from one box or a merge into one box,

@@ -272,21 +272,54 @@ std::vector<Stroke> strokesOf(const Graph& g, const Layout& lay, const std::vect
     for (size_t k = 0; k < g.edges.size(); ++k) {
         const std::vector<Pt>& path = lay.edgePath[k];
         for (size_t i = 0; i + 1 < path.size(); ++i) {
-            Stroke st;
-            st.kind = Stroke::Segment;
-            st.line = g.edges[k].line;
-            st.pts = {path[i], path[i + 1]};
-            st.round = static_cast<unsigned char>((corners.count(path[i]) ? 1 : 0) |
-                                                  (corners.count(path[i + 1]) ? 2 : 0));
-            if (path[i].second == path[i + 1].second) {
-                for (const Pt& x : crossings)
-                    if (x.second == path[i].second &&
-                        x.first > std::min(path[i].first, path[i + 1].first) &&
-                        x.first < std::max(path[i].first, path[i + 1].first))
-                        st.breaks.push_back(x.first);
+            const Pt a = path[i], b = path[i + 1];
+            const unsigned char round =
+                static_cast<unsigned char>((corners.count(a) ? 1 : 0) | (corners.count(b) ? 2 : 0));
+            // A run that goes through the edge's label is two strokes, each stopping a little short
+            // of the label: from a to the cell before it, and from the cell after it to b.
+            struct Piece {
+                Pt from, to;
+                unsigned char round, reach;
+            };
+            std::vector<Piece> pieces = {{a, b, round, 0}};
+            const CellBox& lb = lay.edgeLabel[k];
+            const bool vertical = a.first == b.first;
+            if (lb.cols > 0 && (vertical || a.second == b.second)) {
+                const int lo = vertical ? std::min(a.second, b.second) : std::min(a.first, b.first);
+                const int hi = vertical ? std::max(a.second, b.second) : std::max(a.first, b.first);
+                const int line = vertical ? a.first : a.second;
+                const int l0 = 2 * (vertical ? lb.row : lb.col);
+                const int l1 = 2 * (vertical ? lb.row + lb.rows : lb.col + lb.cols);
+                const int c0 = 2 * (vertical ? lb.col : lb.row);
+                const int c1 = 2 * (vertical ? lb.col + lb.cols : lb.row + lb.rows);
+                if (line > c0 && line < c1 && lo <= l0 && hi >= l1) {
+                    auto at = [&](int along) {
+                        return vertical ? Pt{line, along} : Pt{along, line};
+                    };
+                    const bool forward = vertical ? a.second < b.second : a.first < b.first;
+                    const Pt before = at(l0 - 1), after = at(l1 + 1);
+                    pieces = {
+                        {a, forward ? before : after, static_cast<unsigned char>(round & 1), 2},
+                        {forward ? after : before, b, static_cast<unsigned char>(round & 2), 1}};
+                }
             }
-            auto same = [&](const Stroke& o) { return o.kind == st.kind && o.pts == st.pts; };
-            if (std::none_of(strokes.begin(), strokes.end(), same)) strokes.push_back(st);
+            for (const Piece& pc : pieces) {
+                Stroke st;
+                st.kind = Stroke::Segment;
+                st.line = g.edges[k].line;
+                st.pts = {pc.from, pc.to};
+                st.round = pc.round;
+                st.reach = pc.reach;
+                if (pc.from.second == pc.to.second) {
+                    for (const Pt& x : crossings)
+                        if (x.second == pc.from.second &&
+                            x.first > std::min(pc.from.first, pc.to.first) &&
+                            x.first < std::max(pc.from.first, pc.to.first))
+                            st.breaks.push_back(x.first);
+                }
+                auto same = [&](const Stroke& o) { return o.kind == st.kind && o.pts == st.pts; };
+                if (std::none_of(strokes.begin(), strokes.end(), same)) strokes.push_back(st);
+            }
         }
         // The markers at the two ends of the edge, each pointing from the next point of the path
         // to the end.
@@ -347,10 +380,12 @@ bool rasterize(const std::vector<Stroke>& strokes,
         } else if (st.kind == Stroke::Segment) {
             Pt a = st.pts[0], b = st.pts[1];
             bool roundA = st.round & 1, roundB = st.round & 2;
+            bool reachA = st.reach & 1, reachB = st.reach & 2;
             bool vertical = a.first == b.first;
             if (vertical ? b.second < a.second : b.first < a.first) {
                 std::swap(a, b);
                 std::swap(roundA, roundB);
+                std::swap(reachA, reachB);
             }
             // How far the shaft stops short of this segment's end `p` because of a marker there:
             // the marker points along the segment, away from it (`forward`) or back toward the
@@ -383,11 +418,16 @@ bool rasterize(const std::vector<Stroke>& strokes,
                 reason = "segment too short";
                 return false;
             }
-            int begin = roundA ? from - hw + roA
+            // Where a stroke goes on beyond the centre of the cell next to a label: to a quarter of
+            // a cell's height short of the label.
+            const int gap = std::max(0, (vertical ? m.ch : m.cw) / 2 - m.ch / 4);
+            int begin = reachA ? from - gap
+                : roundA       ? from - hw + roA
                 : stopA >= 0   ? from - hs + s + stopA
                 : dotAt(a)     ? from - hw
                                : from - hs;
-            int end = roundB ? to - hw + w - roB
+            int end = reachB ? to + gap
+                : roundB     ? to - hw + w - roB
                 : stopB >= 0 ? to - hs - stopB
                 : dotAt(b)   ? to - hw + w
                              : to - hs + s;
@@ -563,16 +603,19 @@ bool validate(const Graph& g,
               const Grid& grid,
               const std::vector<Pt>& crossings,
               std::string& reason) {
-    // No edge passes through a node or label, except at its own endpoints.
+    // No edge passes through a node or label, except at its own endpoints, and through its own
+    // label.
     for (size_t k = 0; k < g.edges.size(); ++k) {
         const CellBox& a = lay.nodeFoot[static_cast<size_t>(g.edges[k].from)];
         const CellBox& b = lay.nodeFoot[static_cast<size_t>(g.edges[k].to)];
+        const CellBox& own = lay.edgeLabel[k];
         const std::vector<Pt>& path = lay.edgePath[k];
         for (size_t i = 0; i + 1 < path.size(); ++i) {
             bool ok = true;
             segmentCells(path[i], path[i + 1], [&](int c, int r) {
                 Occ o = grid.get(c, r);
-                if (o == Occ::Label || (o == Occ::Node && !inBox(a, c, r) && !inBox(b, c, r)))
+                if ((o == Occ::Label && !inBox(own, c, r)) ||
+                    (o == Occ::Node && !inBox(a, c, r) && !inBox(b, c, r)))
                     ok = false;
             });
             if (!ok) {
@@ -664,6 +707,17 @@ bool drawDiagram(
         for (int r = l.row; r < l.row + l.rows; ++r)
             for (int c = l.col; c < l.col + l.cols; ++c) grid.at(c, r) = Occ::Label;
     }
+    for (const CellBox& l : lay.edgeLabel) {
+        for (int r = l.row; r < l.row + l.rows; ++r) {
+            for (int c = l.col; c < l.col + l.cols; ++c) {
+                if (grid.get(c, r) != Occ::Empty) {
+                    reason = "overlap";
+                    return false;
+                }
+                grid.at(c, r) = Occ::Label;
+            }
+        }
+    }
     for (const Stroke& st : strokes) {
         if (st.kind != Stroke::Segment) continue;
         segmentCells(st.pts[0], st.pts[1], [&](int c, int r) {
@@ -676,30 +730,45 @@ bool drawDiagram(
     Raster ras(lay.cols * m.cw, lay.rows * m.ch);
     if (!rasterize(strokes, m, ras, reason)) return false;
 
-    // The text layer: labels on each node's middle row, spaces elsewhere.
+    // The text layer: node labels on each node's middle row, edge labels where the layout put them,
+    // spaces elsewhere.
     out.cols = lay.cols;
     out.rows = lay.rows;
     out.textRows.assign(static_cast<size_t>(lay.rows), std::string());
-    std::vector<std::vector<size_t>> byRow(static_cast<size_t>(lay.rows));
+    struct Text {
+        int col, width;
+        const std::string* text;
+    };
+    std::vector<std::vector<Text>> byRow(static_cast<size_t>(lay.rows));
     if (lay.titleRows > 0) {  // bold, centred
         int w = env.width(g.title);
         out.textRows[0] = std::string(static_cast<size_t>((lay.cols - w) / 2), ' ') + "\033[1m" +
             g.title + "\033[22m" +
             std::string(static_cast<size_t>(lay.cols - w - (lay.cols - w) / 2), ' ');
     }
-    for (size_t i = 0; i < g.nodes.size(); ++i)
-        byRow[static_cast<size_t>(lay.nodeLabel[i].row)].push_back(i);
+    for (size_t i = 0; i < g.nodes.size(); ++i) {
+        const CellBox& l = lay.nodeLabel[i];
+        byRow[static_cast<size_t>(l.row)].push_back({l.col, l.cols, &g.nodes[i].label.lines[0]});
+    }
+    for (size_t k = 0; k < g.edges.size(); ++k) {
+        const CellBox& l = lay.edgeLabel[k];
+        const std::vector<std::string>& lines = g.edges[k].label.lines;
+        for (size_t j = 0; j < lines.size() && l.cols > 0; ++j) {
+            int w = env.width(lines[j]);
+            byRow[static_cast<size_t>(l.row) + j].push_back(
+                {l.col + (l.cols - w) / 2, w, &lines[j]});
+        }
+    }
     for (int r = 0; r < lay.rows; ++r) {
-        std::vector<size_t>& nodes = byRow[static_cast<size_t>(r)];
-        std::sort(nodes.begin(), nodes.end(), [&](size_t a, size_t b) {
-            return lay.nodeLabel[a].col < lay.nodeLabel[b].col;
-        });
+        std::vector<Text>& texts = byRow[static_cast<size_t>(r)];
+        std::sort(
+            texts.begin(), texts.end(), [](const Text& a, const Text& b) { return a.col < b.col; });
         std::string& line = out.textRows[static_cast<size_t>(r)];
         int at = 0;
-        for (size_t i : nodes) {
-            line.append(static_cast<size_t>(lay.nodeLabel[i].col - at), ' ');
-            line += g.nodes[i].label.lines[0];
-            at = lay.nodeLabel[i].col + lay.nodeLabel[i].cols;
+        for (const Text& t : texts) {
+            line.append(static_cast<size_t>(t.col - at), ' ');
+            line += *t.text;
+            at = t.col + t.width;
         }
         line.append(static_cast<size_t>(lay.cols - at), ' ');
     }

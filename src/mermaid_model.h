@@ -69,7 +69,7 @@ struct Layout {  // cells for boxes, half-cell units for paths
     int cols = 0, rows = 0;
     int titleRows = 0;  // rows at the top that hold the title, and a blank one after it
     std::vector<CellBox> nodeFoot, nodeLabel;  // per node
-    std::vector<CellBox> edgeLabel;            // per edge (cols == 0 if none)
+    std::vector<CellBox> edgeLabel;            // per edge: its text's cells (cols == 0 if none)
     std::vector<std::vector<Pt>> edgePath;     // per edge, orthogonal hu polyline
     // Per edge: its group, a split (edges from one source) or a merge (edges into one target) whose
     // edges share a port on each of their nodes, and have one style. Only edges of one group may
@@ -88,6 +88,10 @@ struct Stroke {  // what the rasterizer consumes, in hu
     // Segment: bit 0 (bit 1) is set when the end at pts[0] (pts[1]) is a rounded Corner, so the
     // straight piece stops short of the bend.
     unsigned char round = 0;
+    // Segment: bit 0 (bit 1) is set when the end at pts[0] (pts[1]) is the gap before an edge's
+    // label. The point is then the centre of the cell next to the label, and the stroke goes on
+    // from it until it is a quarter of a cell's height short of the label.
+    unsigned char reach = 0;
     // Segment, horizontal only: the x of each vertical stroke that crosses it, where the stroke
     // breaks to form a bridge.
     std::vector<int> breaks;
@@ -107,7 +111,8 @@ constexpr int kGapTd =
 constexpr int kGapLr = 4;  // columns between two ranks, at least; with many tracks, tracks + 2
 constexpr int kSepTd = 2;  // columns between neighbouring footprints in a rank
 constexpr int kSepLr = 1;  // rows between neighbouring footprints in a rank
-constexpr int kMaxCrossings = 3;  // edge crossings (bridges) a diagram may have
+constexpr int kMaxCrossings = 3;    // edge crossings (bridges) a diagram may have
+constexpr int kMaxLabelWidth = 24;  // columns an edge label may take
 }  // namespace tune
 
 // Parse the body of a ```mermaid block. On failure `reason` is one of the stable fallback reasons.

@@ -56,6 +56,22 @@ bool plainLabelChar(char c) {
     }
 }
 
+// The text of a plain label, from `raw`: its whitespace collapsed as HTML does, as Mermaid shows
+// it. Text that is empty or holds syntax characters is declined.
+bool plainLabel(const std::string& raw, std::string& label) {
+    for (char c : raw)
+        if (!plainLabelChar(c)) return false;
+    label.clear();
+    for (char c : trim(raw)) {
+        if (c == ' ' || c == '\t') {
+            if (label.empty() || label.back() != ' ') label += ' ';
+        } else {
+            label += c;
+        }
+    }
+    return !label.empty();
+}
+
 bool reservedId(const std::string& id) {
     static const char* const kReserved[] = {"end",
                                             "subgraph",
@@ -217,19 +233,8 @@ struct Parser {
         if (p < s.size() && s[p] == '[') {
             size_t close = s.find(']', p + 1);
             if (close == std::string::npos) return fail(kUnsupportedSyntax);
-            std::string raw = s.substr(p + 1, close - p - 1);
-            for (char c : raw)
-                if (!plainLabelChar(c)) return fail("unsupported label");
-            // HTML-style collapsing of whitespace runs, as Mermaid shows them.
-            raw = trim(raw);
-            for (char c : raw) {
-                if (c == ' ' || c == '\t') {
-                    if (label.empty() || label.back() != ' ') label += ' ';
-                } else {
-                    label += c;
-                }
-            }
-            if (label.empty()) return fail("unsupported label");
+            if (!plainLabel(s.substr(p + 1, close - p - 1), label))
+                return fail("unsupported label");
             labelled = true;
             p = close + 1;
         }
@@ -340,14 +345,15 @@ struct Parser {
     // characters, so `-->` is 1, `--->` is 2, `---` is 1 and `----` is 2, and a dotted link counts
     // its dots. Markers at both ends must agree (`<-->`, `o--o`, `x--x`); Mermaid reads others as
     // something else, so they are declined.
+    static End marker(char c) {
+        return c == 'o'            ? End::Circle
+            : c == 'x'             ? End::Cross
+            : c == '>' || c == '<' ? End::Arrow
+                                   : End::None;
+    }
+
     bool parseLink(const std::string& s, size_t& p, Edge& edge) {
         auto at = [&](size_t i) { return i < s.size() ? s[i] : '\0'; };
-        auto marker = [](char c) {
-            return c == 'o'            ? End::Circle
-                : c == 'x'             ? End::Cross
-                : c == '>' || c == '<' ? End::Arrow
-                                       : End::None;
-        };
         char left = '\0';
         if ((at(p) == 'o' || at(p) == 'x' || at(p) == '<') &&
             (at(p + 1) == '-' || at(p + 1) == '=')) {
@@ -401,8 +407,78 @@ struct Parser {
         return true;
     }
 
+    // A link with its text in the middle, `-- text -->`, `-. text .->` or `== text ==>` at s[p], as
+    // Mermaid reads it: a start (`--`, `-.` or `==`, after the same optional marker as parseLink
+    // reads) and a space, then the text, then the end of a link of the same stroke. The end says
+    // the length and the marker on the right, so `-- No ---->` is 3 ranks long. `handled` says
+    // whether s[p] has that shape at all; if not, nothing is consumed.
+    bool parseTextLink(const std::string& s, size_t& p, Edge& edge, bool& handled) {
+        handled = false;
+        auto at = [&](size_t i) { return i < s.size() ? s[i] : '\0'; };
+        size_t q = p;
+        char left = '\0';
+        if ((at(q) == 'o' || at(q) == 'x' || at(q) == '<') &&
+            (at(q + 1) == '-' || at(q + 1) == '=')) {
+            left = s[q];
+            ++q;
+        }
+        const bool dotted = at(q) == '-' && at(q + 1) == '.';
+        const bool thick = at(q) == '=' && at(q + 1) == '=';
+        if (!(dotted || thick || (at(q) == '-' && at(q + 1) == '-')) ||
+            !std::isspace(static_cast<unsigned char>(at(q + 2))))
+            return true;
+        handled = true;
+        const size_t textAt = q + 3;
+        const char stroke = dotted ? '.' : s[q];
+        char right = '\0';
+        size_t len = 0, end = std::string::npos, after = 0;
+        for (size_t j = textAt; j < s.size() && end == std::string::npos;) {
+            size_t run = 0;
+            while (at(j + run) == stroke) ++run;
+            if (run == 0) {
+                ++j;
+                continue;
+            }
+            char next = at(j + run);
+            if (dotted) {
+                if (next == '-') {
+                    after = j + run + 1;
+                    len = run;
+                    end = j;
+                    if (at(after) == '>' || at(after) == 'o' || at(after) == 'x')
+                        right = s[after++];
+                }
+            } else if (run >= 2) {
+                if (next == '>' || next == 'o' || next == 'x') {
+                    right = next;
+                    after = j + run + 1;
+                    len = run - 1;
+                    end = j;
+                } else if (run >= 3) {
+                    after = j + run;
+                    len = run - 2;
+                    end = j;
+                }
+            }
+            j += run;
+        }
+        if (end == std::string::npos) return fail(kUnsupportedSyntax);
+        std::string text;
+        if (!plainLabel(s.substr(textAt, end - textAt), text)) return fail("unsupported label");
+        if (left && !(left == right || (left == '<' && right == '>')))
+            return fail(kUnsupportedSyntax);
+        edge.line = dotted ? Line::Dotted : thick ? Line::Thick : Line::Solid;
+        edge.head = marker(right);
+        edge.tail = marker(left);
+        edge.minlen = static_cast<int>(std::min<size_t>(len, tune::kMaxRanks));
+        edge.label.lines = {text};
+        p = after;
+        return true;
+    }
+
     // A chain `group link group link ...`, where a link is as parseLink reads it, possibly
-    // preceded by an edge id (`e1@-->`). A group is `node & node ...`, and every node of a group
+    // preceded by an edge id (`e1@-->`), and has text as parseTextLink or `|text|` after it reads.
+    // A group is `node & node ...`, and every node of a group
     // is joined to every node of the next. A lone group just declares its nodes.
     bool parseChain(const std::string& s) {
         size_t p = 0;
@@ -415,7 +491,23 @@ struct Parser {
                 p = e + 1;
             }
             Edge link;
-            if (!parseLink(s, p, link)) return false;
+            bool handled = false;
+            if (!parseTextLink(s, p, link, handled)) return false;
+            if (!handled) {
+                if (!parseLink(s, p, link)) return false;
+                size_t bar = p;
+                while (bar < s.size() && s[bar] == ' ') ++bar;
+                if (bar < s.size() && s[bar] == '|') {
+                    size_t close = s.find('|', bar + 1);
+                    std::string text;
+                    if (close == std::string::npos ||
+                        !plainLabel(s.substr(bar + 1, close - bar - 1), text) ||
+                        link.line == Line::Invisible)
+                        return fail("unsupported label");
+                    link.label.lines = {text};
+                    p = close + 1;
+                }
+            }
             if (!parseGroup(s, p, to)) return false;
             for (int a : from) {
                 for (int b : to) {

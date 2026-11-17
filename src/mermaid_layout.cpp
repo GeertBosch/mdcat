@@ -20,10 +20,11 @@ int floorDiv(int a, int b) {
 constexpr int kDummyWeight = 8;
 
 // One thing that occupies a slot in a rank: a real node, or a dummy that an edge spanning several
-// ranks passes through.
+// ranks passes through, which is also where an edge's label sits.
 struct Item {
     int rank = 0;
     int ext = 1;     // extent across the flow, in cells
+    int thick = 1;   // extent along the flow, in cells (of a label; nodes have their own)
     int left = 0;    // start across the flow, in cells
     int weight = 1;  // how strongly placement honours its desired position
 };
@@ -351,6 +352,26 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
             return false;
         }
     }
+    // Edge labels, as in Dagre: every rank and minimum length is doubled, so that a labelled edge
+    // has a rank halfway along it. Its label is an item there, which ordering and placement treat
+    // like any other, so the labels get room without a search for it. Nodes stay on even ranks.
+    auto labelWidth = [&](const Edge& e) {
+        int w = 0;
+        for (const std::string& line : e.label.lines) w = std::max(w, env.width(line));
+        return w;
+    };
+    bool labelled = false;
+    for (const Edge& e : g.edges) {
+        if (e.label.lines.empty()) continue;
+        labelled = true;
+        if (labelWidth(e) > tune::kMaxLabelWidth) {
+            reason = "label too wide: " + std::to_string(labelWidth(e)) + " > " +
+                std::to_string(tune::kMaxLabelWidth);
+            return false;
+        }
+    }
+    const int unit = labelled ? 2 : 1;
+
     std::vector<std::vector<int>> outE(n), inE(n);  // edge indices, in declaration order
     for (size_t k = 0; k < g.edges.size(); ++k) {
         outE[static_cast<size_t>(g.edges[k].from)].push_back(static_cast<int>(k));
@@ -369,7 +390,7 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
         for (int k : outE[u]) {
             const Edge& e = g.edges[static_cast<size_t>(k)];
             size_t v = static_cast<size_t>(e.to);
-            rank[v] = std::max(rank[v], rank[u] + e.minlen);
+            rank[v] = std::max(rank[v], rank[u] + unit * e.minlen);
             if (--indeg[v] == 0) topo.push_back(v);
         }
     }
@@ -384,30 +405,32 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
         int r = INT_MAX;
         for (int k : outE[i]) {
             const Edge& e = g.edges[static_cast<size_t>(k)];
-            r = std::min(r, rank[static_cast<size_t>(e.to)] - e.minlen);
+            r = std::min(r, rank[static_cast<size_t>(e.to)] - unit * e.minlen);
         }
         rank[i] = r;
     }
-    // Tighten: move a node a rank toward the side with more edges while every edge on the other
-    // side has slack to spare, which shortens the total edge length. Each move shortens it by at
-    // least one, so this ends.
+    // Tighten: move a node a rank (two, when labelled) toward the side with more edges while every
+    // edge on the other side has slack to spare, which shortens the total edge length. Each move
+    // shortens it by at least one, so this ends.
     for (bool moved = true; moved;) {
         moved = false;
         for (size_t i = 0; i < n; ++i) {
             int slackIn = INT_MAX, slackOut = INT_MAX;
             for (int k : inE[i]) {
                 const Edge& e = g.edges[static_cast<size_t>(k)];
-                slackIn = std::min(slackIn, rank[i] - rank[static_cast<size_t>(e.from)] - e.minlen);
+                slackIn = std::min(slackIn,
+                                   rank[i] - rank[static_cast<size_t>(e.from)] - unit * e.minlen);
             }
             for (int k : outE[i]) {
                 const Edge& e = g.edges[static_cast<size_t>(k)];
-                slackOut = std::min(slackOut, rank[static_cast<size_t>(e.to)] - rank[i] - e.minlen);
+                slackOut =
+                    std::min(slackOut, rank[static_cast<size_t>(e.to)] - rank[i] - unit * e.minlen);
             }
-            if (outE[i].size() > inE[i].size() && slackOut >= 1) {
-                ++rank[i];
+            if (outE[i].size() > inE[i].size() && slackOut >= unit) {
+                rank[i] += unit;
                 moved = true;
-            } else if (inE[i].size() > outE[i].size() && slackIn >= 1) {
-                --rank[i];
+            } else if (inE[i].size() > outE[i].size() && slackIn >= unit) {
+                rank[i] -= unit;
                 moved = true;
             }
         }
@@ -451,6 +474,7 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
     }
     std::vector<std::vector<int>> order(ranks);
     std::vector<std::vector<int>> chain(g.edges.size());  // items an edge passes through
+    std::vector<int> labelItem(g.edges.size(), -1);       // the item holding an edge's label
     std::vector<char> visited(n, 0);
     std::function<void(size_t)> visit = [&](size_t u) {
         visited[u] = 1;
@@ -459,10 +483,20 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
             size_t v = static_cast<size_t>(g.edges[static_cast<size_t>(k)].to);
             std::vector<int>& c = chain[static_cast<size_t>(k)];
             c.push_back(static_cast<int>(u));
+            const Edge& edge = g.edges[static_cast<size_t>(k)];
+            const int mid = rank[u] + (rank[v] - rank[u]) / 2;
             for (int r = rank[u] + 1; r < rank[v]; ++r) {
                 Item d;
                 d.rank = r;
                 d.weight = kDummyWeight;
+                if (!edge.label.lines.empty() && r == mid) {
+                    const int lines = static_cast<int>(edge.label.lines.size());
+                    int w = labelWidth(edge);
+                    if (td && w % 2 == 0) ++w;  // so that the edge can run through its middle
+                    d.ext = td ? w : lines;
+                    d.thick = td ? lines : labelWidth(edge);
+                    labelItem[static_cast<size_t>(k)] = static_cast<int>(items.size());
+                }
                 items.push_back(d);
                 c.push_back(static_cast<int>(items.size()) - 1);
                 order[static_cast<size_t>(r)].push_back(static_cast<int>(items.size()) - 1);
@@ -488,10 +522,10 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
     // B->C all sharing ports would show B->B, and even a complete A,B->C,D lets A's strokes climb
     // into B's bus and up to B. So the edges are split into stars, each a split or a merge, and a
     // star gets a port of its own on each of its nodes. A star's edges all have one style, so
-    // edges of different styles never share a bus. Invisible links have no ports: they rank and
-    // order the nodes but are not routed. Greedily, the next star is the largest
-    // left, ties going to the one holding the earliest-declared edge, then to splits. A node's
-    // first port on each side is centred.
+    // edges of different styles never share a bus, and a labelled edge never shares one at all.
+    // Invisible links have no ports: they rank and order the nodes but are not routed. Greedily,
+    // the next star is the largest left, ties going to the one holding the earliest-declared edge,
+    // then to splits. A node's first port on each side is centred.
     const size_t m = g.edges.size();
     struct Port {
         std::vector<int> edges;  // in declaration order
@@ -513,7 +547,9 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
             ++routed;
         }
         auto styleOf = [&](int a, int b) {
-            const Edge& e = g.edges[static_cast<size_t>(edgeOf.at({a, b}))];
+            const int k = edgeOf.at({a, b});
+            const Edge& e = g.edges[static_cast<size_t>(k)];
+            if (!e.label.lines.empty()) return 1000 + k;  // never shares a port
             return (static_cast<int>(e.line) * 4 + static_cast<int>(e.head)) * 4 +
                 static_cast<int>(e.tail);
         };
@@ -756,6 +792,10 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
         size_t r = static_cast<size_t>(rank[i]);
         thick[r] = std::max(thick[r], td ? tune::kNodeRows : nodeW[i]);
     }
+    for (size_t i = n; i < items.size(); ++i) {
+        size_t r = static_cast<size_t>(items[i].rank);
+        thick[r] = std::max(thick[r], items[i].thick);
+    }
     std::vector<std::vector<GapSeg>> gapSegs(ranks);
     for (size_t k = 0; k < m; ++k) {
         if (g.edges[k].line == Line::Invisible) continue;
@@ -801,6 +841,19 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
     // the track of every gap where its ends differ, and arrives at the middle of its target's
     // facing side, each through its port.
     lay.edgeLabel.assign(g.edges.size(), CellBox());
+    for (size_t k = 0; k < g.edges.size(); ++k) {
+        if (labelItem[k] < 0) continue;
+        const Item& it = items[static_cast<size_t>(labelItem[k])];
+        const size_t r = static_cast<size_t>(it.rank);
+        const int w = labelWidth(g.edges[k]);
+        const int lines = static_cast<int>(g.edges[k].label.lines.size());
+        CellBox& b = lay.edgeLabel[k];
+        b.cols = w;
+        b.rows = lines;
+        // Centred on the item across the flow, and on its band along it.
+        b.col = td ? it.left + (it.ext - w) / 2 : start[r] + (thick[r] - w) / 2;
+        b.row = td ? start[r] + (thick[r] - lines) / 2 : it.left + (it.ext - lines) / 2;
+    }
     lay.edgePath.assign(g.edges.size(), std::vector<Pt>());
     for (size_t k = 0; k < g.edges.size(); ++k) {
         if (g.edges[k].line == Line::Invisible) continue;

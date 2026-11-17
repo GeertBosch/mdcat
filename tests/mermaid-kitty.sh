@@ -6,7 +6,8 @@
 #
 # Checked here, over tests/mermaid-basic.md (widths 80 and 30), tests/mermaid-dag.md (80 and 44),
 # tests/mermaid-routing.md (80), tests/mermaid-crossings.md (80), tests/mermaid-syntax.md (80),
-# tests/mermaid-links.md (80) and tests/mermaid-fallback.md:
+# tests/mermaid-links.md (80), tests/mermaid-edge-labels.md (80 and 44) and
+# tests/mermaid-fallback.md:
 #   - tests/kitty-preview.py's rendering of the output of `mdcat --mermaid builtin` (text plus each
 #     image as quadrant blocks) equals tests/expected/<fixture>.w<N>.txt, and the
 #     MDCAT_MERMAID_DEBUG=1 stderr equals <fixture>.w<N>.err (UPDATE=1 rewrites both). The
@@ -104,6 +105,8 @@ golden_case mermaid-routing 80
 golden_case mermaid-crossings 80
 golden_case mermaid-syntax 80
 golden_case mermaid-links 80
+golden_case mermaid-edge-labels 80
+golden_case mermaid-edge-labels 44
 golden_case mermaid-basic 30
 golden_case mermaid-basic 80
 
@@ -151,6 +154,48 @@ PY
 else
     fail "dotted link dashes" "$msg"
 fi
+
+# An edge's stroke stops a quarter of a cell's height short of its label on either side, in a top
+# down and a left to right diagram alike. Along the middle line of the picture, the pixel runs are the
+# stroke before the label and the stroke after it, and the gap between them is the label's cells
+# plus 2 * (cellH / 4): 30 px for a one-row label, 40 px for the three columns of "yes".
+for dir in TD LR; do
+    lab="$tmp/label-$dir.md"
+    printf '```mermaid\ngraph %s\n    a[Start] -->|yes| b[End]\n```\n' "$dir" > "$lab"
+    mc --img kitty --mermaid builtin --width 80 "$lab" > "$tmp/label-$dir.out" 2>/dev/null
+    if msg=$(python3 - "$here/kitty-preview.py" "$tmp/label-$dir.out" "$dir" <<'PY'
+import base64, importlib.util, re, sys
+sys.dont_write_bytecode = True
+spec = importlib.util.spec_from_file_location("kp", sys.argv[1])
+kp = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(kp)
+d = open(sys.argv[2], "rb").read()
+chunks = re.findall(rb"\x1b_G[^;]*;(.*?)\x1b\\", d, re.S)
+w, h, rows = kp.decode_png(base64.b64decode(b"".join(chunks)))
+td = sys.argv[3] == "TD"
+want = 30 if td else 40
+line = ([rows[y][4 * (w // 2) + 3] > 0 for y in range(h)] if td
+        else [rows[h // 2][4 * x + 3] > 0 for x in range(w)])
+best, i = [], 0
+while i < len(line):
+    if line[i]:
+        e = i
+        while e < len(line) and line[e]:
+            e += 1
+        best.append((i, e))
+        i = e
+    else:
+        i += 1
+gaps = [b[0] - a[1] for a, b in zip(best, best[1:])]
+if want not in gaps:
+    sys.exit("expected a %d px gap around the label, runs %r" % (want, best))
+PY
+    ); then
+        pass
+    else
+        fail "label gap ($dir)" "$msg"
+    fi
+done
 
 # Structure of every APC. (The previewer has already decoded every PNG: signature, CRC, zlib
 # stream, and size c*cellW x r*cellH.)
