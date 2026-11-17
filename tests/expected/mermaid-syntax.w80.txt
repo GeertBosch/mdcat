@@ -1,0 +1,248 @@
+Mermaid syntax the built-in renderer reads
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Directions, statement forms, and syntax that is understood but has no visual
+effect. Checked by mermaid-kitty.sh at width 80, with the fallback reasons in
+expected/mermaid-syntax.w80.err.
+
+Directions
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the same three boxes in all four directions. Arrowheads follow the
+true direction (up for BT, left for RL), and the labels are never mirrored.
+
+image @13,34 c=11 r=13 z=0 C=1 png=110x260
+                                    ▗▄▄▄▄▄▄
+                                    ▐ Top ▐
+                                    ▐▄▄▄▄▄▟
+                                       ▜▘
+                                       ▐
+                                  ▗▄▄▄▄▟▄▄▄▄▄
+                                  ▐ Middle  ▐
+                                  ▐▄▄▄▄▄▄▄▄▄▟
+                                       ▜▘
+                                       ▐
+                                   ▗▄▄▄▟▄▄▄▄
+                                   ▐ Base  ▐
+                                   ▐▄▄▄▄▄▄▄▟
+
+image @27,22 c=36 r=3 z=0 C=1 png=360x60
+                      ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄
+                      ▐ Third ▐█▄▄▄▟ Second ▐█▄▄▄▟ First ▐
+                      ▐▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▟
+
+Direction aliases
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: > is LR, < is RL, ^ is BT and v is TB.
+
+image @36,33 c=14 r=3 z=0 C=1 png=140x60
+                                 ▗▄▄▄▄    ▗▄▄▄▄
+                                 ▐ A ▐▄▄▄▟█ B ▐
+                                 ▐▄▄▄▟    ▐▄▄▄▟
+
+image @40,33 c=14 r=3 z=0 C=1 png=140x60
+                                 ▗▄▄▄▄    ▗▄▄▄▄
+                                 ▐ B ▐█▄▄▄▟ A ▐
+                                 ▐▄▄▄▟    ▐▄▄▄▟
+
+image @44,37 c=5 r=8 z=0 C=1 png=50x160
+                                     ▗▄▄▄▄
+                                     ▐ B ▐
+                                     ▐▄▄▄▟
+                                       ▜▘
+                                       ▐
+                                     ▗▄▟▄▄
+                                     ▐ A ▐
+                                     ▐▄▄▄▟
+
+image @53,37 c=5 r=8 z=0 C=1 png=50x160
+                                     ▗▄▄▄▄
+                                     ▐ A ▐
+                                     ▐▄▄▄▟
+                                       ▐
+                                       ▐
+                                     ▗▄█▙▄
+                                     ▐ B ▐
+                                     ▐▄▄▄▟
+
+No direction, and flowchart-elk
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: both read as top-down, as flowchart-elk reads as flowchart.
+
+image @67,37 c=5 r=8 z=0 C=1 png=50x160
+                                     ▗▄▄▄▄
+                                     ▐ A ▐
+                                     ▐▄▄▄▟
+                                       ▐
+                                       ▐
+                                     ▗▄█▙▄
+                                     ▐ B ▐
+                                     ▐▄▄▄▟
+
+image @76,33 c=14 r=3 z=0 C=1 png=140x60
+                                 ▗▄▄▄▄    ▗▄▄▄▄
+                                 ▐ A ▐▄▄▄▟█ B ▐
+                                 ▐▄▄▄▟    ▐▄▄▄▟
+
+Fan-out, bottom to top
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: a split drawn upward, one arrow from A to B and C, heads pointing up.
+
+image @85,34 c=12 r=14 z=0 C=1 png=120x280
+                                  ▗▄▄▄▄
+                                  ▐ D ▐
+                                  ▐▄▄▄▟
+                                    ▜▘
+                                    ▐
+                                  ▗▄▟▄▄  ▗▄▄▄▄
+                                  ▐ B ▐  ▐ C ▐
+                                  ▐▄▄▄▟  ▐▄▄▄▟
+                                    ▜▘     ▜▘
+                                    ▐▄▄█▄▄▄▛
+                                       ▐
+                                     ▗▄▟▄▄
+                                     ▐ A ▐
+                                     ▐▄▄▄▟
+
+Fan-in, right to left
+────────────────────────────────────────────────────────────────────────────────
+
+image @103,33 c=14 r=7 z=0 C=1 png=140x140
+                                          ▗▄▄▄▄
+                                        ▗▄▟ A ▐
+                                 ▗▄▄▄▄  ▐ ▐▄▄▄▟
+                                 ▐ C ▐█▄█
+                                 ▐▄▄▄▟  ▐ ▗▄▄▄▄
+                                        ▐▄▟ B ▐
+                                          ▐▄▄▄▟
+
+Statements
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: ; and newlines both separate statements. The chain makes A --> B and B
+--> C.
+
+image @117,19 c=41 r=3 z=0 C=1 png=410x60
+                   ▗▄▄▄▄    ▗▄▄▄▄    ▗▄▄▄▄    ▗▄▄▄▄    ▗▄▄▄▄
+                   ▐ A ▐▄▄▄▟█ B ▐▄▄▄▟█ C ▐▄▄▄▟█ D ▐▄▄▄▟█ E ▐
+                   ▐▄▄▄▟    ▐▄▄▄▟    ▐▄▄▄▟    ▐▄▄▄▟    ▐▄▄▄▟
+
+Chains and &
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: a --> b & c --> d makes a --> b, a --> c, b --> d and c --> d. (A & B
+--> C & D is in mermaid-crossings.md.)
+
+image @127,34 c=12 r=15 z=0 C=1 png=120x300
+                                     ▗▄▄▄▄
+                                     ▐ a ▐
+                                     ▐▄▄▄▟
+                                       ▐
+                                    ▗▄▄█▄▄▄▄
+                                    ▐      ▐
+                                  ▗▄█▙▄  ▗▄█▙▄
+                                  ▐ b ▐  ▐ c ▐
+                                  ▐▄▄▄▟  ▐▄▄▄▟
+                                    ▐      ▐
+                                    ▐▄▄▄█▄▄▛
+                                        ▐
+                                      ▗▄█▙▄
+                                      ▐ d ▐
+                                      ▐▄▄▄▟
+
+Redefinition
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the label is the last explicit text, New, and a bare A keeps it.
+
+image @148,32 c=16 r=11 z=0 C=1 png=160x220
+                                           ▗▄▄▄▄
+                                        ▗▄▟█ B ▐
+                                        ▐  ▐▄▄▄▟
+                                        ▐
+                                ▗▄▄▄▄▄▄ ▐  ▗▄▄▄▄
+                                ▐ New ▐▄█▄▟█ C ▐
+                                ▐▄▄▄▄▄▟ ▐  ▐▄▄▄▟
+                                        ▐
+                                        ▐  ▗▄▄▄▄
+                                        ▐▄▟█ D ▐
+                                           ▐▄▄▄▟
+
+Comments and directives
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: three boxes in a row. A %% line, a trailing %%, and a %%{ }%%
+directive over several lines have no effect.
+
+image @166,24 c=31 r=3 z=0 C=1 png=310x60
+                        ▗▄▄▄▄▄▄    ▗▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄
+                        ▐ One ▐▄▄▄▟█ Two ▐▄▄▄▟█ Three ▐
+                        ▐▄▄▄▄▄▟    ▐▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▟
+
+Front matter
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: a bold, centred title above the diagram. config: has no effect.
+
+image @175,32 c=16 r=5 z=0 C=1 png=160x100
+                                A short pipeline
+
+                                 ▗▄▄▄▄    ▗▄▄▄▄
+                                 ▐ A ▐▄▄▄▟█ B ▐
+                                 ▐▄▄▄▟    ▐▄▄▄▟
+
+Wide title
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the title is wider than the diagram, which is centred under it.
+
+image @186,17 c=46 r=10 z=0 C=1 png=460x200
+                 A title much wider than the two boxes below it
+
+                                     ▗▄▄▄▄
+                                     ▐ A ▐
+                                     ▐▄▄▄▟
+                                       ▐
+                                       ▐
+                                     ▗▄█▙▄
+                                     ▐ B ▐
+                                     ▐▄▄▄▟
+
+Understood, but no visual effect
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the diagram is just A --> B and B --> C. Styling, classes, links,
+accessibility text, edge ids and edge properties are all read and dropped.
+
+image @203,34 c=12 r=9 z=0 C=1 png=120x180
+                                     ▗▄▄▄▄
+                                     ▐ A ▐
+                                     ▐▄▄▄▟
+                                       ▐
+                                    ▗▄▄█▄▄▄▄
+                                    ▐      ▐
+                                  ▗▄█▙▄  ▗▄█▙▄
+                                  ▐ B ▐  ▐ C ▐
+                                  ▐▄▄▄▟  ▐▄▄▄▟
+
+Multi-line accessibility description
+────────────────────────────────────────────────────────────────────────────────
+
+image @216,33 c=14 r=3 z=0 C=1 png=140x60
+                                 ▗▄▄▄▄    ▗▄▄▄▄
+                                 ▐ A ▐▄▄▄▟█ B ▐
+                                 ▐▄▄▄▟    ▐▄▄▄▟
+
+Ids
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: ids may hold non-ASCII letters, . and -.
+
+image @225,25 c=30 r=3 z=0 C=1 png=300x60
+                         ▗▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄    ▗▄▄▄▄▄▄
+                         ▐ café ▐▄▄▄▟█ a.b ▐▄▄▄▟█ x-y ▐
+                         ▐▄▄▄▄▄▄▟    ▐▄▄▄▄▄▟    ▐▄▄▄▄▄▟
+

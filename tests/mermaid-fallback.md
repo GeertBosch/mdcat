@@ -27,3 +27,42 @@ graph TD
         A --> B
     end
 ```
+
+## Subgraph with a direction
+
+```mermaid
+graph TD
+    subgraph one
+        direction LR
+        A --> B
+    end
+```
+
+## Direction statement
+
+```mermaid
+graph TD
+    direction LR
+    A --> B
+```
+
+## Reserved word as an id
+
+```mermaid
+graph TD
+    A --> end
+```
+
+## Circle link
+
+```mermaid
+graph LR
+    A---oB
+```
+
+## Unknown direction
+
+```mermaid
+graph XY
+    A --> B
+```

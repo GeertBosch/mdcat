@@ -5,7 +5,8 @@
 # fallback.
 #
 # Checked here, over tests/mermaid-basic.md (widths 80 and 30), tests/mermaid-dag.md (80 and 44),
-# tests/mermaid-routing.md (80), tests/mermaid-crossings.md (80) and tests/mermaid-fallback.md:
+# tests/mermaid-routing.md (80), tests/mermaid-crossings.md (80), tests/mermaid-syntax.md (80) and
+# tests/mermaid-fallback.md:
 #   - tests/kitty-preview.py's rendering of the output of `mdcat --mermaid builtin` (text plus each
 #     image as quadrant blocks) equals tests/expected/<fixture>.w<N>.txt, and the
 #     MDCAT_MERMAID_DEBUG=1 stderr equals <fixture>.w<N>.err (UPDATE=1 rewrites both). The
@@ -101,6 +102,7 @@ golden_case mermaid-dag 44
 golden_case mermaid-dag 80
 golden_case mermaid-routing 80
 golden_case mermaid-crossings 80
+golden_case mermaid-syntax 80
 golden_case mermaid-basic 30
 golden_case mermaid-basic 80
 

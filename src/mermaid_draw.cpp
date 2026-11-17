@@ -92,24 +92,20 @@ struct Raster {
         }
     }
 
-    // A filled triangle with its tip at (tipX8, tipY8), in eighths of a pixel, pointing down
-    // (`down`) or right. Its base lies `len` px behind the tip and is 2*half px wide; each pixel is
-    // sampled 4x4.
-    void arrowhead(int tipX8, int tipY8, bool down, int len, int half) {
+    // A filled triangle with its tip at (tipX8, tipY8), in eighths of a pixel, pointing the way
+    // (ux, uy) says: one of them is +1 or -1 and the other 0. Its base lies `len` px behind the tip
+    // and is 2*half px wide; each pixel is sampled 4x4.
+    void arrowhead(int tipX8, int tipY8, int ux, int uy, int len, int half) {
         int span = len + half + 2;
         int cx = tipX8 / 8, cy = tipY8 / 8;
-        int x0 = down ? cx - half - 1 : cx - span;
-        int x1 = down ? cx + half + 2 : cx + 1;
-        int y0 = down ? cy - span : cy - half - 1;
-        int y1 = down ? cy + 1 : cy + half + 2;
-        for (int y = y0; y < y1; ++y) {
-            for (int x = x0; x < x1; ++x) {
+        for (int y = cy - span; y < cy + span + 2; ++y) {
+            for (int x = cx - span; x < cx + span + 2; ++x) {
                 int hits = 0;
                 for (int j = 0; j < 4; ++j) {
                     for (int i = 0; i < 4; ++i) {
                         int ex = 8 * x + 2 * i + 1, ey = 8 * y + 2 * j + 1;
-                        int depth = down ? tipY8 - ey : tipX8 - ex;
-                        int cross = std::abs(down ? ex - tipX8 : ey - tipY8);
+                        int depth = (tipX8 - ex) * ux + (tipY8 - ey) * uy;
+                        int cross = std::abs(ux ? ey - tipY8 : ex - tipX8);
                         if (depth > 0 && depth <= len * 8 && cross * len <= half * depth) ++hits;
                     }
                 }
@@ -244,16 +240,18 @@ bool rasterize(const std::vector<Stroke>& strokes,
                 std::swap(a, b);
                 std::swap(roundA, roundB);
             }
-            bool tipped = std::any_of(strokes.begin(), strokes.end(), [&](const Stroke& h) {
-                return h.kind == Stroke::Arrowhead && h.pts[0] == b;
-            });
-            bool tippedBack = std::any_of(strokes.begin(), strokes.end(), [&](const Stroke& h) {
-                return h.kind == Stroke::Arrowhead && h.pts[0] == a;
-            });
-            if (tippedBack) {
-                reason = "unsupported stroke direction";
-                return false;
-            }
+            // An arrowhead on this segment's end `p`: it points along the segment, away from it
+            // (`forward`) or back toward the other end.
+            auto headAt = [&](Pt p, bool forward) {
+                return std::any_of(strokes.begin(), strokes.end(), [&](const Stroke& h) {
+                    if (h.kind != Stroke::Arrowhead || h.pts[0] != p) return false;
+                    if ((h.pts[0].first == h.pts[1].first) != vertical) return false;
+                    bool ahead = vertical ? h.pts[0].second > h.pts[1].second
+                                          : h.pts[0].first > h.pts[1].first;
+                    return ahead == forward;
+                });
+            };
+            bool tipped = headAt(b, true), tippedBack = headAt(a, false);
             int cross = vertical ? m.px(a.first) : m.py(a.second);
             int from = vertical ? m.py(a.second) : m.px(a.first);
             int to = vertical ? m.py(b.second) : m.px(b.first);
@@ -265,9 +263,11 @@ bool rasterize(const std::vector<Stroke>& strokes,
                 reason = "segment too short";
                 return false;
             }
-            int begin = roundA ? from - hs + roA : from - hs;
+            int begin = roundA ? from - hs + roA
+                : tippedBack   ? from - hs + s + m.headLen
+                               : from - hs;
             int end = roundB ? to - hs + s - roB : tipped ? to - hs - m.headLen : to - hs + s;
-            if (tipped && end < begin + s) {
+            if ((tipped || tippedBack) && end < begin + s) {
                 reason = "arrow too short";
                 return false;
             }
@@ -308,17 +308,18 @@ bool rasterize(const std::vector<Stroke>& strokes,
                      12 * s);
         } else if (st.kind == Stroke::Arrowhead) {
             Pt tip = st.pts[0], base = st.pts[1];
-            bool down = tip.first == base.first;
-            if (down ? tip.second < base.second : tip.first < base.first) {
-                reason = "unsupported stroke direction";
-                return false;
-            }
+            bool vertical = tip.first == base.first;
+            int sign = (vertical ? tip.second > base.second : tip.first > base.first) ? 1 : -1;
+            // The tip touches the outer edge of the target's outline stroke.
             int x = 8 * (m.px(tip.first) - hs), y = 8 * (m.py(tip.second) - hs);
-            if (down)
+            if (vertical) {
                 x += 4 * s;
-            else
+                if (sign < 0) y += 8 * s;
+            } else {
                 y += 4 * s;
-            ras.arrowhead(x, y, down, m.headLen, m.headHalf);
+                if (sign < 0) x += 8 * s;
+            }
+            ras.arrowhead(x, y, vertical ? 0 : sign, vertical ? sign : 0, m.headLen, m.headHalf);
         }
     }
     return true;
@@ -470,8 +471,10 @@ bool validate(const Graph& g,
             segmentCells(st.pts[0], st.pts[1], check);
         } else if (st.kind == Stroke::Arrowhead) {
             Pt tip = st.pts[0], base = st.pts[1];
-            Pt back = tip.first == base.first ? Pt{tip.first, tip.second - 2}
-                                              : Pt{tip.first - 2, tip.second};
+            bool vertical = tip.first == base.first;
+            int sign = (vertical ? tip.second > base.second : tip.first > base.first) ? 1 : -1;
+            Pt back = vertical ? Pt{tip.first, tip.second - 2 * sign}
+                               : Pt{tip.first - 2 * sign, tip.second};
             segmentCells(back, tip, check);
         }
     }
@@ -494,6 +497,8 @@ bool drawDiagram(
     for (const CellBox& f : lay.nodeFoot)
         for (int r = f.row; r < f.row + f.rows; ++r)
             for (int c = f.col; c < f.col + f.cols; ++c) grid.at(c, r) = Occ::Node;
+    if (lay.titleRows > 0)
+        for (int c = 0; c < lay.cols; ++c) grid.at(c, 0) = Occ::Label;
     for (size_t i = 0; i < g.nodes.size(); ++i) {
         const CellBox& l = lay.nodeLabel[i];
         for (int r = l.row; r < l.row + l.rows; ++r)
@@ -516,6 +521,12 @@ bool drawDiagram(
     out.rows = lay.rows;
     out.textRows.assign(static_cast<size_t>(lay.rows), std::string());
     std::vector<std::vector<size_t>> byRow(static_cast<size_t>(lay.rows));
+    if (lay.titleRows > 0) {  // bold, centred
+        int w = env.width(g.title);
+        out.textRows[0] = std::string(static_cast<size_t>((lay.cols - w) / 2), ' ') + "\033[1m" +
+            g.title + "\033[22m" +
+            std::string(static_cast<size_t>(lay.cols - w - (lay.cols - w) / 2), ' ');
+    }
     for (size_t i = 0; i < g.nodes.size(); ++i)
         byRow[static_cast<size_t>(lay.nodeLabel[i].row)].push_back(i);
     for (int r = 0; r < lay.rows; ++r) {

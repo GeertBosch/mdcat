@@ -229,6 +229,23 @@ graph TD
     ext[Extensions] --> lex
 ```
 
+Every direction works — `TB`, `TD`, `BT`, `LR`, `RL`, and the `>`, `<`, `^`, `v`
+aliases — with arrowheads pointing the true way and labels never mirrored. Chains
+(`a --> b --> c`), `&` (`a --> b & c`), `;`, comments, a front-matter `title:`
+(shown in bold above the diagram), and syntax that has no visual effect here
+(`style`, `classDef`, `class`, `linkStyle`, `click`, `:::cls`, edge ids,
+accessibility text) are all understood:
+
+```mermaid
+---
+title: Right to left, with a chain and a fan-out
+---
+graph RL
+    a[Source] --> b[Build] --> c[Test] %% a chain
+    c --> d[Ship] & e[Report]
+    style d fill:#bbf
+```
+
 A diagram taller than the terminal isn't shrunk to fit — `gmore` scrolls
 through it like any other content, revealing more of it a row at a time. This
 one is a sequence diagram, which mdcat's own renderer doesn't draw, so it goes

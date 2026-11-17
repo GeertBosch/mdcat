@@ -292,6 +292,43 @@ int assignTracks(const std::vector<GapSeg>& segs, std::vector<int>& trackOf) {
     return *std::max_element(level.begin(), level.end()) + 1;
 }
 
+// Flip the layout along its rows (`rows`) or its columns, so that the flow runs against the axis it
+// was laid out along. Boxes keep their size, and a hu coordinate x becomes 2 * extent - x.
+void mirror(Layout& lay, bool rows) {
+    const int extent = rows ? lay.rows : lay.cols;
+    auto flip = [&](CellBox& b) {
+        if (b.cols == 0) return;
+        (rows ? b.row : b.col) = extent - (rows ? b.row + b.rows : b.col + b.cols);
+    };
+    for (CellBox& b : lay.nodeFoot) flip(b);
+    for (CellBox& b : lay.nodeLabel) flip(b);
+    for (CellBox& b : lay.edgeLabel) flip(b);
+    for (std::vector<Pt>& path : lay.edgePath)
+        for (Pt& p : path) (rows ? p.second : p.first) = 2 * extent - (rows ? p.second : p.first);
+}
+
+// Make room for a title `width` columns wide: a row for it and a blank one, at the top, and
+// columns on either side if it is wider than the diagram, which is then centred under it.
+void addTitle(Layout& lay, int width) {
+    const int dx = std::max(0, (width - lay.cols) / 2), dy = 2;
+    for (std::vector<CellBox>* boxes : {&lay.nodeFoot, &lay.nodeLabel, &lay.edgeLabel}) {
+        for (CellBox& b : *boxes) {
+            if (b.cols == 0) continue;
+            b.col += dx;
+            b.row += dy;
+        }
+    }
+    for (std::vector<Pt>& path : lay.edgePath) {
+        for (Pt& p : path) {
+            p.first += 2 * dx;
+            p.second += 2 * dy;
+        }
+    }
+    lay.cols = std::max(lay.cols, width);
+    lay.rows += dy;
+    lay.titleRows = dy;
+}
+
 }  // namespace
 
 bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reason) {
@@ -304,11 +341,8 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
         reason = "too many nodes";
         return false;
     }
-    const bool td = g.dir == Dir::TB;
-    if (!td && g.dir != Dir::LR) {
-        reason = "unsupported direction";
-        return false;
-    }
+    // BT and RL are laid out as TB and LR, and mirrored along the flow at the end.
+    const bool td = g.dir == Dir::TB || g.dir == Dir::BT;
 
     std::set<std::pair<int, int>> seen;
     for (const Edge& e : g.edges) {
@@ -346,6 +380,7 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
     // Pull each source down next to its nearest successor, so that it does not hang far above.
     for (size_t i = 0; i < n; ++i) {
         if (!inE[i].empty()) continue;
+        if (outE[i].empty()) continue;  // a node with no edges stays in the first rank
         int r = INT_MAX;
         for (int k : outE[i]) {
             const Edge& e = g.edges[static_cast<size_t>(k)];
@@ -781,6 +816,8 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
             "crossings: " + std::to_string(crossings) + " > " + std::to_string(tune::kMaxCrossings);
         return false;
     }
+    if (g.dir == Dir::BT || g.dir == Dir::RL) mirror(lay, /*rows=*/td);
+    if (!g.title.empty()) addTitle(lay, env.width(g.title));
     return true;
 }
 

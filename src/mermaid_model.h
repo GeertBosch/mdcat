@@ -67,6 +67,7 @@ using Pt = std::pair<int, int>;
 
 struct Layout {  // cells for boxes, half-cell units for paths
     int cols = 0, rows = 0;
+    int titleRows = 0;  // rows at the top that hold the title, and a blank one after it
     std::vector<CellBox> nodeFoot, nodeLabel;  // per node
     std::vector<CellBox> edgeLabel;            // per edge (cols == 0 if none)
     std::vector<std::vector<Pt>> edgePath;     // per edge, orthogonal hu polyline

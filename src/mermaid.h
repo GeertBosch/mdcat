@@ -20,7 +20,9 @@ struct Env {
 };
 
 struct Diagram {
-    std::vector<std::string> textRows;  // `rows` entries, each exactly `cols` columns wide
+    // `rows` entries, each exactly `cols` columns wide. A diagram title is wrapped in SGR bold
+    // escapes, which take no columns.
+    std::vector<std::string> textRows;
     int cols = 0, rows = 0;
     std::string png;  // cols*cellW x rows*cellH pixels, transparent background
 };
