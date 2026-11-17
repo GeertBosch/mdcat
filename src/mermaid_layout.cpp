@@ -522,7 +522,7 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
     // B->C all sharing ports would show B->B, and even a complete A,B->C,D lets A's strokes climb
     // into B's bus and up to B. So the edges are split into stars, each a split or a merge, and a
     // star gets a port of its own on each of its nodes. A star's edges all have one style, so
-    // edges of different styles never share a bus, and a labelled edge never shares one at all.
+    // edges of different styles never share a bus. Labels don't matter: each sits on its own edge.
     // Invisible links have no ports: they rank and order the nodes but are not routed. Greedily,
     // the next star is the largest left, ties going to the one holding the earliest-declared edge,
     // then to splits. A node's first port on each side is centred.
@@ -549,7 +549,6 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
         auto styleOf = [&](int a, int b) {
             const int k = edgeOf.at({a, b});
             const Edge& e = g.edges[static_cast<size_t>(k)];
-            if (!e.label.lines.empty()) return 1000 + k;  // never shares a port
             return (static_cast<int>(e.line) * 4 + static_cast<int>(e.head)) * 4 +
                 static_cast<int>(e.tail);
         };

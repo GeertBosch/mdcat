@@ -4,7 +4,8 @@ On a Kitty terminal, the built-in renderer writes an edge's label as ordinary te
 on the edge, which stops a little short of it on either side. The label is a node
 of its own in the layout, halfway along the edge, so it gets room like any other
 box. Every rank is twice as far apart in a diagram with labels, so a label always
-has a rank to sit in. A labelled edge has its own port: it never shares a bus.
+has a rank to sit in. A label doesn't stop its edge from sharing a port: edges with different labels, or
+none, still split from one box or merge into one on a single bus.
 Checked by `mermaid-kitty.sh` at widths 80 and 44, with `--img kitty` and pinned
 cell sizes. The `.err` golden names the diagrams that are declined, and so are
 shown as source: at width 44, those too wide for it.
@@ -43,8 +44,8 @@ graph TD
 
 ## A decision (top down)
 
-Expected: `Valid?` has two labelled branches, `yes` and `no`, each leaving it through
-a port of its own and carrying its label in a rank of its own halfway down. Both
+Expected: `Valid?` has two labelled branches, `yes` and `no`, both leaving it through
+one port and carrying their labels in a rank of their own halfway down. Both
 branches then meet at `Done`.
 
 ```mermaid
@@ -103,9 +104,8 @@ graph RL
 
 ## Two labelled edges into one target (top down)
 
-Expected: both labelled edges arrive at `Target` through ports of their own, and
-the unlabelled one from `C` arrives through a third. Nothing is merged into one
-arrowhead, since a label belongs to one edge only.
+Expected: the two labelled edges and the unlabelled one from `C` all arrive at
+`Target` through one port, on one bus, with one arrowhead.
 
 ```mermaid
 graph TD

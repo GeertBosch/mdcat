@@ -888,7 +888,9 @@ Work, following Dagre:
 - **Drawing:** the edge's stroke stops ¼ cell before the label's cells and
   resumes ¼ cell after them. The label itself goes in the text layer, and
   `Layout::edgeLabel` records where.
-- **Ports:** a labelled edge never shares a bus; it gets its own port.
+- **Ports:** a label does not affect ports: labelled and unlabelled edges of one
+  star share a port and bus as usual, each label sitting on its own edge below
+  the bus.
 - **Width limit:** a label wider than `kMaxLabelWidth` (24 at first) ⇒ fallback,
   until Step 11 adds wrapping.
 

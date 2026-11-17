@@ -231,7 +231,7 @@ Edges can carry text: `a -->|yes| b`, `a -- yes --> b`, `a -. yes .-> b` and
 `a == yes ==> b`. The label is ordinary, selectable text that sits on its edge,
 halfway between the boxes, and the edge stops just short of it on either side.
 It gets a rank of its own, so diagrams with labels are spaced out twice as far, and
-a labelled edge has a port of its own and never joins a bus:
+edges with different labels, or none, still share a bus in a split or merge:
 
 ```mermaid
 graph TD
