@@ -3260,10 +3260,13 @@ std::vector<std::string> mermaidMarkdownLines(const std::string& md, int width);
 // false, writing nothing and setting `reason`, when the builtin does not apply: not a Kitty
 // terminal or images are off, the block is inside a list or quote (whose per-line prefixing would
 // break the framing), the diagram is outside the supported subset, or it is too tall for the
-// terminal.
+// terminal. `tooComplex` is set when the diagram has more back edges or crossings than its width
+// allows, which is better shown as source than drawn by anything else.
 bool emitBuiltinMermaid(const std::vector<std::string>& body,
                         std::ostream& out,
-                        std::string& reason) {
+                        std::string& reason,
+                        bool& tooComplex) {
+    tooComplex = false;
     if (!terminalSupportsGraphics() || graphicsBackend() != GraphicsBackend::Kitty) {
         reason = "not kitty";
         return false;
@@ -3281,7 +3284,11 @@ bool emitBuiltinMermaid(const std::vector<std::string>& body,
     env.width = displayWidth;
     env.markdownLines = mermaidMarkdownLines;
     mermaid::Diagram d;
-    if (!mermaid::render(body, env, d, reason)) return false;
+    mermaid::Decline why;
+    if (!mermaid::render(body, env, d, reason, &why)) {
+        tooComplex = why == mermaid::Decline::TooComplex;
+        return false;
+    }
     // VSCode misplaces the text of a band taller than the screen (field guide section 10, case K).
     if (const char* tp = std::getenv("TERM_PROGRAM"); tp && std::string(tp) == "vscode") {
         for (int fd : {STDOUT_FILENO, STDERR_FILENO, STDIN_FILENO}) {
@@ -4618,13 +4625,14 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
             } else if (mlang == "mermaid") {
                 if (gMermaidMode != MermaidMode::Image) {
                     std::string why;
-                    if (emitBuiltinMermaid(body, out, why)) {
+                    bool tooComplex = false;
+                    if (emitBuiltinMermaid(body, out, why, tooComplex)) {
                         i = (j < n) ? j + 1 : j;  // skip the closing fence if present
                         continue;
                     }
                     if (std::getenv("MDCAT_MERMAID_DEBUG"))
                         std::cerr << "mdcat: mermaid: fallback: " << why << "\n";
-                    if (gMermaidMode == MermaidMode::Builtin) {
+                    if (gMermaidMode == MermaidMode::Builtin || tooComplex) {
                         emitCodeBlock(body, lang, out);
                         i = (j < n) ? j + 1 : j;
                         continue;

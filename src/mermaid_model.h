@@ -73,7 +73,7 @@ struct Layout {  // cells for boxes, half-cell units for paths
     int titleRows = 0;  // rows at the top that hold the title, and a blank one after it
     std::vector<CellBox> nodeFoot, nodeLabel;  // per node
     std::vector<CellBox> edgeLabel;            // per edge: its text's cells (cols == 0 if none)
-    std::vector<std::vector<Pt>> edgePath;     // per edge, orthogonal hu polyline
+    std::vector<std::vector<Pt>> edgePath;     // per edge, orthogonal hu polyline, source to target
     // Per edge: its group, a split (edges from one source) or a merge (edges into one target) whose
     // edges share a port on each of their nodes, and have one style. Only edges of one group may
     // share or touch strokes. An invisible edge has no group (-1) and an empty path.
@@ -114,7 +114,10 @@ constexpr int kGapTd =
 constexpr int kGapLr = 4;  // columns between two ranks, at least; with many tracks, tracks + 2
 constexpr int kSepTd = 2;  // columns between neighbouring footprints in a rank
 constexpr int kSepLr = 1;  // rows between neighbouring footprints in a rank
-constexpr int kMaxCrossings = 3;  // edge crossings (bridges) a diagram may have
+constexpr int kColsPerCrossing = 10;  // a diagram may have one edge crossing (bridge) per this many
+                                      // columns of the available width, and no more
+constexpr int kColsPerBackEdge = 10;  // likewise for the edges that close a cycle
+constexpr int kMinGateCols = 72;  // a narrower terminal counts as this wide for those two limits
 constexpr int kMaxLabelWidth =
     24;                        // columns an edge label may take, and a Markdown string wraps at
 constexpr int kNoWrap = 4096;  // a wrap width that no label reaches, for markdownAutoWrap: false
@@ -125,11 +128,13 @@ constexpr int kMinCylinderLabel =
 // Parse the body of a ```mermaid block. On failure `reason` is one of the stable fallback reasons.
 bool parseFlowchart(const std::vector<std::string>& body, Graph& g, std::string& reason);
 
-// Lay out an acyclic graph in ranks, ordering and placing the boxes of each rank so that few edges
-// cross and long ones run straight, and routing the edges between two ranks along as many tracks
-// as they need. Does not check the width against the environment; the caller compares `lay.cols`
-// with Env::availCols.
-bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reason);
+// Lay out a graph in ranks, ordering and placing the boxes of each rank so that few edges cross and
+// long ones run straight, and routing the edges between two ranks along as many tracks as they
+// need. The edges that close a cycle are reversed for the layout and drawn against the flow, each
+// with ports of its own. Does not check the width against the environment; the caller compares
+// `lay.cols` with Env::availCols. Declines with Decline::TooComplex, instead of the usual
+// Unsupported, a graph with more back edges or crossings than the width allows.
+bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reason, Decline& why);
 
 // The points, in half-cell units, where one edge's path crosses another's without either path
 // ending or bending there. Where one edge bends off a run that another passes straight along, the

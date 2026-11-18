@@ -1,11 +1,12 @@
 #!/bin/sh
 # mdcat's built-in Mermaid flowcharts (docs/plan-mermaid-flowcharts.md, ADR 0004): on a Kitty
-# terminal an acyclic ```mermaid flowchart of boxes joined by --> links is drawn as one transparent
+# terminal a ```mermaid flowchart of boxes joined by --> links is drawn as one transparent
 # PNG (strokes) plus ordinary text rows (labels). Anything else is left to the mmdc / source
 # fallback.
 #
 # Checked here, over tests/mermaid-basic.md (widths 80 and 30), tests/mermaid-dag.md (80 and 44),
-# tests/mermaid-routing.md (80), tests/mermaid-crossings.md (80), tests/mermaid-syntax.md (80),
+# tests/mermaid-cycles.md (80), tests/mermaid-routing.md (80), tests/mermaid-crossings.md (80),
+# tests/mermaid-syntax.md (80),
 # tests/mermaid-links.md (80), tests/mermaid-edge-labels.md (80 and 44),
 # tests/mermaid-label-text.md (80), tests/mermaid-shapes.md (80) and tests/mermaid-fallback.md:
 #   - tests/kitty-preview.py's rendering of the output of `mdcat --mermaid builtin` (text plus each
@@ -20,7 +21,9 @@
 #   - gmore anchors each image where the previewer does, with the same cells footprint, and its
 #     text layer matches the previewer's on every row an image covers;
 #   - gmore anchors single diagrams at the first diagram row, with the expected footprint;
-#   - neither piped output without --img nor --img sixel contains a Kitty APC.
+#   - neither piped output without --img nor --img sixel contains a Kitty APC;
+#   - in auto mode a diagram too complex for the width (too many back edges or crossings) is shown
+#     as source without calling mmdc, while an unsupported one still goes to it (a fake mmdc).
 #
 # Cell metrics are pinned (MDCAT_CELL_W/H) so the PNG bytes are deterministic. mmdc is hidden from
 # PATH so a declined diagram falls back to its source regardless of the machine.
@@ -116,6 +119,7 @@ golden_case() {
 golden_case mermaid-fallback 80
 golden_case mermaid-dag 44
 golden_case mermaid-dag 80
+golden_case mermaid-cycles 80
 golden_case mermaid-routing 80
 golden_case mermaid-crossings 80
 golden_case mermaid-syntax 80
@@ -408,6 +412,60 @@ if mc --img sixel --width 80 "$lr" 2>/dev/null | grep -q "$(printf '\033_G')"; t
 else
     pass
 fi
+
+# A diagram with too many back edges or crossings for the width is shown as source, and mmdc is not
+# asked to draw it, while one the builtin does not support (a pie chart) still goes to mmdc. A fake
+# mmdc that records its calls stands in for the real one.
+fake="$tmp/fakebin"
+mkdir -p "$fake"
+printf '#!/bin/sh\necho called >> "%s/mmdc.calls"\nexit 1\n' "$tmp" > "$fake/mmdc"
+chmod +x "$fake/mmdc"
+auto_case() {
+    src=$1
+    want=$2
+    printf '%s\n' "$src" > "$tmp/auto.md"
+    rm -f "$tmp/mmdc.calls"
+    # MDCAT_MERMAID=auto: a prefix assignment before a shell function (as in the cases above) can
+    # outlive the call.
+    MDCAT_MERMAID=auto PATH="$fake:/usr/bin:/bin" "$mdcat" --img kitty --width 80 "$tmp/auto.md" \
+        > /dev/null 2>&1
+    if [ -f "$tmp/mmdc.calls" ]; then got=called; else got=skipped; fi
+    if [ "$got" = "$want" ]; then pass; else fail "auto chain" "mmdc $got, expected $want"; fi
+}
+auto_case '```mermaid
+graph TD
+    A --> B
+    A --> C
+    A --> D
+    A --> E
+    B --> C
+    B --> D
+    B --> E
+    C --> D
+    C --> E
+    D --> E
+    B --> A
+    C --> A
+    D --> A
+    E --> A
+    C --> B
+    D --> B
+    E --> B
+    D --> C
+    E --> C
+    E --> D
+```' skipped
+auto_case '```mermaid
+pie title Pets
+    "Dogs" : 3
+```' called
+
+# A terminal narrower than 72 columns counts as 72 wide for the back-edge and crossing limits, so
+# the limit there is 7 and not width / 10.
+printf '```mermaid\ngraph TD\n    A --> E\n    A --> F\n    A --> G\n    A --> H\n    B --> E\n    B --> F\n    B --> G\n    B --> H\n    C --> E\n    C --> F\n    C --> G\n    C --> H\n    D --> E\n    D --> F\n    D --> G\n    D --> H\n```\n' > "$tmp/narrow.md"
+unset MDCAT_MERMAID  # the invalid-mode case above leaves it set, as sh keeps a function's assignment
+MDCAT_MERMAID_DEBUG=1 mc --img kitty --mermaid builtin --width 30 "$tmp/narrow.md" \
+    2>&1 > /dev/null | grep -q 'crossings: 24 > 7$' && pass || fail "narrow gate" "expected 24 > 7"
 
 if [ "$fails" -eq 0 ]; then
     echo "mermaid-kitty: OK ($n cases)"

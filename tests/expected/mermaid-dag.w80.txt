@@ -2,11 +2,12 @@ Mermaid graphs with branches and merges
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 On a Kitty terminal, the built-in renderer draws any acyclic graph of boxes
-joined by --> links. The graphs here are trees and merges that need no more than
-one track between two ranks; mermaid-routing.md covers the ones that need more.
-Checked by mermaid-kitty.sh at widths 80 and 44, with --img kitty and pinned
-cell sizes. The .err goldens name the diagrams that are declined, for now, and
-so are shown as source.
+joined by --> links (mermaid-cycles.md covers the graphs with cycles). The
+graphs here are trees and merges that need no more than one track between two
+ranks; mermaid-routing.md covers the ones that need more. Checked by
+mermaid-kitty.sh at widths 80 and 44, with --img kitty and pinned cell sizes.
+The .err goldens name the diagrams that are declined, for now, and so are shown
+as source.
 
 Where several edges leave one box they share its port and split off a common
 bus; where several arrive they merge into one arrowhead. A dot marks each split
@@ -18,7 +19,7 @@ Tree (top down)
 Expected: Root above two children, Left and Right, with the bus splitting under
 Root. Left has one child of its own, Leaf, directly below it.
 
-image @20,30 c=20 r=14 z=0 C=1 png=200x280
+image @21,30 c=20 r=14 z=0 C=1 png=200x280
                                    ▗▄▄▄▄▄▄▄▄
                                    ▐ Root  ▐
                                    ▐▄▄▄▄▄▄▄▟
@@ -40,7 +41,7 @@ Tree (left to right)
 Expected: the same tree turned on its side. Root on the left, two children
 stacked in a column, Leaf to the right of Left.
 
-image @41,23 c=33 r=7 z=0 C=1 png=330x140
+image @42,23 c=33 r=7 z=0 C=1 png=330x140
                                    ▗▄▄▄▄▄▄▄     ▗▄▄▄▄▄▄▄
                                 ▗▄▟█ Left ▐▄▄▄▄▟█ Leaf ▐
                        ▗▄▄▄▄▄▄▄ ▐  ▐▄▄▄▄▄▄▟     ▐▄▄▄▄▄▄▟
@@ -54,7 +55,7 @@ Fan-in (top down)
 
 Expected: three boxes at the top merge into one arrowhead on Done.
 
-image @54,24 c=31 r=9 z=0 C=1 png=310x180
+image @55,24 c=31 r=9 z=0 C=1 png=310x180
                         ▗▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄
                         ▐ Build ▐  ▐ Test  ▐  ▐ Lint  ▐
                         ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟
@@ -70,7 +71,7 @@ Fan-in (left to right)
 
 Expected: two sources merge into one arrowhead on Sink.
 
-image @69,28 c=24 r=7 z=0 C=1 png=240x140
+image @70,28 c=24 r=7 z=0 C=1 png=240x140
                             ▗▄▄▄▄▄▄▄▄▄▄▄
                             ▐ Source 1 ▐▄▄
                             ▐▄▄▄▄▄▄▄▄▄▄▟ ▐  ▗▄▄▄▄▄▄▄
@@ -85,7 +86,7 @@ Diamond (top down)
 Expected: A splits into B and C, which merge again into D; D sits directly below
 A.
 
-image @83,34 c=12 r=15 z=0 C=1 png=120x300
+image @84,34 c=12 r=15 z=0 C=1 png=120x300
                                      ▗▄▄▄▄
                                      ▐ A ▐
                                      ▐▄▄▄▟
@@ -107,7 +108,7 @@ Diamond (left to right)
 
 Expected: the same diamond, with D directly to the right of A.
 
-image @104,28 c=23 r=7 z=0 C=1 png=230x140
+image @105,28 c=23 r=7 z=0 C=1 png=230x140
                                      ▗▄▄▄▄
                                   ▗▄▟█ B ▐▄▄
                             ▗▄▄▄▄ ▐  ▐▄▄▄▟ ▐  ▗▄▄▄▄
@@ -124,7 +125,7 @@ comes back to C. It splits off A's bus but arrives at C through its own
 arrowhead: merging it with the one from B would show a path from B back up into
 B.
 
-image @120,35 c=9 r=15 z=0 C=1 png=90x300
+image @121,35 c=9 r=15 z=0 C=1 png=90x300
                                        ▗▄▄▄▄
                                        ▐ A ▐
                                        ▐▄▄▄▟
@@ -147,7 +148,7 @@ Skip edge (left to right)
 Expected: the same, with the long edge passing under B and arriving at C below
 the arrow from B.
 
-image @142,28 c=23 r=6 z=0 C=1 png=230x120
+image @143,28 c=23 r=6 z=0 C=1 png=230x120
                                      ▗▄▄▄▄
                                   ▗▄▟█ B ▐▄▄
                                   ▐  ▐▄▄▄▟ ▐  ▗▄▄▄▄
@@ -161,7 +162,7 @@ Long links (top down)
 Expected: each extra dash makes a link span one more rank. Short is one rank
 below Top, Mid two, Far three, and Top stays the only box in its rank.
 
-image @155,29 c=21 r=19 z=0 C=1 png=210x380
+image @156,29 c=21 r=19 z=0 C=1 png=210x380
                                      ▗▄▄▄▄▄▄
                                      ▐ Top ▐
                                      ▐▄▄▄▄▄▟
@@ -188,7 +189,7 @@ Long links (left to right)
 Expected: the same graph turned on its side. The long edges pass through the
 empty ranks as straight lines.
 
-image @181,19 c=42 r=9 z=0 C=1 png=420x180
+image @182,19 c=42 r=9 z=0 C=1 png=420x180
                               ▗▄▄▄▄▄▄▄▄
                            ▗▄▟█ Short ▐
                            ▐  ▐▄▄▄▄▄▄▄▟
@@ -205,7 +206,7 @@ Two components (top down)
 Expected: two unrelated graphs side by side, each with its own arrows. A box
 declared after the first graph's boxes still sits with its own graph.
 
-image @197,28 c=24 r=13 z=0 C=1 png=240x260
+image @198,28 c=24 r=13 z=0 C=1 png=240x260
                              ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄
                              ▐ First ▐    ▐ Other ▐
                              ▐▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▟
@@ -225,7 +226,7 @@ Two components (left to right)
 
 Expected: the graphs are stacked, one above the other.
 
-image @216,21 c=37 r=7 z=0 C=1 png=370x140
+image @217,21 c=37 r=7 z=0 C=1 png=370x140
                      ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄     ▗▄▄▄▄▄▄▄▄
                      ▐ First ▐▄▄▄▟█ Second ▐▄▄▄▄▟█ Third ▐
                      ▐▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▟     ▐▄▄▄▄▄▄▄▟
@@ -240,7 +241,7 @@ A source that starts late (top down)
 Expected: Late starts at the rank just above End rather than at the top, so its
 arrow is as short as it can be.
 
-image @230,30 c=19 r=19 z=0 C=1 png=190x380
+image @231,30 c=19 r=19 z=0 C=1 png=190x380
                               ▗▄▄▄▄▄▄▄▄
                               ▐ Start ▐
                               ▐▄▄▄▄▄▄▄▟
@@ -260,16 +261,6 @@ image @230,30 c=19 r=19 z=0 C=1 png=190x380
                                     ▗▄▄█▙▄▄
                                     ▐ End ▐
                                     ▐▄▄▄▄▄▟
-
-A cycle (declined for now)
-────────────────────────────────────────────────────────────────────────────────
-
-Expected: the builtin declines with cycle, and the source is shown.
-
-  graph TD
-      A --> B
-      B --> C
-      C --> A
 
 Parallel edges (declined for now)
 ────────────────────────────────────────────────────────────────────────────────

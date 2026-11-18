@@ -240,7 +240,15 @@ graph TD
     check -->|no| report[Report]
     build == all green ==> ship[Ship]
     report -.-> ship
+    report -->|retry| check
 ```
+
+A graph may have cycles: the edge that closes one, here `retry`, is drawn against the
+flow, from `Report` up to `Valid?`, with an arrowhead at its real target. It leaves and
+arrives through ports of its own, a cell beside the middle, so it never merges with the
+edges running the other way. A box with many ports grows to hold them. A diagram with more
+back edges, or more crossings, than one per ten columns of the terminal's width is too
+tangled to read: it is shown as source, and `mmdc` is not asked to redraw it.
 
 Labels follow Mermaid's rules for text. A quoted label, `a["x (y) [z]"]`, may hold
 brackets and other syntax; entity codes such as `#quot;`, `#35;` and `#9829;` stand

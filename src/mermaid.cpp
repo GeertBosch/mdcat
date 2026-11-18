@@ -33,12 +33,18 @@ bool renderMarkdown(Graph& g, const Env& env, std::string& reason) {
 bool render(const std::vector<std::string>& body,
             const Env& env,
             Diagram& out,
-            std::string& reason) {
+            std::string& reason,
+            Decline* why) {
+    if (why) *why = Decline::Unsupported;
     Graph g;
     if (!parseFlowchart(body, g, reason)) return false;
     if (!renderMarkdown(g, env, reason)) return false;
     Layout lay;
-    if (!layoutGraph(g, env, lay, reason)) return false;
+    Decline declined = Decline::Unsupported;
+    if (!layoutGraph(g, env, lay, reason, declined)) {
+        if (why) *why = declined;
+        return false;
+    }
     if (lay.cols > env.availCols) {
         reason = "too wide: " + std::to_string(lay.cols) + " > " + std::to_string(env.availCols);
         return false;

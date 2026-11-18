@@ -1,0 +1,358 @@
+Mermaid cycles
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+On a Kitty terminal, the built-in renderer draws a graph with cycles. Like
+Dagre, it finds the edges that close a cycle with a depth-first search, in order
+of first appearance, and reverses them for the layout, so that the graph is laid
+out in ranks. Each of those back edges is then drawn from its real source to its
+real target, against the flow: it leaves the top of its source (top down), runs
+up, and arrives, with its arrowhead, at the bottom of its target. It has ports
+of its own, one cell off the middle of the side, so it never shares strokes with
+the edges that run the other way. Checked by mermaid-kitty.sh at width 80, with
+--img kitty and pinned cell sizes. The .err golden names the diagrams that are
+declined, and so are shown as source.
+
+A retry loop (top down)
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: Try and Check are in a chain below Start, and the arrow from Check
+back to Try runs up beside the one from Try to Check, with its arrowhead at the
+bottom of Try.
+
+image @21,35 c=9 r=13 z=0 C=1 png=90x260
+                                   ▗▄▄▄▄▄▄▄▄
+                                   ▐ Start ▐
+                                   ▐▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                    ▗▄▄█▙▄▄
+                                    ▐ Try ▐
+                                    ▐▄▄▄▄▄▟
+                                       ▐▜▘
+                                       ▐▐
+                                   ▗▄▄▄██▄▄▄
+                                   ▐ Check ▐
+                                   ▐▄▄▄▄▄▄▄▟
+
+A retry loop (left to right)
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the same graph turned on its side. The arrow back runs left, below the
+one that goes right, and its arrowhead touches the right side of Try.
+
+image @41,23 c=33 r=3 z=0 C=1 png=330x60
+                       ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄
+                       ▐ Start ▐▄▄▄▟█ Try ▐▄▄▄▟█ Check ▐
+                       ▐▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▟▀▀▀▀▜▄▄▄▄▄▄▄▟
+
+Minimum length of a link, with a loop (top down)
+────────────────────────────────────────────────────────────────────────────────
+
+This is the example from the Mermaid documentation. The arrow from Rethink back
+to Is it? is a back edge. The two spellings of the label differ only in the way
+the label is written, so the two diagrams are drawn exactly alike.
+
+Expected: End is three ranks below Is it?, as ----> says, while Rethink is two
+ranks below it and loops up to the decision.
+
+image @55,31 c=17 r=38 z=0 C=1 png=170x760
+                                    ▗▄▄▄▄▄▄▄▄
+                                    ▐ Start ▐
+                                    ▐▄▄▄▄▄▄▄▟
+                                        ▐
+                                        ▐
+                                        ▐
+                                      ▗▄█▙▖
+                                   ▄▄▛▀   ▀▜▙▄
+                                 ▐█▌ Is it?  ▐██
+                                   ▀▜▙▄   ▄▄▛▀
+                                      ▝▀██▌
+                                        ▐▐
+                                    ▗▄▄▄█▟▄▄
+                                    ▐   ▗▛ ▐
+                                    ▐   ▐  ▐
+                                   Yes  ▐  ▐
+                                    ▐   ▐  ▐
+                                  ▗▄▛   ▐  ▐
+                                  ▐     ▐  ▐
+                               ▗▄▄█▙▄▄  ▐  ▐
+                               ▐ OK  ▐  ▐  ▐
+                               ▐▄▄▄▄▄▟  ▐  ▐
+                                  ▐     ▐  ▐
+                                  ▐     ▐  ▐▄
+                                  ▐     ▐   ▐
+                                  ▐     ▐  No
+                                  ▐     ▐   ▐
+                                  ▐▄▄▗▄▄▛   ▐
+                                    ▐▐      ▐
+                               ▗▄▄▄▄██▄▄▄▄  ▐
+                               ▐ Rethink ▐  ▐
+                               ▐▄▄▄▄▄▄▄▄▄▟  ▐
+                                            ▐
+                                            ▐
+                                            ▐
+                                         ▗▄▄█▙▄▄
+                                         ▐ End ▐
+                                         ▐▄▄▄▄▄▟
+
+image @94,31 c=17 r=38 z=0 C=1 png=170x760
+                                    ▗▄▄▄▄▄▄▄▄
+                                    ▐ Start ▐
+                                    ▐▄▄▄▄▄▄▄▟
+                                        ▐
+                                        ▐
+                                        ▐
+                                      ▗▄█▙▖
+                                   ▄▄▛▀   ▀▜▙▄
+                                 ▐█▌ Is it?  ▐██
+                                   ▀▜▙▄   ▄▄▛▀
+                                      ▝▀██▌
+                                        ▐▐
+                                    ▗▄▄▄█▟▄▄
+                                    ▐   ▗▛ ▐
+                                    ▐   ▐  ▐
+                                   Yes  ▐  ▐
+                                    ▐   ▐  ▐
+                                  ▗▄▛   ▐  ▐
+                                  ▐     ▐  ▐
+                               ▗▄▄█▙▄▄  ▐  ▐
+                               ▐ OK  ▐  ▐  ▐
+                               ▐▄▄▄▄▄▟  ▐  ▐
+                                  ▐     ▐  ▐
+                                  ▐     ▐  ▐▄
+                                  ▐     ▐   ▐
+                                  ▐     ▐  No
+                                  ▐     ▐   ▐
+                                  ▐▄▄▗▄▄▛   ▐
+                                    ▐▐      ▐
+                               ▗▄▄▄▄██▄▄▄▄  ▐
+                               ▐ Rethink ▐  ▐
+                               ▐▄▄▄▄▄▄▄▄▄▟  ▐
+                                            ▐
+                                            ▐
+                                            ▐
+                                         ▗▄▄█▙▄▄
+                                         ▐ End ▐
+                                         ▐▄▄▄▄▄▟
+
+A 2-cycle (top down and left to right)
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: two boxes joined by one arrow each way, side by side, each with an
+arrowhead.
+
+image @139,35 c=9 r=8 z=0 C=1 png=90x160
+                                   ▗▄▄▄▄▄▄▄▄
+                                   ▐ Ping  ▐
+                                   ▐▄▄▄▄▄▄▄▟
+                                       ▐▜▘
+                                       ▐▐
+                                   ▗▄▄▄██▄▄▄
+                                   ▐ Pong  ▐
+                                   ▐▄▄▄▄▄▄▄▟
+
+image @148,30 c=20 r=3 z=0 C=1 png=200x60
+                              ▗▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄
+                              ▐ Ping ▐▄▄▄▟█ Pong ▐
+                              ▐▄▄▄▄▄▄▟▀▀▀▀▜▄▄▄▄▄▄▟
+
+A long loop (top down)
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: Three points back at One. The back edge runs up the side of the chain
+through the ranks in between, and arrives at the bottom of One.
+
+image @158,34 c=12 r=15 z=0 C=1 png=120x300
+                                       ▗▄▄▄▄▄▄
+                                       ▐ One ▐
+                                       ▐▄▄▄▄▄▟
+                                          ▐▜▘
+                                     ▗▄▄▄▄▛▐
+                                     ▐     ▐
+                                  ▗▄▄█▙▄▄  ▐
+                                  ▐ Two ▐  ▐
+                                  ▐▄▄▄▄▄▟  ▐
+                                     ▐     ▐
+                                     ▐▄▄▄▗▄▛
+                                        ▐▐
+                                    ▗▄▄▄██▄▄▄
+                                    ▐ Three ▐
+                                    ▐▄▄▄▄▄▄▄▟
+
+A loop with a label (top down)
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the label of the back edge sits on it, halfway up.
+
+image @179,32 c=16 r=22 z=0 C=1 png=160x440
+                                      ▗▄▄▄▄▄▄▄▄
+                                      ▐ Fetch ▐
+                                      ▐▄▄▄▄▄▄▄▟
+                                          ▐▜▘
+                                         ▗▛▐▄
+                                         ▐  ▐
+                                         ▐  ▐
+                                         ▐  ▐
+                                    ▗▄▄▄▄▛  ▐▄
+                                    ▐        ▐
+                                ▗▄▄▄█▙▄▄▄    ▐
+                                ▐ Parse ▐  retry
+                                ▐▄▄▄▄▄▄▄▟    ▐
+                                    ▐        ▐
+                                    ▐        ▐
+                                    ▐        ▐
+                                    ▐        ▐
+                                    ▐▄▄▄▄▄▗▄▄▛
+                                         ▐▐
+                                     ▗▄▄▄██▄▄▄
+                                     ▐ Store ▐
+                                     ▐▄▄▄▄▄▄▄▟
+
+A dotted back edge, and one loop in each direction (bottom up, right to left)
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the dotted edge keeps its style, and its arrowhead is at the original
+target. In the bottom-up graph the flow, and so the back edge, runs the other
+way.
+
+image @209,31 c=17 r=15 z=0 C=1 png=170x300
+                                     ▗▄▄▄▄▄▄
+                                     ▐ Top ▐
+                                     ▐▄▄▄▄▄▟
+                                        ▜▜
+                                    ▗▄▄▄▛▐▄▄▄
+                                    ▐       ▐
+                               ▗▄▄▄▄▟▄▄▄▄▄  ▐
+                               ▐ Middle  ▐  ▐
+                               ▐▄▄▄▄▄▄▄▄▄▟  ▐
+                                    ▜▘      ▐
+                                    ▐▄▄▄▄▄▄▄▐
+                                           ▐▐
+                                       ▗▄▄▄▟█▙▄▄
+                                       ▐ Base  ▐
+                                       ▐▄▄▄▄▄▄▄▟
+
+image @225,24 c=31 r=3 z=0 C=1 png=310x60
+                        ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄    ▗▄▄▄▄▄▄
+                        ▐ Three ▐█▄▄▄▟ Two ▐█▄▄▄▟ One ▐
+                        ▐▄▄▄▄▄▄▄▟▀▀▀▀▜▄▄▄▄▄▟    ▐▄▄▄▄▄▟
+
+Three back edges, and a node that grows to hold their ports (top down)
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: D points back at A, B and C, each arrow running up its own line to the
+bottom of its target. D is wider than a one-letter box, because its four ports
+(three back edges and the arrow in from C) need a cell each, clear of its
+corners.
+
+image @237,34 c=12 r=23 z=0 C=1 png=120x460
+                                        ▗▄▄▄▄
+                                        ▐ A ▐
+                                        ▐▄▄▄▟
+                                          ▐▜▘
+                                       ▗▄▄▛▐▄
+                                       ▐    ▐
+                                     ▗▄█▙▄  ▐
+                                     ▐ B ▐  ▐
+                                     ▐▄▄▄▟  ▐
+                                       ▐▜▘  ▐
+                                    ▗▄▄▛▐▄  ▐
+                                    ▐    ▐  ▐
+                                  ▗▄█▙▄  ▐  ▐
+                                  ▐ C ▐  ▐  ▐
+                                  ▐▄▄▄▟  ▐  ▐
+                                    ▐▜▘  ▐  ▐
+                                    ▐▐   ▐▄▄▐
+                                    ▐▐▄▄▄▄▄▐▐
+                                    ▐▄▄▄▄▄▐▐▐
+                                         ▐▐▐▐
+                                       ▗▄██▟▟▄
+                                       ▐  D  ▐
+                                       ▐▄▄▄▄▄▟
+
+Four nodes, each pointing back at every earlier one (top down)
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: six back edges, within the eight that fit 80 columns. The boxes widen
+to fit their ports, and every arrowhead touches the box it points at.
+
+image @267,34 c=12 r=24 z=0 C=1 png=120x480
+                                       ▗▄▄▄▄▄▄
+                                       ▐  A  ▐
+                                       ▐▄▄▄▄▄▟
+                                         ▐▜▜▜▘
+                                    ▗▄▄▄▄▛▐▐▐
+                                    ▐▗▄▄▄▄▛▐▐
+                                    ▐▐   ▗▄▛▐
+                                    ▐▐   ▐  ▐
+                                  ▗▄██▄  ▐  ▐
+                                  ▐ B ▐  ▐  ▐
+                                  ▐▄▄▄▟  ▐  ▐
+                                   ▜▜▜▘  ▐  ▐
+                                   ▐▐▐▄▄▄▐  ▐▄
+                                   ▐▐▄▄▄▐▐   ▐
+                                   ▐   ▐▐▐   ▐
+                                   ▐  ▗██▟▄  ▐
+                                   ▐  ▐ C ▐  ▐
+                                   ▐  ▐▄▄▄▟  ▐
+                                   ▐    ▐▜▘  ▐
+                                   ▐▄▄▄▄▐▐▗▄▄▛
+                                       ▐▐▐▐
+                                     ▗▄▟██▟▄
+                                     ▐  D  ▐
+                                     ▐▄▄▄▄▄▟
+
+Three back edges, left to right
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: a box with several ports grows taller instead.
+
+image @297,23 c=33 r=9 z=0 C=1 png=330x180
+                                         ▗▄▄▄▄
+                                      ▗▄▟█ C ▐▄▄▄▄
+                                      ▐  ▐▄▄▄▟▀▀▜▐ ▗▄▄▄▄
+                                ▗▄▄▄▄ ▐         ▐▐ ▐   ▐
+                             ▗▄▟█ B ▐▄▛▄▄▄▄▄▄▄▄▄▐▐▟█ D ▐
+                             ▐  ▐▄▄▄▟▀▀▘       ▐▟███   ▐
+                       ▗▄▄▄▄ ▐                 ▐▀▀▀▜▄▄▄▟
+                       ▐ A ▐▄▛▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▛
+                       ▐▄▄▄▟▀▀▘
+
+Too many back edges (declined)
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: five nodes with an edge each way between every pair have ten back
+edges, more than the eight that fit 80 columns (one per ten columns). The
+builtin declines with back edges: 10 > 8, and the source is shown, without
+trying mmdc.
+
+  graph TD
+      A --> B
+      A --> C
+      A --> D
+      A --> E
+      B --> C
+      B --> D
+      B --> E
+      C --> D
+      C --> E
+      D --> E
+      B --> A
+      C --> A
+      D --> A
+      E --> A
+      C --> B
+      D --> B
+      E --> B
+      D --> C
+      E --> C
+      E --> D
+
+A self-loop (declined for now)
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the builtin declines with self-loop, and the source is shown.
+
+  graph TD
+      A --> A
+

@@ -32,10 +32,14 @@ struct Diagram {
 
 // Render the body of a ```mermaid block. Returns false, leaving `out` unspecified, when the
 // diagram is outside the supported subset, wider than env.availCols, or fails validation; `reason`
-// then says why.
+// then says why. `why` says what kind of decline it is: Unsupported ones are left to an image from
+// mmdc, TooComplex ones (too many back edges or crossings for the width) are better shown as
+// source than redrawn by anything else.
+enum class Decline { Unsupported, TooComplex };
 bool render(const std::vector<std::string>& body,
             const Env& env,
             Diagram& out,
-            std::string& reason);
+            std::string& reason,
+            Decline* why = nullptr);
 
 }  // namespace mermaid

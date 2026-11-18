@@ -1,0 +1,2 @@
+mdcat: mermaid: fallback: back edges: 10 > 8
+mdcat: mermaid: fallback: self-loop

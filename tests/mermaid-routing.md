@@ -149,11 +149,12 @@ graph LR
     B --> D
 ```
 
-## Too many crossings (declined for now)
+## Three by three (top down)
 
-Expected: each of three boxes links to each of three others. Without shared
-buses that takes eight crossings, more than the builtin allows. It declines with
-`crossings: 8 > 3`, and the source is shown.
+Expected: each of three boxes links to each of three others. Without shared buses
+that takes eight crossings, which the builtin draws: it allows one crossing for each
+ten columns, eight at width 80. Every crossing is a bridge, and each box takes three
+arrowheads side by side.
 
 ```mermaid
 graph TD
@@ -166,4 +167,30 @@ graph TD
     C --> D
     C --> E
     C --> F
+```
+
+## Too many crossings (declined)
+
+Expected: each of four boxes links to each of four others, twenty-four crossings and
+more than the eight that fit 80 columns. It declines with `crossings: 24 > 8`, and the
+source is shown, without trying `mmdc`.
+
+```mermaid
+graph TD
+    A --> E
+    A --> F
+    A --> G
+    A --> H
+    B --> E
+    B --> F
+    B --> G
+    B --> H
+    C --> E
+    C --> F
+    C --> G
+    C --> H
+    D --> E
+    D --> F
+    D --> G
+    D --> H
 ```

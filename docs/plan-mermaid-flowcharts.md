@@ -114,7 +114,7 @@ an override that mirrors `--img` / `MDCAT_GRAPHICS`:
   stable strings so tests can assert them, for example:
   - `not kitty`, `not a flowchart`, `subgraph`, `overlap`
   - `unsupported shape: doc`
-  - `too wide: 97 > 80`, `crossings: 4 > 2`
+  - `too wide: 97 > 80`, `crossings: 24 > 8`
 
 ### Mermaid semantics we follow (not invent)
 
@@ -266,9 +266,16 @@ Graphics make the route easier to read:
 - A parse error, an unknown statement, or an unsupported construct.
 - The laid-out width exceeds the available width. That is `terminalWidth()`,
   which already accounts for list and quote indentation via `gIndent`.
-- More edge crossings than `kMaxCrossings` (2 at first, 3 once buses stopped
-  joining, so that K₃,₂ renders; recalibrated in Step 16).
-- More back edges than `kMaxBackEdges` (introduced in Step 14; 0 before that).
+- More edge crossings than the width allows: one per `kColsPerCrossing` (10)
+  columns of `terminalWidth()`, so 8 at width 80. A terminal narrower than
+  `kMinGateCols` (72) counts as 72 wide for this limit and the next. (It was a flat 2, then 3, before
+  the limit followed the width.)
+- More back edges than the width allows: one per `kColsPerBackEdge` (10) columns.
+  Introduced in Step 14.
+
+  These two are **complexity** gates. A diagram that trips one is shown as
+  source in `auto` mode, and `mmdc` is not asked to draw it (`Decline::TooComplex`
+  in `mermaid.h`). Every other gate leaves the diagram to `mmdc`.
 - More real nodes than `kMaxNodes` (60 at first). This bounds layout cost and
   clutter.
 - **Validation fails.** A final pass over the occupancy grid and the stroke list
@@ -1009,7 +1016,10 @@ Work:
   - It gets its own ports, offset from the shared centre ports.
   - In TD it runs from the original source's top outline, up through its dummies,
     to the original target's bottom outline. LR mirrors this.
-- Gate the number of back edges with `kMaxBackEdges` (2 at first).
+- Gate the number of back edges by the width: one per `kColsPerBackEdge` columns,
+  a complexity gate (the source is shown, not an `mmdc` image).
+- A node with many ports on one side grows (two cells at a time) until they fit
+  a cell apart, clear of its corners, so that dense cycles still render.
 
 **Tests:** `tests/mermaid-cycles.md`, with goldens at w80:
 
@@ -1017,7 +1027,8 @@ Work:
 - the docs' "Minimum length of a link" example, in both its `-->|Yes|` and
   `-- Yes -->` spellings, which must render identically;
 - a 2-cycle;
-- a graph with three back edges that trips the gate (`.err`).
+- a graph with more back edges than the width allows (`.err`); the harness also
+  checks that it is shown as source without calling `mmdc`.
 
 **README:** the tour gains a "retry" back edge.
 
@@ -1050,7 +1061,7 @@ Work:
 2. **Calibration.** Take the Mermaid docs examples that fall within the subset,
    as a scratch corpus that is not committed. Render them at 80 and 120 columns,
    in the previewer and in a Kitty terminal, and review each picture.
-   - Tune `kMaxCrossings`, `kMaxBackEdges`, `kMaxNodes` and `kMaxLabelWidth` so
+   - Tune `kColsPerCrossing`, `kColsPerBackEdge`, `kMaxNodes` and `kMaxLabelWidth` so
      that every accepted diagram is legible, and nothing legible is rejected for
      a minor reason.
    - Record the values, and why, next to the constants.

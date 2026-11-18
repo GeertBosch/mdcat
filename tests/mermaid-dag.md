@@ -1,8 +1,9 @@
 # Mermaid graphs with branches and merges
 
 On a Kitty terminal, the built-in renderer draws any acyclic graph of boxes joined
-by `-->` links. The graphs here are trees and merges that need no more than one
-track between two ranks; `mermaid-routing.md` covers the ones that need more.
+by `-->` links (`mermaid-cycles.md` covers the graphs with cycles). The graphs here
+are trees and merges that need no more than one track between two ranks;
+`mermaid-routing.md` covers the ones that need more.
 Checked by `mermaid-kitty.sh` at widths 80 and 44, with `--img kitty` and pinned
 cell sizes. The `.err` goldens name the diagrams that are declined, for now, and
 so are shown as source.
@@ -165,17 +166,6 @@ graph TD
     m1 --> m2[Two]
     m2 --> e[End]
     late[Late] --> e
-```
-
-## A cycle (declined for now)
-
-Expected: the builtin declines with `cycle`, and the source is shown.
-
-```mermaid
-graph TD
-    A --> B
-    B --> C
-    C --> A
 ```
 
 ## Parallel edges (declined for now)

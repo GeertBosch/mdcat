@@ -333,9 +333,10 @@ void addTitle(Layout& lay, int width) {
 
 }  // namespace
 
-bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reason) {
-    const size_t n = g.nodes.size();
-    if (g.edges.empty()) {
+bool layoutGraph(
+    const Graph& source, const Env& env, Layout& lay, std::string& reason, Decline& why) {
+    const size_t n = source.nodes.size();
+    if (source.edges.empty()) {
         reason = "no edges";
         return false;
     }
@@ -343,16 +344,64 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
         reason = "too many nodes";
         return false;
     }
-    // BT and RL are laid out as TB and LR, and mirrored along the flow at the end.
-    const bool td = g.dir == Dir::TB || g.dir == Dir::BT;
-
     std::set<std::pair<int, int>> seen;
-    for (const Edge& e : g.edges) {
+    for (const Edge& e : source.edges) {
+        if (e.from == e.to) {
+            reason = "self-loop";
+            return false;
+        }
         if (!seen.insert({e.from, e.to}).second) {
             reason = "parallel edges";
             return false;
         }
     }
+
+    // Cycles: a depth-first search from the nodes in order of first appearance, along the edges in
+    // declaration order, finds the back edges, those that lead to a node still on the stack. Like
+    // Dagre, the layout reverses them, so that it works on an acyclic graph, and each is drawn
+    // from its real source to its real target at the end (see below).
+    std::vector<char> reversed(source.edges.size(), 0);
+    {
+        std::vector<std::vector<int>> out(n);
+        for (size_t k = 0; k < source.edges.size(); ++k)
+            out[static_cast<size_t>(source.edges[k].from)].push_back(static_cast<int>(k));
+        std::vector<char> state(n, 0);  // 1: on the stack, 2: done
+        std::function<void(size_t)> dfs = [&](size_t u) {
+            state[u] = 1;
+            for (int k : out[u]) {
+                const size_t v = static_cast<size_t>(source.edges[static_cast<size_t>(k)].to);
+                if (state[v] == 1)
+                    reversed[static_cast<size_t>(k)] = 1;
+                else if (state[v] == 0)
+                    dfs(v);
+            }
+            state[u] = 2;
+        };
+        for (size_t u = 0; u < n; ++u)
+            if (state[u] == 0) dfs(u);
+    }
+    int backEdges = 0;
+    for (size_t k = 0; k < reversed.size(); ++k)
+        if (reversed[k] && source.edges[k].line != Line::Invisible) ++backEdges;
+    const int gateCols = std::max(env.availCols, tune::kMinGateCols);
+    const int maxBack = gateCols / tune::kColsPerBackEdge;
+    if (backEdges > maxBack) {
+        reason = "back edges: " + std::to_string(backEdges) + " > " + std::to_string(maxBack);
+        why = Decline::TooComplex;
+        return false;
+    }
+    // From here on `g` is the graph that is laid out: a reversed edge runs from its real target
+    // down to its real source, with its ends' markers swapped to match.
+    Graph g = source;
+    for (size_t k = 0; k < reversed.size(); ++k) {
+        if (!reversed[k]) continue;
+        Edge& e = g.edges[k];
+        std::swap(e.from, e.to);
+        std::swap(e.head, e.tail);
+    }
+    // BT and RL are laid out as TB and LR, and mirrored along the flow at the end.
+    const bool td = g.dir == Dir::TB || g.dir == Dir::BT;
+
     // Edge labels, as in Dagre: every rank and minimum length is doubled, so that a labelled edge
     // has a rank halfway along it. Its label is an item there, which ordering and placement treat
     // like any other, so the labels get room without a search for it. Nodes stay on even ranks.
@@ -480,17 +529,8 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
     // Along the flow of a top-down graph, nodes of a rank are set down so that their labels start
     // on one row, as far down their band as the node whose label sits lowest. Mirroring turns a
     // node upside down in its band, so for bottom-up graphs it is the rows below the label that
-    // line up before it.
+    // line up before it. (Done once the ports are known, as they may widen a node.)
     std::vector<int> off(n, 0);
-    if (td) {
-        const bool flip = g.dir == Dir::BT;
-        auto above = [&](size_t i) { return flip ? nodeH[i] - labelRow[i] : labelRow[i]; };
-        std::vector<int> most(ranks, 0);
-        for (size_t i = 0; i < n; ++i)
-            most[static_cast<size_t>(rank[i])] =
-                std::max(most[static_cast<size_t>(rank[i])], above(i));
-        for (size_t i = 0; i < n; ++i) off[i] = most[static_cast<size_t>(rank[i])] - above(i);
-    }
 
     // Initial order, by depth-first search from the sources of each weakly connected component in
     // turn, visiting children in the order their edges were declared. An edge that spans k ranks
@@ -557,7 +597,8 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
     // edges of different styles never share a bus. Labels don't matter: each sits on its own edge.
     // Invisible links have no ports: they rank and order the nodes but are not routed. Greedily,
     // the next star is the largest left, ties going to the one holding the earliest-declared edge,
-    // then to splits. A node's first port on each side is centred.
+    // then to splits. A node's first port on each side is centred. A back edge, which the layout
+    // reversed, has a port of its own at each end, after the others.
     const size_t m = g.edges.size();
     struct Port {
         std::vector<int> edges;  // in declaration order
@@ -572,7 +613,7 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
         std::vector<std::set<int>> outLeft(n), inLeft(n);
         for (size_t k = 0; k < m; ++k) {
             const Edge& e = g.edges[k];
-            if (e.line == Line::Invisible) continue;
+            if (e.line == Line::Invisible || reversed[k]) continue;
             edgeOf[{e.from, e.to}] = static_cast<int>(k);
             outLeft[static_cast<size_t>(e.from)].insert(e.to);
             inLeft[static_cast<size_t>(e.to)].insert(e.from);
@@ -584,7 +625,8 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
             return (static_cast<int>(e.line) * 4 + static_cast<int>(e.head)) * 4 +
                 static_cast<int>(e.tail);
         };
-        for (size_t placed = 0, groups = 0; placed < routed; ++groups) {
+        size_t groups = 0;
+        for (size_t placed = 0; placed < routed; ++groups) {
             std::set<int> bestS, bestT;
             size_t bestSize = 0;
             int bestFirst = INT_MAX;
@@ -642,15 +684,61 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
                 }
             }
         }
+        // A reversed edge is a group of its own, with a port of its own on each node, so that it
+        // never shares strokes with the edges that run the other way between the same two nodes.
+        for (size_t k = 0; k < m; ++k) {
+            if (!reversed[k] || g.edges[k].line == Line::Invisible) continue;
+            const Edge& e = g.edges[k];
+            outPort[k] = static_cast<int>(ports.size());
+            outPorts[static_cast<size_t>(e.from)].push_back(outPort[k]);
+            ports.push_back({{static_cast<int>(k)}});
+            inPort[k] = static_cast<int>(ports.size());
+            inPorts[static_cast<size_t>(e.to)].push_back(inPort[k]);
+            ports.push_back({{static_cast<int>(k)}});
+            lay.edgeGroup[k] = static_cast<int>(groups++);
+        }
         for (Port& p : ports) std::sort(p.edges.begin(), p.edges.end());
-        // A node's first port is the one holding its earliest-declared edge.
+        // A node's first port is the one holding its earliest-declared edge, and a reversed edge's
+        // port comes after those of the others.
         auto byFirstEdge = [&](int a, int b) {
-            return ports[static_cast<size_t>(a)].edges[0] < ports[static_cast<size_t>(b)].edges[0];
+            auto key = [&](int p) {
+                const int k = ports[static_cast<size_t>(p)].edges[0];
+                return k + (reversed[static_cast<size_t>(k)] ? static_cast<int>(m) : 0);
+            };
+            return key(a) < key(b);
         };
         for (size_t v = 0; v < n; ++v) {
             std::sort(outPorts[v].begin(), outPorts[v].end(), byFirstEdge);
             std::sort(inPorts[v].begin(), inPorts[v].end(), byFirstEdge);
         }
+    }
+
+    // A node with many ports on a side is made wider (taller, left to right), by two cells at a
+    // time to keep it symmetric, until they fit a cell (half a cell, left to right) apart, clear of
+    // the corners.
+    for (size_t v = 0; v < n; ++v) {
+        const int count = static_cast<int>(std::max(outPorts[v].size(), inPorts[v].size()));
+        while (count >= 2) {
+            const int room = (td ? nodeW[v] - 3 : nodeH[v] - 2) - std::abs(items[v].skew);
+            if ((count - 1) * (td ? 2 : 1) <= 2 * room) break;
+            if (td) {
+                nodeW[v] += 2;
+                items[v].ext = nodeW[v];
+            } else {
+                nodeH[v] += 2;
+                ++labelRow[v];
+                items[v].ext = nodeH[v];
+            }
+        }
+    }
+    if (td) {
+        const bool flip = g.dir == Dir::BT;
+        auto above = [&](size_t i) { return flip ? nodeH[i] - labelRow[i] : labelRow[i]; };
+        std::vector<int> most(ranks, 0);
+        for (size_t i = 0; i < n; ++i)
+            most[static_cast<size_t>(rank[i])] =
+                std::max(most[static_cast<size_t>(rank[i])], above(i));
+        for (size_t i = 0; i < n; ++i) off[i] = most[static_cast<size_t>(rank[i])] - above(i);
     }
 
     std::vector<std::vector<int>> preds(items.size()), succs(items.size());
@@ -934,11 +1022,15 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
             }
             out.push_back(p);
         }
+        // The path of a reversed edge was laid out from its real target; it is drawn from its real
+        // source, against the flow, so that its markers are where they belong.
+        if (reversed[k]) std::reverse(out.begin(), out.end());
     }
     const size_t crossings = crossingPoints(lay).size();
-    if (crossings > static_cast<size_t>(tune::kMaxCrossings)) {
-        reason =
-            "crossings: " + std::to_string(crossings) + " > " + std::to_string(tune::kMaxCrossings);
+    const int maxCross = gateCols / tune::kColsPerCrossing;
+    if (crossings > static_cast<size_t>(maxCross)) {
+        reason = "crossings: " + std::to_string(crossings) + " > " + std::to_string(maxCross);
+        why = Decline::TooComplex;
         return false;
     }
     if (g.dir == Dir::BT || g.dir == Dir::RL) {
