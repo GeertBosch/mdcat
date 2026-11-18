@@ -4,14 +4,19 @@ On a Kitty terminal, the built-in renderer draws each node's outline as part of 
 diagram's image, and its label as ordinary text over it. Besides the box, `[text]`,
 it draws the rounded box `(text)`, the stadium `([text])`, the circle `((text))`, the
 double circle `(((text)))`, the subroutine `[[text]]`, the cylinder `[(text)]`, the
-rhombus `{text}` and the hexagon `{{text}}`. The curves and slants are drawn exactly,
+rhombus `{text}` and the hexagon `{{text}}`, and the slanted shapes: the parallelograms
+`[/text/]` and `[\text\]`, the trapezoids `[/text\]` and `[\text/]`, and the flag
+`>text]`. The same shapes can be named with `A@{ shape: name, label: "text" }`. The
+curves and slants are drawn exactly,
 so an arrowhead touches them exactly where an edge meets them, even off the middle
 of a side. Each shape takes the room its outline needs to clear the label: the
 stadium, subroutine and hexagon are 2 columns wider than a box, the cylinder is a row
 taller (its label sits under the lid) and at least as wide as an 8-column label, so
 that its lid looks equally deep whatever the label, the rhombus has the label's rows
 + 4 rows and
-about twice its width, and a circle is widened until the label's box fits inside.
+about twice its width, a circle is widened until the label's box fits inside, a
+parallelogram or trapezoid is 2 columns wider than a box with its sides slanted by a
+column, and the flag is a column wider, with a notch a column deep in its left side.
 Checked by `mermaid-kitty.sh` at width 80, with `--img kitty` and pinned cell sizes.
 
 ## Every shape, top down
@@ -146,17 +151,125 @@ graph LR
     b --> c[("{x} | y")]
 ```
 
-## Declined
+## Slanted shapes, top down
 
-Expected: shown as source, as the `.err` golden says, in this order. A slanted shape,
-`[/text/]`, which is not drawn yet; a shape that is never closed.
+Expected: five shapes in a column. The parallelogram `[/…/]` leans right, with its top
+edge shifted right of its bottom edge; `[\…\]` leans left. The trapezoid `[/…\]` is
+wider at the bottom and `[\…/]` is wider at the top; their sides slant a column. The
+flag `>…]` is a box with a notch in its left side, pointing in to the middle of the
+label's row. Each arrowhead touches the slanted side or the notch where its edge
+meets it, even off the middle of a side.
 
 ```mermaid
 graph TD
-    a[/Slanted/] --> b[B]
+    a[/Lean right/] --> b[\Lean left\]
+    b --> c[/Trapezoid\]
+    c --> d[\Inverted/]
+    d --> e>Odd flag]
+```
+
+## Slanted shapes, left to right
+
+Expected: the same shapes in a row. Arrows meet the slanted sides at their middle
+and the flag at the tip of its notch.
+
+```mermaid
+graph LR
+    a[/In/] --> b[\Out\] --> c[/Wide\] --> d[\Inv/] --> e>Flag]
+```
+
+## Slanted shapes with several edges
+
+Expected: edges leave and arrive off the middle of a side. Each stroke that leaves a
+slanted side starts on it, and each arrowhead ends on it. A label of several lines
+grows the shape a row for each line without changing its slant.
+
+```mermaid
+graph TD
+    src[/Source/] --> lex[\Lexer\]
+    src --> doc>"Two<br>lines"]
+    cfg[/Config\] --> lex
+    cfg --> doc
+    lex --> out[\Output/]
+    doc --> out
+```
+
+## Other directions
+
+Expected: `BT` and `RL` keep the slants the way they are written: a `[/…/]` leans
+right in every direction.
+
+```mermaid
+graph BT
+    a[/Go/] --> b[\Check/]
+    b -->|yes| c>Flag]
+    b -->|no| d[/Wait\]
+```
+
+```mermaid
+graph RL
+    a>Flag] --> b[/Lean/] --> c[\Trap/]
+```
+
+## The `@{ shape }` form
+
+Expected: each node is the shape its name says: `rect` (and its alias `process`), `rounded`,
+`stadium`, `circle`, `dbl-circ`, `fr-rect`, `cyl`, `diam`, `hex`, `lean-r`, `lean-l`,
+`trap-b`, `trap-t` and `odd`, and the aliases that Mermaid gives them (`event`, `pill`,
+`db`, `decision`, `prepare`, `in-out`, `out-in`, `priority`, `manual`). A node with
+no label is labelled with its id, and a label may be quoted, hold syntax characters
+and be a Markdown string. Other keys are ignored.
+
+```mermaid
+graph LR
+    a@{ shape: rect, label: "Rect" } --> b@{ shape: rounded, label: "Round" }
+    b --> c@{ shape: stadium, label: "Stad" }
+    c --> d@{ shape: circle, label: "Circ" }
+```
+
+```mermaid
+graph LR
+    e@{ shape: dbl-circ, label: "Dbl" } --> f@{ shape: fr-rect, label: "Frame" }
+    f --> g@{ shape: cyl, label: "Cyl" }
 ```
 
 ```mermaid
 graph TD
+    a@{ shape: diam, label: "Diamond" } --> b@{ shape: hex, label: "Hex" }
+    b --> c@{ shape: lean-r, label: "Lean right" }
+    c --> d@{ shape: lean-l, label: "Lean left" }
+    d --> e@{ shape: trap-b, label: "Trap bottom" }
+    e --> f@{ shape: trap-t, label: "Trap top" }
+    f --> g@{ shape: odd, label: "Odd" }
+```
+
+```mermaid
+flowchart LR
+    A@{ shape: db, label: "Store" } --> B@{ shape: decision, label: "Ok?" }
+    B -->|yes| C@{ shape: in-out, label: "Read #35; in" }
+    B -->|no| D@{ shape: manual, icon: "fa:user", label: "`**Fix** it`" }
+    plain@{ shape: process } --> C
+    C --> E@{ shape: event }
+    E@{ shape: pill, label: "Done" }
+```
+
+## Declined
+
+Expected: shown as source, as the `.err` golden says, in this order. A shape that is
+never closed, a slanted shape that is never closed, and `@{ shape }` with a name that
+is not drawn here.
+
+```mermaid
+graph TD
     a((Open) --> b[B]
+```
+
+```mermaid
+graph TD
+    a[/Open/ --> b[B]
+```
+
+```mermaid
+graph TD
+    a@{ shape: doc, label: "Document" } --> b[B]
 ```

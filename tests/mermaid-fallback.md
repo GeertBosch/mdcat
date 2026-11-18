@@ -66,3 +66,10 @@ graph LR
 graph XY
     A --> B
 ```
+
+## A shape that is not drawn
+
+```mermaid
+graph TD
+    A@{ shape: doc, label: "Report" } --> B
+```

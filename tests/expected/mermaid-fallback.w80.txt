@@ -60,3 +60,9 @@ Unknown direction
   graph XY
       A --> B
 
+A shape that is not drawn
+────────────────────────────────────────────────────────────────────────────────
+
+  graph TD
+      A@{ shape: doc, label: "Report" } --> B
+

@@ -418,6 +418,57 @@ private:
     size_t i = 0;
 };
 
+// The node shapes of `A@{ shape: name }`: every short name and alias that Mermaid's "Complete List
+// of New Shapes" (docs/syntax/flowchart.md) gives for a shape that is drawn. The others are
+// declined.
+const std::map<std::string, Shape>& shapeNames() {
+    static const std::map<std::string, Shape> kNames = {{"rect", Shape::Rect},
+                                                        {"proc", Shape::Rect},
+                                                        {"process", Shape::Rect},
+                                                        {"rectangle", Shape::Rect},
+                                                        {"rounded", Shape::Round},
+                                                        {"event", Shape::Round},
+                                                        {"stadium", Shape::Stadium},
+                                                        {"pill", Shape::Stadium},
+                                                        {"terminal", Shape::Stadium},
+                                                        {"circle", Shape::Circle},
+                                                        {"circ", Shape::Circle},
+                                                        {"dbl-circ", Shape::DoubleCircle},
+                                                        {"double-circle", Shape::DoubleCircle},
+                                                        {"fr-rect", Shape::Subroutine},
+                                                        {"framed-rectangle", Shape::Subroutine},
+                                                        {"subproc", Shape::Subroutine},
+                                                        {"subprocess", Shape::Subroutine},
+                                                        {"subroutine", Shape::Subroutine},
+                                                        {"cyl", Shape::Cylinder},
+                                                        {"cylinder", Shape::Cylinder},
+                                                        {"database", Shape::Cylinder},
+                                                        {"db", Shape::Cylinder},
+                                                        {"diam", Shape::Rhombus},
+                                                        {"decision", Shape::Rhombus},
+                                                        {"diamond", Shape::Rhombus},
+                                                        {"question", Shape::Rhombus},
+                                                        {"hex", Shape::Hexagon},
+                                                        {"hexagon", Shape::Hexagon},
+                                                        {"prepare", Shape::Hexagon},
+                                                        {"lean-r", Shape::LeanR},
+                                                        {"in-out", Shape::LeanR},
+                                                        {"lean-right", Shape::LeanR},
+                                                        {"lean-l", Shape::LeanL},
+                                                        {"lean-left", Shape::LeanL},
+                                                        {"out-in", Shape::LeanL},
+                                                        {"trap-b", Shape::TrapB},
+                                                        {"priority", Shape::TrapB},
+                                                        {"trapezoid", Shape::TrapB},
+                                                        {"trapezoid-bottom", Shape::TrapB},
+                                                        {"trap-t", Shape::TrapT},
+                                                        {"inv-trapezoid", Shape::TrapT},
+                                                        {"manual", Shape::TrapT},
+                                                        {"trapezoid-top", Shape::TrapT},
+                                                        {"odd", Shape::Odd}};
+    return kNames;
+}
+
 const char* const kUnsupportedSyntax = "unsupported syntax";
 
 struct Parser {
@@ -431,9 +482,45 @@ struct Parser {
         return false;
     }
 
+    // The `{ shape: name, label: "text" }` after an id's `@` at s[p] (`s[p..p+1]` is `@{`): the
+    // shape and the label that it gives, if it does. Other keys are read and ignored.
+    bool parseShapeData(
+        const std::string& s, size_t& p, Label& label, bool& labelled, Shape& shape, bool& shaped) {
+        const size_t close = findOutsideQuotes(s, p + 2, '}');
+        if (close == std::string::npos) return fail(kUnsupportedSyntax);
+        const std::string body = s.substr(p + 2, close - p - 2);
+        for (size_t at = 0;;) {
+            const size_t comma = findOutsideQuotes(body, at, ',');
+            const std::string item =
+                trim(body.substr(at, comma == std::string::npos ? comma : comma - at));
+            if (!item.empty()) {
+                const size_t colon = item.find(':');
+                if (colon == std::string::npos) return fail(kUnsupportedSyntax);
+                const std::string key = trim(item.substr(0, colon));
+                std::string value = trim(item.substr(colon + 1));
+                if (key == "shape") {
+                    if (value.size() >= 2 && value.front() == '"' && value.back() == '"')
+                        value = value.substr(1, value.size() - 2);
+                    auto it = shapeNames().find(value);
+                    if (it == shapeNames().end()) return fail("unsupported shape: " + value);
+                    shape = it->second;
+                    shaped = true;
+                } else if (key == "label") {
+                    if (!parseLabel(value, label, reason)) return false;
+                    labelled = true;
+                }
+            }
+            if (comma == std::string::npos) break;
+            at = comma + 1;
+        }
+        p = close + 1;
+        return true;
+    }
+
     // The node `id` or `id` followed by a shape and its text (`id[text]`, `id(text)`, `id{text}`
-    // and so on), with an optional `:::class` that has no effect, at s[p], with surrounding spaces
-    // skipped. A later text or shape for a node replaces the earlier one.
+    // and so on, or `id@{ shape: name, label: "text" }`), with an optional `:::class` that has no
+    // effect, at s[p], with surrounding spaces skipped. A later text or shape for a node replaces
+    // the earlier one.
     bool parseNode(const std::string& s, size_t& p, int& node) {
         while (p < s.size() && s[p] == ' ') ++p;
         size_t b = p;
@@ -441,11 +528,28 @@ struct Parser {
         if (p == b) return fail(kUnsupportedSyntax);
         std::string id = s.substr(b, p - b);
         if (reservedId(id)) return fail(kUnsupportedSyntax);
-        if (s.compare(p, 2, "@{") == 0) return fail(kUnsupportedSyntax);
-        bool labelled = false;
+        bool labelled = false, shaped = false;
         Label label;
         Shape shape = Shape::Rect;
-        if (p < s.size()) {
+        if (s.compare(p, 2, "@{") == 0) {
+            if (!parseShapeData(s, p, label, labelled, shape, shaped)) return false;
+        } else if (s.compare(p, 2, "[/") == 0 || s.compare(p, 2, "[\\") == 0) {
+            // A slanted shape: `[/t/]` and `[\t\]` lean, `[/t\]` and `[\t/]` are trapezoids. The
+            // text ends at the first `]` that has a slash or backslash before it.
+            size_t close = p + 2;
+            for (;;) {
+                close = findOutsideQuotes(s, close, ']');
+                if (close == std::string::npos) return fail(kUnsupportedSyntax);
+                if (close >= p + 3 && (s[close - 1] == '/' || s[close - 1] == '\\')) break;
+                ++close;
+            }
+            const bool open = s[p + 1] == '/', end = s[close - 1] == '/';
+            shape =
+                open ? (end ? Shape::LeanR : Shape::TrapB) : (end ? Shape::TrapT : Shape::LeanL);
+            if (!parseLabel(s.substr(p + 2, close - 1 - (p + 2)), label, reason)) return false;
+            labelled = shaped = true;
+            p = close + 1;
+        } else if (p < s.size()) {
             static const struct {
                 const char *open, *close;
                 Shape shape;
@@ -457,14 +561,11 @@ struct Parser {
                            {"[(", ")]", Shape::Cylinder},
                            {"[", "]", Shape::Rect},
                            {"{{", "}}", Shape::Hexagon},
-                           {"{", "}", Shape::Rhombus}};
+                           {"{", "}", Shape::Rhombus},
+                           {">", "]", Shape::Odd}};
             for (const auto& k : kShapes) {
                 const size_t openLen = std::strlen(k.open);
                 if (s.compare(p, openLen, k.open) != 0) continue;
-                // The slanted shapes, `[/text/]` and the like, are not drawn.
-                if (k.shape == Shape::Rect && p + 1 < s.size() &&
-                    (s[p + 1] == '/' || s[p + 1] == '\\'))
-                    return fail(kUnsupportedSyntax);
                 size_t close = findOutsideQuotes(s, p + openLen, k.close[0]);
                 while (close != std::string::npos &&
                        s.compare(close, std::strlen(k.close), k.close))
@@ -472,7 +573,7 @@ struct Parser {
                 if (close == std::string::npos) return fail(kUnsupportedSyntax);
                 if (!parseLabel(s.substr(p + openLen, close - p - openLen), label, reason))
                     return false;
-                labelled = true;
+                labelled = shaped = true;
                 shape = k.shape;
                 p = close + std::strlen(k.close);
                 break;
@@ -494,10 +595,8 @@ struct Parser {
             n.label.lines.push_back(id);
             g.nodes.push_back(n);
         }
-        if (labelled) {
-            g.nodes[static_cast<size_t>(it->second)].label = label;
-            g.nodes[static_cast<size_t>(it->second)].shape = shape;
-        }
+        if (labelled) g.nodes[static_cast<size_t>(it->second)].label = label;
+        if (shaped) g.nodes[static_cast<size_t>(it->second)].shape = shape;
         node = it->second;
         return true;
     }
@@ -562,7 +661,7 @@ struct Parser {
         handled = false;
         size_t e = idEnd(s, 0);
         if (e == 0 || s.compare(e, 2, "@{") != 0) return true;
-        if (!edgeIds.count(s.substr(0, e))) return fail(kUnsupportedSyntax);
+        if (!edgeIds.count(s.substr(0, e))) return true;  // a node's `A@{ shape: ... }`
         if (s.back() != '}') return fail(kUnsupportedSyntax);
         std::string body = s.substr(e + 2, s.size() - e - 3);
         size_t at = 0;

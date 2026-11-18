@@ -6,3 +6,4 @@ mdcat: mermaid: fallback: unsupported syntax: direction LR
 mdcat: mermaid: fallback: unsupported syntax: A --> end
 mdcat: mermaid: fallback: unsupported syntax: A o--> B
 mdcat: mermaid: fallback: unsupported direction
+mdcat: mermaid: fallback: unsupported shape: doc

@@ -26,8 +26,8 @@ inline bool isBox(Shape s) {
 class Geom {
 public:
     // The outline's box (the top-left and bottom-right of the strokes' centre lines, as the
-    // drawer's Stroke::Outline has them) in pixels, for cells ch pixels tall and strokes s wide.
-    Geom(Shape sh, int left, int top, int right, int bottom, int ch, int s)
+    // drawer's Stroke::Outline has them) in pixels, for cells cw x ch pixels and strokes s wide.
+    Geom(Shape sh, int left, int top, int right, int bottom, int cw, int ch, int s)
         : shape(sh),
           l(8L * (left - s / 2) + 4L * s),
           t(8L * (top - s / 2) + 4L * s),
@@ -40,6 +40,7 @@ public:
         rad = sh == Shape::Stadium ? h / 2 : std::min(4L * ch, std::min(w, h) / 2);
         cap = std::min(cap, h / 4);
         point = std::min(8L * ch, w / 4);
+        slant = std::min(8L * cw, w / 4);
     }
 
     long half() const { return hw; }
@@ -59,6 +60,14 @@ public:
             return (x >= l - g && x <= r + g && y >= t + cap && y <= b - cap) ||
                 ellipse(x, y, cx, t + cap, (r - l) / 2 + g, cap + g) ||
                 ellipse(x, y, cx, b - cap, (r - l) / 2 + g, cap + g);
+        case Shape::Odd: {
+            // The box less a wedge that opens on its left side; the wedge is cut off far enough
+            // to the left that it never ends inside the grown box.
+            if (!(x >= l - g && x <= r + g && y >= t - g && y <= b + g)) return false;
+            long wx[3], wy[3];
+            wedge(wx, wy);
+            return !polygonIn(wx, wy, 3, x, y, -g);
+        }
         default: break;
         }
         long px[6], py[6];
@@ -89,22 +98,28 @@ public:
     bool extent(bool vertical, long cross, long& lo, long& hi) const {
         auto at = [&](long e) { return vertical ? in(cross, e, hw) : in(e, cross, hw); };
         const long c = vertical ? (t + b) / 2 : (l + r) / 2;
-        if (!at(c)) return false;
         const long span = (vertical ? b - t : r - l) / 2 + hw + 16;
-        long out = c - span, inside = c;
-        while (inside - out > 1) {
-            long m = out + (inside - out) / 2;
-            (at(m) ? inside : out) = m;
-        }
-        lo = inside;
-        inside = c;
-        out = c + span;
-        while (out - inside > 1) {
-            long m = inside + (out - inside) / 2;
-            (at(m) ? inside : out) = m;
-        }
-        hi = inside;
-        return true;
+        const long step = 8;
+        // Walk in from outside until the line is inside the shape, then bisect for the edge. The
+        // line may miss the middle of a slanted or notched shape and still cross it nearer an end.
+        auto edge = [&](long from, long dir, long& found) {
+            long out = from;
+            for (long d = 0; d <= 2 * span; d += step) {
+                const long e = from + dir * d;
+                if (at(e)) {
+                    long inside = e;
+                    while (std::labs(inside - out) > 1) {
+                        const long m = out + (inside - out) / 2;
+                        (at(m) ? inside : out) = m;
+                    }
+                    found = inside;
+                    return true;
+                }
+                out = e;
+            }
+            return false;
+        };
+        return edge(c - span, 1, lo) && edge(c + span, -1, hi);
     }
 
     // The bounding box of the strokes, in eighths.
@@ -148,7 +163,37 @@ private:
             std::copy(ys, ys + 6, py);
             return 6;
         }
+        if (shape == Shape::LeanR || shape == Shape::LeanL) {
+            const long lt = shape == Shape::LeanR ? slant : 0, lb = slant - lt;
+            const long xs[4] = {l + lt, r - lb, r - lt, l + lb};
+            const long ys[4] = {t, t, b, b};
+            std::copy(xs, xs + 4, px);
+            std::copy(ys, ys + 4, py);
+            return 4;
+        }
+        if (shape == Shape::TrapB || shape == Shape::TrapT) {
+            const long at = shape == Shape::TrapB ? slant : 0, ab = slant - at;
+            const long xs[4] = {l + at, r - at, r - ab, l + ab};
+            const long ys[4] = {t, t, b, b};
+            std::copy(xs, xs + 4, px);
+            std::copy(ys, ys + 4, py);
+            return 4;
+        }
         return 0;
+    }
+
+    // The wedge that a notched shape cuts out of its left side: its tip, then the two points where
+    // its edges, run on to the left, are far outside the box (clockwise on the screen).
+    void wedge(long* wx, long* wy) const {
+        const long cy = (t + b) / 2, h = std::max(cy - t, 1L);
+        const long far = (r - l) + 8 * h;  // how far left of the box the wedge is cut
+        const long rise = far * h / std::max(slant, 1L);
+        wx[0] = l + slant;
+        wy[0] = cy;
+        wx[1] = l - far;
+        wy[1] = b + rise;
+        wx[2] = l - far;
+        wy[2] = t - rise;
     }
 
     // Whether the point is inside the convex polygon grown by g: within g of it if g is positive,
@@ -192,6 +237,7 @@ private:
     long cap;         // the vertical radius of a cylinder's lid
     long rad = 0;     // the corner radius of a rounded box
     long point = 0;   // how far a hexagon's points reach in
+    long slant = 0;   // how far a slanted side or a notch reaches in: a column
 };
 
 struct Footprint {
@@ -203,7 +249,8 @@ struct Footprint {
 // spare on either side.
 inline bool labelFits(Shape sh, const Footprint& f, int labelW, int lines, int cw, int ch) {
     const int s = strokeWidth(cw);
-    const Geom g(sh, cw / 2, ch / 2, (2 * f.cols - 1) * cw / 2, (2 * f.rows - 1) * ch / 2, ch, s);
+    const Geom g(
+        sh, cw / 2, ch / 2, (2 * f.cols - 1) * cw / 2, (2 * f.rows - 1) * ch / 2, cw, ch, s);
     const long x0 = 8L * ((f.cols - labelW) / 2 - 1) * cw;
     const long x1 = 8L * ((f.cols - labelW) / 2 + labelW + 1) * cw;
     const long y0 = 8L * f.labelRow * ch, y1 = 8L * (f.labelRow + lines) * ch;
@@ -219,7 +266,12 @@ inline Footprint footprint(Shape sh, int labelW, int lines, bool td, int cw, int
     switch (sh) {
     case Shape::Stadium:
     case Shape::Subroutine:
-    case Shape::Hexagon: f.cols += 2; break;
+    case Shape::Hexagon:
+    case Shape::LeanR:
+    case Shape::LeanL:
+    case Shape::TrapB:
+    case Shape::TrapT: f.cols += 2; break;
+    case Shape::Odd: f.cols += 1; break;
     case Shape::Cylinder:
         // The lid is half a row tall whatever the width, so a narrow cylinder would get a lid
         // that looks far deeper than a wide one's. Give it at least the width of a middling label,

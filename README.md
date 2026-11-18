@@ -266,6 +266,23 @@ graph TD
     report --> done
 ```
 
+The slanted shapes are there too: the parallelograms `[/in/]` and `[\out\]`, the
+trapezoids `[/priority\]` and `[\manual/]`, and the flag `>odd]`, with a notch in its
+left side. Mermaid's newer form names a shape instead of drawing it, `a@{ shape: db,
+label: "Store" }`, and every short name or alias of the shapes above (`rect`, `rounded`,
+`stadium`, `circle`, `dbl-circ`, `fr-rect`, `cyl`, `diam`, `hex`, `lean-r`, `lean-l`,
+`trap-b`, `trap-t`, `odd`, `decision`, `database`, …) works; a name for a shape that
+isn't drawn here sends the diagram to the fallback, with the name on stderr under
+`MDCAT_MERMAID_DEBUG=1`:
+
+```mermaid
+graph TD
+    read[/Read input/] --> parse{Valid?}
+    parse -->|yes| store@{ shape: db, label: "Store" }
+    parse -->|no| fail>Report error]
+    store --> write[\Write output\]
+```
+
 When edges interleave, each bus gets a track of its own between the ranks. An
 edge that has to cross another passes over it on a bridge, and only a dot marks a
 join. Edges share strokes only in a split from one box or a merge into one box,
