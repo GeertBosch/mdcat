@@ -374,6 +374,20 @@ int cornerRadius(const std::vector<Stroke>& strokes, const Metrics& m, Pt v) {
             int len = std::abs(m.px(far.first) - m.px(v.first)) +
                 std::abs(m.py(far.second) - m.py(v.second));
             r = std::min(r, farRounded ? (len - m.width(st.line)) / 2 : len);
+            // A marker at the far end takes its length off the run, and the shaft must still reach
+            // the arc (see how rasterize sets where a run begins and ends).
+            if (farRounded) continue;
+            const bool vertical = far.first == v.first;
+            const bool farIsLow = vertical ? far.second < v.second : far.first < v.first;
+            const int w = m.width(st.line), hw = w / 2;
+            for (const Stroke& h : strokes) {
+                if (m.shaftStop(h) < 0 || h.pts[0] != far) continue;
+                if ((h.pts[0].first == h.pts[1].first) != vertical) continue;
+                const int stop = m.shaftStop(h);
+                r = std::min(r,
+                             farIsLow ? len - stop - hw + m.hs - 2 * m.s
+                                      : len - stop - m.hs + hw - w - m.s);
+            }
         }
     }
     return r;

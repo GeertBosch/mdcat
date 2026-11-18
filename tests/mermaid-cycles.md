@@ -7,6 +7,8 @@ Each of those back edges is then drawn from its real source to its real target, 
 the flow: it leaves the top of its source (top down), runs up, and arrives, with its
 arrowhead, at the bottom of its target. It has ports of its own, one cell off the middle
 of the side, so it never shares strokes with the edges that run the other way.
+A self-loop is drawn beside its box, and each of several edges between the same pair of
+boxes gets ports and a track of its own.
 Checked by `mermaid-kitty.sh` at width 80, with `--img kitty` and pinned cell sizes. The
 `.err` golden names the diagrams that are declined, and so are shown as source.
 
@@ -198,11 +200,207 @@ graph TD
     E --> D
 ```
 
-## A self-loop (declined for now)
+## A self-loop (top down and left to right)
 
-Expected: the builtin declines with `self-loop`, and the source is shown.
+Expected: the arrow from `Work` to itself is a small rounded loop beside the box (to its
+right, top down; below it, left to right). It leaves the outline, turns, and comes back
+in to end in an arrowhead on the outline. The loop is outside the box, so it moves
+neighbouring boxes apart but changes no other edge.
+
+```mermaid
+graph TD
+    A[Start] --> B[Work]
+    B --> B
+    B --> C[Done]
+```
+
+```mermaid
+graph LR
+    A[Start] --> B[Work]
+    B --> B
+    B --> C[Done]
+```
+
+## A self-loop with a label
+
+Expected: the label sits beyond the loop, to the right of it top down and under it left to
+right, centred on the box. A label wider than the box makes room for itself in its rank.
+
+```mermaid
+graph TD
+    A[Start] --> B[Work]
+    B -->|again| B
+    B --> C[Done]
+```
+
+```mermaid
+graph LR
+    A[Start] --> B[Work]
+    B -->|again, and again| B
+    B --> C[Done]
+```
+
+## Self-loops in other directions and styles, and on other shapes
+
+Expected: a thick loop has its larger arrowhead; a dotted one is dotted; a loop with an
+arrowhead at both ends has one at each. In the bottom-up graph the loop stays on the right,
+and in the right-to-left one below. Every shape takes its loop on the outline.
+
+```mermaid
+graph BT
+    A --> B
+    B -.-> B
+    B === C
+    C <--> C
+```
+
+```mermaid
+graph RL
+    A --> B
+    B -->|spin| B
+    A ==> A
+```
+
+```mermaid
+graph TD
+    A{Decide} --> A
+    A --> B((Circle))
+    B --> B
+    B --> C([Stadium])
+    C --> C
+    C --> D[(Database)]
+    D --> D
+    D --> E{{Hexagon}}
+    E --> E
+    E --> F[/Slanted/]
+    F --> F
+```
+
+## Boxes with loops side by side, and a loop beside a back edge
+
+Expected: each loop makes its own box wider by its cells, and the boxes keep their
+separation.
+
+```mermaid
+graph TD
+    A[Fork] --> B[Left]
+    A --> C[Right]
+    B --> B
+    C -->|loop| C
+    B --> D
+    C --> D
+    D --> A
+```
+
+## Parallel edges (top down and left to right)
+
+Expected: two edges between the same pair of boxes each get a port of their own and run
+side by side, each with an arrowhead.
+
+```mermaid
+graph TD
+    A[Source] --> B[Target]
+    A --> B
+```
+
+```mermaid
+graph LR
+    A[Source] --> B[Target]
+    A --> B
+```
+
+## Parallel edges with labels
+
+Expected: each label sits on its own edge, and the edges part to make room for them.
+
+```mermaid
+graph LR
+    A[Ask] -->|yes| B[Answer]
+    A -->|no| B
+```
+
+```mermaid
+graph TD
+    A[Ask] -->|yes| B[Answer]
+    A -->|no| B
+```
+
+## An arrow each way (top down and left to right)
+
+Expected: `A <--> B` is a single edge with an arrowhead at each end. Two separate edges
+`A --> B` and `B --> A` are drawn as two arrows side by side, each with one arrowhead.
+
+```mermaid
+graph TD
+    A[Ping] <--> B[Pong]
+    C[Left] --> D[Right]
+    D --> C
+```
+
+```mermaid
+graph LR
+    A[Ping] --> B[Pong]
+    B --> A
+    B --> C[Done]
+```
+
+## More than two edges between a pair
+
+Expected: every edge gets a port and a track of its own, however many there are, each
+with its own arrowhead. Below, `A --> B` twice with `B --> A` makes three between one
+pair, and two edges from `Three` to `One` both run up the side of the chain.
+
+```mermaid
+graph TD
+    A --> B
+    A --> B
+    B --> A
+```
+
+```mermaid
+graph LR
+    A[Source] --> B[Target]
+    A --> B
+    A --> B
+    B --> A
+    B --> A
+```
+
+```mermaid
+graph TD
+    A[One] --> B[Two]
+    B --> C[Three]
+    C --> A
+    C --> A
+```
+
+## Repeated self-loops
+
+Expected: as in `mmdc`, a self-loop repeated with the same label (or with none) is drawn
+once, so the first diagram is a single plain loop on `A` and the second a single loop
+labelled `x`.
 
 ```mermaid
 graph TD
     A --> A
+    A --> A
+    A --> B
+```
+
+```mermaid
+graph TD
+    A -->|x| A
+    A -->|x| A
+    A --> B
+```
+
+## Two different self-loops on one node (declined)
+
+Expected: a box has room for one loop. With different labels on several the builtin declines
+with `parallel edges`, and the source is shown.
+
+```mermaid
+graph TD
+    A --> A
+    A -->|x| A
 ```

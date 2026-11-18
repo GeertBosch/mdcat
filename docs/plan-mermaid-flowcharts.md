@@ -1040,10 +1040,15 @@ Work:
 
 - **Self-loop** `A --> A`: a small rounded loop beside the node (to its right in
   TD, below it in LR). It leaves and re-enters the outline, ending in an
-  arrowhead, and adds one column (or row) to the footprint.
+  arrowhead. It adds `ceil(2 * arrowhead length / cell size)` columns (TD) or rows
+  (LR) to the node's item, 2 columns and 1 row at 10×20 px cells, so that the
+  arrowhead and a rounded corner fit in the run. A label sits beyond the loop and
+  adds its width (TD) or height (LR) as well. A node has at most one self-loop:
+  repeats with the same label (or none) are dropped, as `mmdc` does, and different
+  labels on several ⇒ fallback.
 - **Parallel edges** (A→B more than once, or A→B together with B→A): each gets
-  its own port pair and track. Labels still go on label nodes. More than two
-  edges between the same pair ⇒ fallback.
+  its own port pair and track, however many there are. Labels still go on label
+  nodes.
 
 **Tests:** add to `tests/mermaid-cycles.md`: a self-loop, a self-loop with a
 label, two parallel labelled edges, and A⇄B.

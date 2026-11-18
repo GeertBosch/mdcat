@@ -5,8 +5,7 @@ by `-->` links (`mermaid-cycles.md` covers the graphs with cycles). The graphs h
 are trees and merges that need no more than one track between two ranks;
 `mermaid-routing.md` covers the ones that need more.
 Checked by `mermaid-kitty.sh` at widths 80 and 44, with `--img kitty` and pinned
-cell sizes. The `.err` goldens name the diagrams that are declined, for now, and
-so are shown as source.
+cell sizes.
 
 Where several edges leave one box they share its port and split off a common bus;
 where several arrive they merge into one arrowhead. A dot marks each split or
@@ -166,15 +165,4 @@ graph TD
     m1 --> m2[Two]
     m2 --> e[End]
     late[Late] --> e
-```
-
-## Parallel edges (declined for now)
-
-Expected: two edges between the same boxes. The builtin declines with
-`parallel edges`, and the source is shown.
-
-```mermaid
-graph LR
-    A --> B
-    A --> B
 ```

@@ -131,8 +131,10 @@ bool parseFlowchart(const std::vector<std::string>& body, Graph& g, std::string&
 // Lay out a graph in ranks, ordering and placing the boxes of each rank so that few edges cross and
 // long ones run straight, and routing the edges between two ranks along as many tracks as they
 // need. The edges that close a cycle are reversed for the layout and drawn against the flow, each
-// with ports of its own. Does not check the width against the environment; the caller compares
-// `lay.cols` with Env::availCols. Declines with Decline::TooComplex, instead of the usual
+// with ports of its own, as is each repeat of an edge between the same nodes in the same
+// direction. A self-loop is no part of the ranks: it is drawn beside its node, in cells that the
+// node's item holds after it. Does not check the width against the environment; the caller
+// compares `lay.cols` with Env::availCols. Declines with Decline::TooComplex, instead of the usual
 // Unsupported, a graph with more back edges or crossings than the width allows.
 bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reason, Decline& why);
 

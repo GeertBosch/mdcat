@@ -24,6 +24,7 @@ constexpr int kDummyWeight = 8;
 struct Item {
     int rank = 0;
     int ext = 1;     // extent across the flow, in cells
+    int pad = 0;     // the cells at the far end of `ext` that hold a self-loop, not the node
     int skew = 0;    // how far the item's centre lies from the middle of its extent, in hu
     int thick = 1;   // extent along the flow, in cells (of a label; nodes have their own)
     int left = 0;    // start across the flow, in cells
@@ -334,9 +335,9 @@ void addTitle(Layout& lay, int width) {
 }  // namespace
 
 bool layoutGraph(
-    const Graph& source, const Env& env, Layout& lay, std::string& reason, Decline& why) {
-    const size_t n = source.nodes.size();
-    if (source.edges.empty()) {
+    const Graph& original, const Env& env, Layout& lay, std::string& reason, Decline& why) {
+    const size_t n = original.nodes.size();
+    if (original.edges.empty()) {
         reason = "no edges";
         return false;
     }
@@ -344,17 +345,25 @@ bool layoutGraph(
         reason = "too many nodes";
         return false;
     }
-    std::set<std::pair<int, int>> seen;
-    for (const Edge& e : source.edges) {
-        if (e.from == e.to) {
-            reason = "self-loop";
-            return false;
-        }
-        if (!seen.insert({e.from, e.to}).second) {
-            reason = "parallel edges";
-            return false;
+    // Like mmdc, draw a repeat of a self-loop with the same label (or none) once: the repeats are
+    // dropped, by making them invisible links, which are not drawn. A node keeps one loop; with
+    // different labels on several the layout has no room, so such a diagram is declined.
+    Graph source = original;
+    {
+        std::set<std::pair<int, std::vector<std::string>>> seenLoop;
+        std::map<int, int> loops;
+        for (Edge& e : source.edges) {
+            if (e.from != e.to || e.line == Line::Invisible) continue;
+            if (!seenLoop.insert({e.from, e.label.lines}).second) {
+                e.line = Line::Invisible;
+            } else if (++loops[e.from] > 1) {
+                reason = "parallel edges";
+                return false;
+            }
         }
     }
+    // A self-loop is no part of the ranked graph: it is drawn beside its node (see below).
+    auto selfLoop = [&](size_t k) { return source.edges[k].from == source.edges[k].to; };
 
     // Cycles: a depth-first search from the nodes in order of first appearance, along the edges in
     // declaration order, finds the back edges, those that lead to a node still on the stack. Like
@@ -364,7 +373,8 @@ bool layoutGraph(
     {
         std::vector<std::vector<int>> out(n);
         for (size_t k = 0; k < source.edges.size(); ++k)
-            out[static_cast<size_t>(source.edges[k].from)].push_back(static_cast<int>(k));
+            if (!selfLoop(k))
+                out[static_cast<size_t>(source.edges[k].from)].push_back(static_cast<int>(k));
         std::vector<char> state(n, 0);  // 1: on the stack, 2: done
         std::function<void(size_t)> dfs = [&](size_t u) {
             state[u] = 1;
@@ -411,9 +421,11 @@ bool layoutGraph(
         return w;
     };
     bool labelled = false;
-    for (const Edge& e : g.edges) {
+    for (size_t k = 0; k < g.edges.size(); ++k) {
+        const Edge& e = g.edges[k];
         if (e.label.lines.empty()) continue;
-        labelled = true;
+        // A self-loop's label sits beside the loop, not in a rank of its own.
+        if (!selfLoop(k)) labelled = true;
         if (labelWidth(e) > tune::kMaxLabelWidth) {
             reason = "label too wide: " + std::to_string(labelWidth(e)) + " > " +
                 std::to_string(tune::kMaxLabelWidth);
@@ -424,6 +436,7 @@ bool layoutGraph(
 
     std::vector<std::vector<int>> outE(n), inE(n);  // edge indices, in declaration order
     for (size_t k = 0; k < g.edges.size(); ++k) {
+        if (selfLoop(k)) continue;
         outE[static_cast<size_t>(g.edges[k].from)].push_back(static_cast<int>(k));
         inE[static_cast<size_t>(g.edges[k].to)].push_back(static_cast<int>(k));
     }
@@ -526,11 +539,37 @@ bool layoutGraph(
             ? nodeW[i] % 2 == 0 ? 1 : 0
             : 2 * f.labelRow + static_cast<int>(g.nodes[i].label.lines.size()) - f.rows;
     }
+    // A self-loop is drawn beside its node, to the right of it top-down and below it left to right,
+    // in cells the node's item holds after the node itself. The loop runs out from the outline and
+    // back in, far enough for its arrowhead and a rounded corner; its label, if any, sits beyond
+    // it. Left to right the label is centred under the node, and a wider one pushes the node along
+    // its rank.
+    std::vector<int> loopEdge(n, -1), loopLabelW(n, 0);
+    for (size_t k = 0; k < g.edges.size(); ++k)
+        if (selfLoop(k) && g.edges[k].line != Line::Invisible)
+            loopEdge[static_cast<size_t>(g.edges[k].from)] = static_cast<int>(k);
+    const int loopCells = [&] {
+        const int cell = std::max(1, td ? env.cellW : env.cellH);
+        return std::max(1, (2 * std::max(6, env.cellW) + cell - 1) / cell);
+    }();
+    std::vector<int> off(n, 0);
+    for (size_t i = 0; i < n; ++i) {
+        if (loopEdge[i] < 0) continue;
+        const Edge& e = g.edges[static_cast<size_t>(loopEdge[i])];
+        const int lines = static_cast<int>(e.label.lines.size());
+        if (td && lines > nodeH[i]) {
+            reason = "self-loop label too tall";
+            return false;
+        }
+        loopLabelW[i] = labelWidth(e);
+        items[i].pad = loopCells + (td ? loopLabelW[i] : lines);
+        items[i].ext += items[i].pad;
+        if (!td) off[i] = std::max(0, (loopLabelW[i] - nodeW[i]) / 2);
+    }
     // Along the flow of a top-down graph, nodes of a rank are set down so that their labels start
     // on one row, as far down their band as the node whose label sits lowest. Mirroring turns a
     // node upside down in its band, so for bottom-up graphs it is the rows below the label that
     // line up before it. (Done once the ports are known, as they may widen a node.)
-    std::vector<int> off(n, 0);
 
     // Initial order, by depth-first search from the sources of each weakly connected component in
     // turn, visiting children in the order their edges were declared. An edge that spans k ranks
@@ -597,9 +636,19 @@ bool layoutGraph(
     // edges of different styles never share a bus. Labels don't matter: each sits on its own edge.
     // Invisible links have no ports: they rank and order the nodes but are not routed. Greedily,
     // the next star is the largest left, ties going to the one holding the earliest-declared edge,
-    // then to splits. A node's first port on each side is centred. A back edge, which the layout
-    // reversed, has a port of its own at each end, after the others.
+    // then to splits. A node's first port on each side is centred. An edge that is a group of its
+    // own, a back edge (which the layout reversed) or a repeat of an earlier edge between the same
+    // two nodes in the same direction, has a port of its own at each end, after the others.
     const size_t m = g.edges.size();
+    std::vector<char> solo(m, 0);
+    {
+        std::set<std::pair<int, int>> had;
+        for (size_t k = 0; k < m; ++k) {
+            const Edge& e = g.edges[k];
+            if (e.line == Line::Invisible || selfLoop(k)) continue;
+            solo[k] = reversed[k] || !had.insert({e.from, e.to}).second;
+        }
+    }
     struct Port {
         std::vector<int> edges;  // in declaration order
     };
@@ -613,7 +662,7 @@ bool layoutGraph(
         std::vector<std::set<int>> outLeft(n), inLeft(n);
         for (size_t k = 0; k < m; ++k) {
             const Edge& e = g.edges[k];
-            if (e.line == Line::Invisible || reversed[k]) continue;
+            if (e.line == Line::Invisible || selfLoop(k) || solo[k]) continue;
             edgeOf[{e.from, e.to}] = static_cast<int>(k);
             outLeft[static_cast<size_t>(e.from)].insert(e.to);
             inLeft[static_cast<size_t>(e.to)].insert(e.from);
@@ -684,10 +733,13 @@ bool layoutGraph(
                 }
             }
         }
-        // A reversed edge is a group of its own, with a port of its own on each node, so that it
-        // never shares strokes with the edges that run the other way between the same two nodes.
+        // A solo edge is a group of its own, with a port of its own on each node, so that it never
+        // shares strokes with the other edges between the same two nodes. A self-loop is one too,
+        // though it has no ports.
         for (size_t k = 0; k < m; ++k) {
-            if (!reversed[k] || g.edges[k].line == Line::Invisible) continue;
+            if (selfLoop(k) && g.edges[k].line != Line::Invisible)
+                lay.edgeGroup[k] = static_cast<int>(groups++);
+            if (!solo[k]) continue;
             const Edge& e = g.edges[k];
             outPort[k] = static_cast<int>(ports.size());
             outPorts[static_cast<size_t>(e.from)].push_back(outPort[k]);
@@ -698,12 +750,12 @@ bool layoutGraph(
             lay.edgeGroup[k] = static_cast<int>(groups++);
         }
         for (Port& p : ports) std::sort(p.edges.begin(), p.edges.end());
-        // A node's first port is the one holding its earliest-declared edge, and a reversed edge's
+        // A node's first port is the one holding its earliest-declared edge, and a solo edge's
         // port comes after those of the others.
         auto byFirstEdge = [&](int a, int b) {
             auto key = [&](int p) {
                 const int k = ports[static_cast<size_t>(p)].edges[0];
-                return k + (reversed[static_cast<size_t>(k)] ? static_cast<int>(m) : 0);
+                return k + (solo[static_cast<size_t>(k)] ? static_cast<int>(m) : 0);
             };
             return key(a) < key(b);
         };
@@ -723,11 +775,11 @@ bool layoutGraph(
             if ((count - 1) * (td ? 2 : 1) <= 2 * room) break;
             if (td) {
                 nodeW[v] += 2;
-                items[v].ext = nodeW[v];
+                items[v].ext = nodeW[v] + items[v].pad;
             } else {
                 nodeH[v] += 2;
                 ++labelRow[v];
-                items[v].ext = nodeH[v];
+                items[v].ext = nodeH[v] + items[v].pad;
             }
         }
     }
@@ -762,7 +814,7 @@ bool layoutGraph(
     }
     auto centre = [&](int id) {  // in hu
         const Item& it = items[static_cast<size_t>(id)];
-        return 2 * it.left + it.ext + it.skew;
+        return 2 * it.left + it.ext - it.pad + it.skew;
     };
     for (size_t r = 1; r < ranks; ++r) {
         const std::vector<int>& row = order[r];
@@ -776,7 +828,7 @@ bool layoutGraph(
             int count = static_cast<int>(from.size());
             int mean = floorDiv(2 * sum + count, 2 * count);
             const Item& it = items[static_cast<size_t>(row[i])];
-            desire[i] = floorDiv(mean - it.ext - it.skew + 1, 2);
+            desire[i] = floorDiv(mean - (it.ext - it.pad) - it.skew + 1, 2);
             known[i] = 1;
         }
         // An item with no predecessor (a source pulled down) hugs its neighbour.
@@ -832,7 +884,7 @@ bool layoutGraph(
                     std::sort(cs.begin(), cs.end());
                     size_t m = cs.size() / 2;
                     int median = cs.size() % 2 ? cs[m] : floorDiv(cs[m - 1] + cs[m] + 1, 2);
-                    desire[i] = floorDiv(median - it.ext - it.skew + 1, 2);
+                    desire[i] = floorDiv(median - (it.ext - it.pad) - it.skew + 1, 2);
                 }
                 placeRank(items, row, desire, sep);
             }
@@ -912,7 +964,8 @@ bool layoutGraph(
     std::vector<int> thick(ranks, 1);
     for (size_t i = 0; i < n; ++i) {
         size_t r = static_cast<size_t>(rank[i]);
-        thick[r] = std::max(thick[r], off[i] + (td ? nodeH[i] : nodeW[i]));
+        thick[r] =
+            std::max({thick[r], off[i] + (td ? nodeH[i] : nodeW[i]), td ? 0 : loopLabelW[i]});
     }
     for (size_t i = n; i < items.size(); ++i) {
         size_t r = static_cast<size_t>(items[i].rank);
@@ -992,6 +1045,38 @@ bool layoutGraph(
     lay.edgePath.assign(g.edges.size(), std::vector<Pt>());
     for (size_t k = 0; k < g.edges.size(); ++k) {
         if (g.edges[k].line == Line::Invisible) continue;
+        if (selfLoop(k)) {
+            // Out from the outline, along the side away from the flow, and back in, a cell (top
+            // down) or two (left to right) apart, centred on the node; the arrowhead is on the way
+            // in. The label sits beyond the loop, centred on the node's other axis.
+            const size_t v = static_cast<size_t>(g.edges[k].from);
+            const CellBox& f = lay.nodeFoot[v];
+            const int reach = 2 * loopCells;
+            const int lines = static_cast<int>(g.edges[k].label.lines.size());
+            CellBox& b = lay.edgeLabel[k];
+            if (lines > 0) {
+                b.cols = loopLabelW[v];
+                b.rows = lines;
+            }
+            if (td) {
+                const int edge = 2 * (f.col + f.cols) - 1, mid = 2 * f.row + f.rows;
+                lay.edgePath[k] = {{edge, mid - 1},
+                                   {edge + reach, mid - 1},
+                                   {edge + reach, mid + 1},
+                                   {edge, mid + 1}};
+                b.col = f.col + f.cols + loopCells;
+                b.row = f.row + (f.rows - lines) / 2;
+            } else {
+                const int edge = 2 * (f.row + f.rows) - 1, mid = 2 * f.col + f.cols;
+                lay.edgePath[k] = {{mid - 2, edge},
+                                   {mid - 2, edge + reach},
+                                   {mid + 2, edge + reach},
+                                   {mid + 2, edge}};
+                b.col = f.col + (f.cols - loopLabelW[v]) / 2;
+                b.row = f.row + f.rows + loopCells;
+            }
+            continue;
+        }
         const std::vector<int>& c = chain[k];
         size_t from = static_cast<size_t>(g.edges[k].from), to = static_cast<size_t>(g.edges[k].to);
         std::vector<Pt> path;
