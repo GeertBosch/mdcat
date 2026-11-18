@@ -250,6 +250,22 @@ kind of label that interprets Markdown, and it wraps long text at 24 columns (`b
 above): a plain label such as `a*b*c` is drawn exactly as written, and front matter
 `config: markdownAutoWrap: false` turns the wrapping off.
 
+Nodes come in the shapes Mermaid has for them: `(rounded)`, `([stadium])`, `((circle))`,
+`(((double circle)))`, `[[subroutine]]`, `[(cylinder)]`, `{rhombus}` and `{{hexagon}}`,
+besides the `[box]`. The curves and slants are drawn as graphics, and an arrowhead
+touches the outline exactly where the edge meets it, even off the middle of a side. Each
+shape takes the room its outline needs to clear the label, so a rhombus is wider and
+taller than a box:
+
+```mermaid
+graph TD
+    start([Start]) --> check{Valid?}
+    check -->|yes| save[(Database)]
+    check -->|no| report((Error))
+    save --> done(((Done)))
+    report --> done
+```
+
 When edges interleave, each bus gets a track of its own between the ranks. An
 edge that has to cross another passes over it on a bridge, and only a dot marks a
 join. Edges share strokes only in a split from one box or a merge into one box,

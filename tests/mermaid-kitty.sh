@@ -7,7 +7,7 @@
 # Checked here, over tests/mermaid-basic.md (widths 80 and 30), tests/mermaid-dag.md (80 and 44),
 # tests/mermaid-routing.md (80), tests/mermaid-crossings.md (80), tests/mermaid-syntax.md (80),
 # tests/mermaid-links.md (80), tests/mermaid-edge-labels.md (80 and 44),
-# tests/mermaid-label-text.md (80) and tests/mermaid-fallback.md:
+# tests/mermaid-label-text.md (80), tests/mermaid-shapes.md (80) and tests/mermaid-fallback.md:
 #   - tests/kitty-preview.py's rendering of the output of `mdcat --mermaid builtin` (text plus each
 #     image as quadrant blocks) equals tests/expected/<fixture>.w<N>.txt, and the
 #     MDCAT_MERMAID_DEBUG=1 stderr equals <fixture>.w<N>.err (UPDATE=1 rewrites both). The
@@ -123,6 +123,7 @@ golden_case mermaid-links 80
 golden_case mermaid-edge-labels 80
 golden_case mermaid-edge-labels 44
 golden_case mermaid-label-text 80 ansi
+golden_case mermaid-shapes 80
 golden_case mermaid-basic 30
 golden_case mermaid-basic 80
 
@@ -212,6 +213,56 @@ PY
         fail "label gap ($dir)" "$msg"
     fi
 done
+
+# An arrowhead touches the outline it points at, exactly where the outline is, however it curves
+# or slants. Down the middle column of `a[Top] --> <shape>` the pixels form runs, which are, in
+# order: the top edge of `a`; its bottom edge, the shaft, the arrowhead and the shape's outline
+# at the column, all in one run, so that a tip one pixel short of the outline would split it; and
+# what lies below. A shape's other strokes (the inner circle, the lid) are runs of their own.
+# Runs are given as start-end, the end exclusive.
+check_touch() {
+    src=$1
+    want=$2
+    printf '```mermaid\ngraph TD\n    a[Top] --> %s\n```\n' "$src" > "$tmp/touch.md"
+    mc --img kitty --mermaid builtin --width 80 "$tmp/touch.md" > "$tmp/touch.out" 2>/dev/null
+    if msg=$(python3 - "$here/kitty-preview.py" "$tmp/touch.out" "$want" <<'PY'
+import base64, importlib.util, re, sys
+sys.dont_write_bytecode = True
+spec = importlib.util.spec_from_file_location("kp", sys.argv[1])
+kp = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(kp)
+d = open(sys.argv[2], "rb").read()
+chunks = re.findall(rb"\x1b_G[^;]*;(.*?)\x1b\\", d, re.S)
+w, h, rows = kp.decode_png(base64.b64decode(b"".join(chunks)))
+line = [rows[y][4 * (w // 2) + 3] > 0 for y in range(h)]
+runs, i = [], 0
+while i < h:
+    if line[i]:
+        e = i
+        while e < h and line[e]:
+            e += 1
+        runs.append("%d-%d" % (i, e))
+        i = e
+    else:
+        i += 1
+if " ".join(runs) != sys.argv[3]:
+    sys.exit("runs %s, expected %s" % (" ".join(runs), sys.argv[3]))
+PY
+    ); then
+        pass
+    else
+        fail "arrowhead touches $src" "$msg"
+    fi
+}
+check_touch 'b[Box]' '10-11 50-111 150-151'
+check_touch 'b(Round)' '10-11 50-111 150-151'
+check_touch 'b([Stadium])' '10-11 50-111 150-151'
+check_touch 'b((Circle))' '10-11 50-111 150-151'
+check_touch 'b(((Double)))' '10-11 50-111 112-113 148-149 150-151'
+check_touch 'b[[Sub]]' '10-11 50-111 150-151'
+check_touch 'b[(Cyl)]' '10-11 50-111 130-131 170-171'
+check_touch 'b{Dec}' '10-11 50-112 189-191'
+check_touch 'b{{Hex}}' '10-11 50-111 150-151'
 
 # Structure of every APC. (The previewer has already decoded every PNG: signature, CRC, zlib
 # stream, and size c*cellW x r*cellH.)

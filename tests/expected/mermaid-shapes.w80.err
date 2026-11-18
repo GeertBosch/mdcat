@@ -1,0 +1,2 @@
+mdcat: mermaid: fallback: unsupported syntax: a[/Slanted/] --> b[B]
+mdcat: mermaid: fallback: unsupported syntax: a((Open) --> b[B]

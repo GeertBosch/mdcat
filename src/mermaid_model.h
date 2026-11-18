@@ -118,6 +118,8 @@ constexpr int kMaxCrossings = 3;  // edge crossings (bridges) a diagram may have
 constexpr int kMaxLabelWidth =
     24;                        // columns an edge label may take, and a Markdown string wraps at
 constexpr int kNoWrap = 4096;  // a wrap width that no label reaches, for markdownAutoWrap: false
+constexpr int kMinCylinderLabel =
+    8;  // columns a cylinder is at least as wide as its label ("database")
 }  // namespace tune
 
 // Parse the body of a ```mermaid block. On failure `reason` is one of the stable fallback reasons.

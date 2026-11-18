@@ -64,12 +64,10 @@ and carrying their labels in a rank of their
 own halfway down. Both branches then meet at
 Done.
 
-image @66,12 c=20 r=30 z=0 C=1 png=200x600
+image @66,12 c=20 r=27 z=0 C=1 png=200x540
                 ▗▄▄▄▄▄▄▄▄
                 ▐ Input ▐
                 ▐▄▄▄▄▄▄▄▟
-                    ▐
-                    ▐
                     ▐
                     ▐
                     ▐
@@ -86,7 +84,6 @@ image @66,12 c=20 r=30 z=0 C=1 png=200x600
             ▗▄▄█▙▄▄  ▗▄▄▄▄█▙▄▄▄▄
             ▐ Run ▐  ▐ Fix it  ▐
             ▐▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▟
-               ▐          ▐
                ▐          ▐
                ▐          ▐
                ▐          ▐
@@ -121,7 +118,7 @@ past it. The edge a -->|one| d is one step
 long, so its label sits one step down,
 beside nothing.
 
-image @122,7 c=29 r=22 z=0 C=1 png=290x440
+image @119,7 c=29 r=22 z=0 C=1 png=290x440
                   ▗▄▄▄▄▄▄▄▄
                   ▐ Start ▐
                   ▐▄▄▄▄▄▄▄▟
@@ -151,7 +148,7 @@ Other directions (bottom to top, right to left)
 Expected: labels are never mirrored, and the
 arrowheads still point the true way.
 
-image @151,16 c=11 r=19 z=0 C=1 png=110x380
+image @148,16 c=11 r=19 z=0 C=1 png=110x380
                   ▗▄▄▄▄▄▄
                   ▐ End ▐
                   ▐▄▄▄▄▄▟
@@ -184,7 +181,7 @@ unlabelled one from C all arrive at Target
 through one port, on one bus, with one
 arrowhead.
 
-image @183,12 c=19 r=13 z=0 C=1 png=190x260
+image @180,12 c=19 r=13 z=0 C=1 png=190x260
             ▗▄▄▄▄  ▗▄▄▄▄  ▗▄▄▄▄
             ▐ A ▐  ▐ B ▐  ▐ C ▐
             ▐▄▄▄▟  ▐▄▄▄▟  ▐▄▄▄▟
@@ -204,7 +201,7 @@ Two labelled edges into one target (left to right)
 
 Expected: as above, turned on its side.
 
-image @202,7 c=29 r=11 z=0 C=1 png=290x220
+image @199,7 c=29 r=11 z=0 C=1 png=290x220
        ▗▄▄▄▄
        ▐ A ▐▄▄▄▖first▗▄▄
        ▐▄▄▄▟           ▐

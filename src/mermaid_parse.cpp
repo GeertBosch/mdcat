@@ -386,8 +386,12 @@ public:
                     j = close + 1;
                     continue;
                 }
-                if (t[j] == '[' || t[j] == '{') {
-                    size_t close = findOutsideQuotes(t, j + 1, t[j] == '[' ? ']' : '}');
+                if (t[j] == '[' || t[j] == '{' || t[j] == '(') {
+                    size_t close = findOutsideQuotes(t,
+                                                     j + 1,
+                                                     t[j] == '['       ? ']'
+                                                         : t[j] == '{' ? '}'
+                                                                       : ')');
                     j = close == std::string::npos ? t.size() : close + 1;
                     continue;
                 }
@@ -427,8 +431,9 @@ struct Parser {
         return false;
     }
 
-    // The node `id` or `id[text]`, with an optional `:::class` that has no effect, at s[p], with
-    // surrounding spaces skipped. A later text for a node replaces the earlier one.
+    // The node `id` or `id` followed by a shape and its text (`id[text]`, `id(text)`, `id{text}`
+    // and so on), with an optional `:::class` that has no effect, at s[p], with surrounding spaces
+    // skipped. A later text or shape for a node replaces the earlier one.
     bool parseNode(const std::string& s, size_t& p, int& node) {
         while (p < s.size() && s[p] == ' ') ++p;
         size_t b = p;
@@ -439,12 +444,39 @@ struct Parser {
         if (s.compare(p, 2, "@{") == 0) return fail(kUnsupportedSyntax);
         bool labelled = false;
         Label label;
-        if (p < s.size() && s[p] == '[') {
-            size_t close = findOutsideQuotes(s, p + 1, ']');
-            if (close == std::string::npos) return fail(kUnsupportedSyntax);
-            if (!parseLabel(s.substr(p + 1, close - p - 1), label, reason)) return false;
-            labelled = true;
-            p = close + 1;
+        Shape shape = Shape::Rect;
+        if (p < s.size()) {
+            static const struct {
+                const char *open, *close;
+                Shape shape;
+            } kShapes[] = {{"(((", ")))", Shape::DoubleCircle},
+                           {"((", "))", Shape::Circle},
+                           {"([", "])", Shape::Stadium},
+                           {"(", ")", Shape::Round},
+                           {"[[", "]]", Shape::Subroutine},
+                           {"[(", ")]", Shape::Cylinder},
+                           {"[", "]", Shape::Rect},
+                           {"{{", "}}", Shape::Hexagon},
+                           {"{", "}", Shape::Rhombus}};
+            for (const auto& k : kShapes) {
+                const size_t openLen = std::strlen(k.open);
+                if (s.compare(p, openLen, k.open) != 0) continue;
+                // The slanted shapes, `[/text/]` and the like, are not drawn.
+                if (k.shape == Shape::Rect && p + 1 < s.size() &&
+                    (s[p + 1] == '/' || s[p + 1] == '\\'))
+                    return fail(kUnsupportedSyntax);
+                size_t close = findOutsideQuotes(s, p + openLen, k.close[0]);
+                while (close != std::string::npos &&
+                       s.compare(close, std::strlen(k.close), k.close))
+                    close = findOutsideQuotes(s, close + 1, k.close[0]);
+                if (close == std::string::npos) return fail(kUnsupportedSyntax);
+                if (!parseLabel(s.substr(p + openLen, close - p - openLen), label, reason))
+                    return false;
+                labelled = true;
+                shape = k.shape;
+                p = close + std::strlen(k.close);
+                break;
+            }
         }
         if (s.compare(p, 3, ":::") == 0) {
             size_t e = idEnd(s, p + 3);
@@ -462,7 +494,10 @@ struct Parser {
             n.label.lines.push_back(id);
             g.nodes.push_back(n);
         }
-        if (labelled) g.nodes[static_cast<size_t>(it->second)].label = label;
+        if (labelled) {
+            g.nodes[static_cast<size_t>(it->second)].label = label;
+            g.nodes[static_cast<size_t>(it->second)].shape = shape;
+        }
         node = it->second;
         return true;
     }

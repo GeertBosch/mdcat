@@ -5,7 +5,7 @@
 #include <set>
 
 #include "mermaid_model.h"
-
+#include "mermaid_shape.h"
 namespace mermaid {
 
 namespace {
@@ -24,6 +24,7 @@ constexpr int kDummyWeight = 8;
 struct Item {
     int rank = 0;
     int ext = 1;     // extent across the flow, in cells
+    int skew = 0;    // how far the item's centre lies from the middle of its extent, in hu
     int thick = 1;   // extent along the flow, in cells (of a label; nodes have their own)
     int left = 0;    // start across the flow, in cells
     int weight = 1;  // how strongly placement honours its desired position
@@ -447,20 +448,48 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
     }
     const size_t ranks = static_cast<size_t>(highest) + 1;
 
-    // Footprints of the real nodes, in cells: (widest line + 4) x (lines + 2). For top-down the
+    // Footprints of the real nodes, in cells: (widest line + 4) x (lines + 2) for a box, and what
+    // each shape needs for its outline to clear the label (see shape::footprint). For top-down the
     // width is made odd so that every footprint's centre lies on a whole column and arrows can be
     // exactly vertical.
-    std::vector<int> nodeW(n), nodeH(n), labelW(n);
+    std::vector<int> nodeW(n), nodeH(n), labelW(n), labelRow(n);
     std::vector<Item> items(n);
     for (size_t i = 0; i < n; ++i) {
         for (const std::string& line : g.nodes[i].label.lines)
             labelW[i] = std::max(labelW[i], env.width(line));
-        int w = labelW[i] + tune::kNodePad;
-        if (td && w % 2 == 0) ++w;
-        nodeW[i] = w;
-        nodeH[i] = static_cast<int>(g.nodes[i].label.lines.size()) + tune::kNodeFrame;
+        const shape::Footprint f = shape::footprint(g.nodes[i].shape,
+                                                    labelW[i],
+                                                    static_cast<int>(g.nodes[i].label.lines.size()),
+                                                    td,
+                                                    std::max(1, env.cellW),
+                                                    std::max(1, env.cellH));
+        nodeW[i] = f.cols;
+        nodeH[i] = f.rows;
+        labelRow[i] = f.labelRow;
         items[i].rank = rank[i];
-        items[i].ext = td ? w : nodeH[i];
+        items[i].ext = td ? nodeW[i] : nodeH[i];
+        // Across the flow of a left-to-right graph a node is centred on its label, which a
+        // cylinder's lid pushes off the middle of its footprint, so that edges meet its sides
+        // level with the labels of the nodes next to it. Top-down, the footprint of a node is
+        // an odd number of columns wide, to put the edges on a whole column; but a footprint of
+        // even width is centred on the line between two, and its edges go half a column right.
+        items[i].skew = td
+            ? nodeW[i] % 2 == 0 ? 1 : 0
+            : 2 * f.labelRow + static_cast<int>(g.nodes[i].label.lines.size()) - f.rows;
+    }
+    // Along the flow of a top-down graph, nodes of a rank are set down so that their labels start
+    // on one row, as far down their band as the node whose label sits lowest. Mirroring turns a
+    // node upside down in its band, so for bottom-up graphs it is the rows below the label that
+    // line up before it.
+    std::vector<int> off(n, 0);
+    if (td) {
+        const bool flip = g.dir == Dir::BT;
+        auto above = [&](size_t i) { return flip ? nodeH[i] - labelRow[i] : labelRow[i]; };
+        std::vector<int> most(ranks, 0);
+        for (size_t i = 0; i < n; ++i)
+            most[static_cast<size_t>(rank[i])] =
+                std::max(most[static_cast<size_t>(rank[i])], above(i));
+        for (size_t i = 0; i < n; ++i) off[i] = most[static_cast<size_t>(rank[i])] - above(i);
     }
 
     // Initial order, by depth-first search from the sources of each weakly connected component in
@@ -644,7 +673,8 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
         }
     }
     auto centre = [&](int id) {  // in hu
-        return 2 * items[static_cast<size_t>(id)].left + items[static_cast<size_t>(id)].ext;
+        const Item& it = items[static_cast<size_t>(id)];
+        return 2 * it.left + it.ext + it.skew;
     };
     for (size_t r = 1; r < ranks; ++r) {
         const std::vector<int>& row = order[r];
@@ -657,7 +687,8 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
             for (int p : from) sum += centre(p);
             int count = static_cast<int>(from.size());
             int mean = floorDiv(2 * sum + count, 2 * count);
-            desire[i] = floorDiv(mean - items[static_cast<size_t>(row[i])].ext + 1, 2);
+            const Item& it = items[static_cast<size_t>(row[i])];
+            desire[i] = floorDiv(mean - it.ext - it.skew + 1, 2);
             known[i] = 1;
         }
         // An item with no predecessor (a source pulled down) hugs its neighbour.
@@ -713,7 +744,7 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
                     std::sort(cs.begin(), cs.end());
                     size_t m = cs.size() / 2;
                     int median = cs.size() % 2 ? cs[m] : floorDiv(cs[m - 1] + cs[m] + 1, 2);
-                    desire[i] = floorDiv(median - it.ext + 1, 2);
+                    desire[i] = floorDiv(median - it.ext - it.skew + 1, 2);
                 }
                 placeRank(items, row, desire, sep);
             }
@@ -755,7 +786,8 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
                 return a.first < b.first;
             });
             const int step = td ? 2 : 1;
-            const int lim = td ? nodeW[v] - 3 : nodeH[v] - 2;  // keeps clear of the corners
+            const int lim = (td ? nodeW[v] - 3 : nodeH[v] - 2) -
+                std::abs(items[v].skew);  // clear of the corners
             int first = 0;
             for (size_t i = 0; i < far.size(); ++i)
                 if (far[i].second == list[0]) first = static_cast<int>(i);
@@ -792,11 +824,18 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
     std::vector<int> thick(ranks, 1);
     for (size_t i = 0; i < n; ++i) {
         size_t r = static_cast<size_t>(rank[i]);
-        thick[r] = std::max(thick[r], td ? nodeH[i] : nodeW[i]);
+        thick[r] = std::max(thick[r], off[i] + (td ? nodeH[i] : nodeW[i]));
     }
     for (size_t i = n; i < items.size(); ++i) {
         size_t r = static_cast<size_t>(items[i].rank);
         thick[r] = std::max(thick[r], items[i].thick);
+    }
+    std::vector<char> plain(ranks, 1), labelRank(ranks, 0);  // only dummies; holds a label
+    for (size_t i = 0; i < n; ++i) plain[static_cast<size_t>(rank[i])] = 0;
+    for (int item : labelItem) {
+        if (item < 0) continue;
+        plain[static_cast<size_t>(items[static_cast<size_t>(item)].rank)] = 0;
+        labelRank[static_cast<size_t>(items[static_cast<size_t>(item)].rank)] = 1;
     }
     std::vector<std::vector<GapSeg>> gapSegs(ranks);
     for (size_t k = 0; k < m; ++k) {
@@ -813,7 +852,13 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
         int used = assignTracks(gapSegs[r], tracks);
         for (size_t j = 0; j < tracks.size(); ++j)
             if (tracks[j] >= 0) trackOf[{gapSegs[r][j].from, gapSegs[r][j].to}] = tracks[j];
-        int gap = td ? tune::kGapTd + used : std::max(tune::kGapLr, used + 2);
+        // In a graph with edge labels, a rank that holds only the dummies of edges that go straight
+        // on is an artefact of the doubled ranks: the edges need no room to leave and arrive either
+        // side of it, so one cell does for each.
+        const bool lean = labelled && used == 0 && (plain[r] || plain[r + 1]) && !labelRank[r] &&
+            !labelRank[r + 1];
+        int gap = td ? (lean ? tune::kGapTd - 1 : tune::kGapTd + used)
+                     : (lean ? tune::kGapLr / 2 : std::max(tune::kGapLr, used + 2));
         start[r + 1] = start[r] + thick[r] + gap;
     }
     const int along = start[ranks - 1] + thick[ranks - 1];
@@ -826,7 +871,7 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
     lay.nodeLabel.assign(n, CellBox());
     for (size_t i = 0; i < n; ++i) {
         const Item& it = items[i];
-        int at = start[static_cast<size_t>(it.rank)];
+        int at = start[static_cast<size_t>(it.rank)] + off[i];
         CellBox& f = lay.nodeFoot[i];
         f.cols = nodeW[i];
         f.rows = nodeH[i];
@@ -836,7 +881,7 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
         l.cols = labelW[i];
         l.rows = static_cast<int>(g.nodes[i].label.lines.size());
         l.col = f.col + (f.cols - l.cols) / 2;
-        l.row = f.row + 1;
+        l.row = f.row + labelRow[i];
     }
 
     // Each edge leaves its source's outline at the middle of the side facing the flow, jogs along
@@ -862,8 +907,10 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
         const std::vector<int>& c = chain[k];
         size_t from = static_cast<size_t>(g.edges[k].from), to = static_cast<size_t>(g.edges[k].to);
         std::vector<Pt> path;
-        int leave =
-            2 * (start[static_cast<size_t>(rank[from])] + (td ? nodeH[from] : nodeW[from])) - 1;
+        int leave = 2 *
+                (start[static_cast<size_t>(rank[from])] + off[from] +
+                 (td ? nodeH[from] : nodeW[from])) -
+            1;
         path.push_back(point(endX(k, 0), leave));
         for (size_t i = 0; i + 1 < c.size(); ++i) {
             int a = endX(k, i), b = endX(k, i + 1);
@@ -873,7 +920,8 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
             path.push_back(point(a, t));
             path.push_back(point(b, t));
         }
-        path.push_back(point(endX(k, c.size() - 1), 2 * start[static_cast<size_t>(rank[to])] + 1));
+        path.push_back(
+            point(endX(k, c.size() - 1), 2 * (start[static_cast<size_t>(rank[to])] + off[to]) + 1));
         // Drop the points that lie on a straight run.
         std::vector<Pt>& out = lay.edgePath[k];
         for (const Pt& p : path) {
@@ -893,7 +941,13 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
             "crossings: " + std::to_string(crossings) + " > " + std::to_string(tune::kMaxCrossings);
         return false;
     }
-    if (g.dir == Dir::BT || g.dir == Dir::RL) mirror(lay, /*rows=*/td);
+    if (g.dir == Dir::BT || g.dir == Dir::RL) {
+        mirror(lay, /*rows=*/td);
+        // A shape keeps its own way up: mirroring moved a label that sits off the middle of its
+        // node (a cylinder's, below the lid) to the wrong side.
+        for (size_t i = 0; i < n && td; ++i)
+            lay.nodeLabel[i].row = lay.nodeFoot[i].row + labelRow[i];
+    }
     if (!g.title.empty()) addTitle(lay, env.width(g.title));
     return true;
 }

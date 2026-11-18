@@ -6,6 +6,7 @@
 #include <set>
 
 #include "mermaid_model.h"
+#include "mermaid_shape.h"
 #include "png_write.h"
 
 namespace mermaid {
@@ -26,7 +27,7 @@ struct Metrics {
     explicit Metrics(const Env& env)
         : cw(std::max(1, env.cellW)),
           ch(std::max(1, env.cellH)),
-          s(std::max(1, (2 * cw + 9) / 18)),
+          s(shape::strokeWidth(cw)),
           hs(s / 2),
           headLen(std::max(6, cw)),
           headHalf(std::max(3, (45 * cw + 50) / 100)),  // round(0.45 * cw)
@@ -135,6 +136,21 @@ struct Raster {
         }
     }
 
+    // Paint the pixels in the box [x0, x1) x [y0, y1), in eighths, where `ink(x, y)`, a point in
+    // eighths, holds; each pixel is sampled 4x4.
+    template <class F>
+    void cover(long x0, long y0, long x1, long y1, F ink) {
+        for (long y = y0 / 8; y <= y1 / 8; ++y) {
+            for (long x = x0 / 8; x <= x1 / 8; ++x) {
+                int hits = 0;
+                for (int j = 0; j < 4; ++j)
+                    for (int i = 0; i < 4; ++i)
+                        if (ink(8 * x + 2 * i + 1, 8 * y + 2 * j + 1)) ++hits;
+                if (hits) plot(static_cast<int>(x), static_cast<int>(y), (hits * 255 + 8) / 16);
+            }
+        }
+    }
+
     // A line from (ax8, ay8) to (bx8, by8), in eighths of a pixel, w8 eighths wide with round
     // ends; each pixel is sampled 4x4.
     void line(int ax8, int ay8, int bx8, int by8, int w8) {
@@ -220,9 +236,11 @@ void mergeDotted(std::vector<Stroke>& strokes) {
 
 std::vector<Stroke> strokesOf(const Graph& g, const Layout& lay, const std::vector<Pt>& crossings) {
     std::vector<Stroke> strokes;
-    for (const CellBox& f : lay.nodeFoot) {
+    for (size_t i = 0; i < lay.nodeFoot.size(); ++i) {
+        const CellBox& f = lay.nodeFoot[i];
         Stroke st;
         st.kind = Stroke::Outline;
+        st.shape = g.nodes[i].shape;
         st.pts = {{2 * f.col + 1, 2 * f.row + 1},
                   {2 * (f.col + f.cols) - 1, 2 * (f.row + f.rows) - 1}};
         strokes.push_back(st);
@@ -368,11 +386,60 @@ bool rasterize(const std::vector<Stroke>& strokes,
                Raster& ras,
                std::string& reason) {
     const int s = m.s, hs = m.hs;
+
+    // The nodes that are not plain boxes: an edge meets their outline inside the footprint, at a
+    // point that depends on where the edge runs, so the end of a run at such a node is found here.
+    struct Shaped {
+        shape::Geom geom;
+        Pt tl, br;
+    };
+    std::vector<Shaped> shaped;
+    for (const Stroke& st : strokes)
+        if (st.kind == Stroke::Outline && !shape::isBox(st.shape))
+            shaped.push_back({shape::Geom(st.shape,
+                                          m.px(st.pts[0].first),
+                                          m.py(st.pts[0].second),
+                                          m.px(st.pts[1].first),
+                                          m.py(st.pts[1].second),
+                                          m.ch,
+                                          m.s),
+                              st.pts[0],
+                              st.pts[1]});
+    // Where the run through hu point p, along the vertical or horizontal, meets the silhouette of
+    // the shaped node whose footprint's edge p is on, in eighths along the run. Gives 0 if p is
+    // not on such a node, 1 if it is, and -1 if the run misses the shape.
+    auto surfaceAt = [&](Pt p, bool vertical, long& at) {
+        for (const Shaped& n : shaped) {
+            const bool within = p.first >= n.tl.first && p.first <= n.br.first &&
+                p.second >= n.tl.second && p.second <= n.br.second;
+            const bool edge = p.first == n.tl.first || p.first == n.br.first ||
+                p.second == n.tl.second || p.second == n.br.second;
+            if (!within || !edge) continue;
+            const long cross = 8L * ((vertical ? m.px(p.first) : m.py(p.second)) - hs) + 4L * s;
+            long lo, hi;
+            if (!n.geom.extent(vertical, cross, lo, hi)) return -1;
+            const bool low = vertical ? 2 * p.second < n.tl.second + n.br.second
+                                      : 2 * p.first < n.tl.first + n.br.first;
+            at = low ? lo : hi;
+            return 1;
+        }
+        return 0;
+    };
+    for (const Shaped& n : shaped) {
+        long x0, y0, x1, y1;
+        n.geom.bounds(x0, y0, x1, y1);
+        ras.cover(x0, y0, x1, y1, [&](long x, long y) { return n.geom.ink(x, y); });
+    }
     for (const Stroke& st : strokes) {
         const int w = m.width(st.line), hw = w / 2;
         if (st.kind == Stroke::Outline) {
+            if (!shape::isBox(st.shape)) continue;
             int l = m.px(st.pts[0].first), t = m.py(st.pts[0].second);
             int r = m.px(st.pts[1].first), b = m.py(st.pts[1].second);
+            if (st.shape == Shape::Subroutine) {  // verticals half a cell inside the sides
+                ras.rect(l + m.cw / 2 - hs, t - hs, l + m.cw / 2 - hs + s, b - hs + s);
+                ras.rect(r - m.cw / 2 - hs, t - hs, r - m.cw / 2 - hs + s, b - hs + s);
+            }
             ras.rect(l - hs, t - hs, r - hs + s, t - hs + s);
             ras.rect(l - hs, b - hs, r - hs + s, b - hs + s);
             ras.rect(l - hs, t - hs, l - hs + s, b - hs + s);
@@ -406,6 +473,12 @@ bool rasterize(const std::vector<Stroke>& strokes,
                 });
             };
             int stopB = markerAt(b, true), stopA = markerAt(a, false);
+            long surfA = 0, surfB = 0;
+            const int onA = surfaceAt(a, vertical, surfA), onB = surfaceAt(b, vertical, surfB);
+            if (onA < 0 || onB < 0) {
+                reason = "edge misses its node";
+                return false;
+            }
             int cross = vertical ? m.px(a.first) : m.py(a.second);
             int from = vertical ? m.py(a.second) : m.px(a.first);
             int to = vertical ? m.py(b.second) : m.px(b.first);
@@ -421,13 +494,18 @@ bool rasterize(const std::vector<Stroke>& strokes,
             // Where a stroke goes on beyond the centre of the cell next to a label: to a quarter of
             // a cell's height short of the label.
             const int gap = std::max(0, (vertical ? m.ch : m.cw) / 2 - m.ch / 4);
+            // A run that ends at a shaped node reaches its silhouette, wherever that is in the
+            // footprint, and a marker stops short of it or the run goes on into the stroke.
+            const int atA = static_cast<int>(surfA / 8), atB = static_cast<int>((surfB + 7) / 8);
             int begin = reachA ? from - gap
                 : roundA       ? from - hw + roA
+                : onA          ? (stopA >= 0 ? atA + stopA : atA - s)
                 : stopA >= 0   ? from - hs + s + stopA
                 : dotAt(a)     ? from - hw
                                : from - hs;
             int end = reachB ? to + gap
                 : roundB     ? to - hw + w - roB
+                : onB        ? (stopB >= 0 ? atB - stopB : atB + s)
                 : stopB >= 0 ? to - hs - stopB
                 : dotAt(b)   ? to - hw + w
                              : to - hs + s;
@@ -502,6 +580,13 @@ bool rasterize(const std::vector<Stroke>& strokes,
                 if (sign < 0) x += 8 * s;
             }
             int ux = vertical ? 0 : sign, uy = vertical ? sign : 0;
+            long surf = 0;
+            const int onNode = surfaceAt(tip, vertical, surf);
+            if (onNode < 0) {
+                reason = "edge misses its node";
+                return false;
+            }
+            if (onNode > 0) (vertical ? y : x) = static_cast<int>(surf);
             if (st.kind == Stroke::Arrowhead) {
                 ras.arrowhead(x, y, ux, uy, m.len(st.line), m.half(st.line));
             } else if (st.kind == Stroke::CircleEnd) {

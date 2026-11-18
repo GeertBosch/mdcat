@@ -19,13 +19,11 @@
 
 
 
-            Say "hi"             Tag #1 ♥      R&D      C# and #hash
+              Say "hi"         Tag #1 ♥      R&D      C# and #hash
 
 
 
                                    One line
-
-
 
 
 
@@ -49,13 +47,13 @@
 
 
 
-                                                           Three
-                                                           short
-                One line              Two                  lines
-                                     lines
-                                                edge
-                                                label
-                                                           Last
+                                                          Three
+                                                          short
+                 One line            Two                  lines
+                                    lines
+                                               edge
+                                               label
+                                                          Last
 
 
 
@@ -118,8 +116,6 @@
 
 
                                 日本語のラベル
-
-
 
 
 
