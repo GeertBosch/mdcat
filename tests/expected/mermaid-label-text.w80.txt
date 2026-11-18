@@ -1,0 +1,245 @@
+Mermaid label text
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+On a Kitty terminal, the built-in renderer writes every label as ordinary text
+over the diagram's image, so the text keeps the terminal's font and colours.
+This fixture covers what a label may hold: quoted text, entity codes, line
+breaks, and Markdown strings. A node with a label of n lines is n + 2 rows tall,
+and its outline follows it. Each line is centred in the box. Checked by
+mermaid-kitty.sh at width 80, with --img kitty and pinned cell sizes: the
+.w80.txt golden holds the previewed text and quadrant blocks, the .w80.ansi.txt
+golden the text layer with its styles (\e is ESC), and the .err golden names the
+diagrams that are declined and so shown as source.
+
+Quoted labels
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the quotes are not shown, and the brackets, parentheses and pipe
+inside them are literal text instead of syntax. A quoted label on an edge is
+drawn on it, in both spellings (-- "text" --> and -->|"text"|), and a --> inside
+the quotes does not end the link.
+
+image @21,19 c=41 r=19 z=0 C=1 png=410x380
+                   ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                   ▐ text (with) [brackets] {and} | pipes  ▐
+                   ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                    a --> b
+                                       ▐
+                                       ▐
+                                   ▗▄▄▄█▙▄▄▄
+                                   ▐ Plain ▐
+                                   ▐▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                     x | y
+                                       ▐
+                                       ▐
+                                    ▗▄▄█▙▄▄
+                                    ▐ End ▐
+                                    ▐▄▄▄▄▄▟
+
+Entity codes
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: #quot; is a double quote, #35; a hash sign, #9829; a heart and #amp;
+an ampersand. A hash sign that does not start an entity code stays as it is.
+
+image @47,10 c=60 r=3 z=0 C=1 png=600x60
+          ▗▄▄▄▄▄▄▄▄▄▄▄         ▗▄▄▄▄▄▄▄▄▄▄▄           ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+          ▐ Say "hi" ▐▄▄▄▄▄▄▄▄▟█ Tag #1 ♥ ▐▄▄▄▖R&D▗▄▄▟█ C# and #hash ▐
+          ▐▄▄▄▄▄▄▄▄▄▄▟         ▐▄▄▄▄▄▄▄▄▄▄▟           ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+Line breaks
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: <br>, <br/> and <br /> end a line, in an unquoted label, a quoted one,
+and an edge label. The boxes are three, four and five rows tall, each line
+centred in its box. Left to right, an edge leaves a tall box at its vertical
+middle, which is the line between two of its rows when it has an even number.
+
+image @59,30 c=20 r=25 z=0 C=1 png=200x500
+                                 ▗▄▄▄▄▄▄▄▄▄▄▄▄
+                                 ▐ One line  ▐
+                                 ▐▄▄▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                       ▐
+                                       ▐
+                                       ▐
+                                   ▗▄▄▄█▙▄▄▄
+                                   ▐  Two  ▐
+                                   ▐ lines ▐
+                                   ▐▄▄▄▄▄▄▄▟
+                                       ▐
+                                     ▗▄█▄▄▄
+                                     ▐    ▐
+                                     ▐  edge
+                                     ▐  label
+                                     ▐    ▐
+                                  ▗▄▄▛    ▐▄▄▄
+                                  ▐          ▐
+                              ▗▄▄▄█▙▄▄▄  ▗▄▄▄█▙▄▄▄
+                              ▐ Three ▐  ▐ Last  ▐
+                              ▐ short ▐  ▐▄▄▄▄▄▄▄▟
+                              ▐ lines ▐
+                              ▐▄▄▄▄▄▄▄▟
+
+image @85,14 c=52 r=9 z=0 C=1 png=520x180
+                                                         ▗▄▄▄▄▄▄▄▄
+                                                         ▐ Three ▐
+              ▗▄▄▄▄▄▄▄▄▄▄▄         ▗▄▄▄▄▄▄▄▄          ▗▄▟█ short ▐
+              ▐ One line ▐▄▄▄▄▄▄▄ ▗▟  Two  ▐ ▄▄▄▄▄▄▄▄▄▛  ▐ lines ▐
+              ▐▄▄▄▄▄▄▄▄▄▄▟      ▝▀▀▜ lines ▐▀▜           ▐▄▄▄▄▄▄▄▟
+                                   ▐▄▄▄▄▄▄▄▟ ▐  edge
+                                             ▝▀▘label▝▜  ▗▄▄▄▄▄▄▄
+                                                      ▐▄▟█ Last ▐
+                                                         ▐▄▄▄▄▄▄▟
+
+Markdown strings
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: **bold**, *italic* and  `code`  are styled in the text layer, and the
+markers are not shown. A newline inside the string is a hard break. An entity
+code becomes its character and is never read as Markdown: #42; is a literal
+star.
+
+image @103,30 c=19 r=19 z=0 C=1 png=190x380
+                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                              ▐ Bold and italic ▐
+                              ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                              ▗▄▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄▄
+                              ▐ Some code here  ▐
+                              ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                ▗▄▄▄▄▄▄█▙▄▄▄▄▄▄
+                                ▐    first    ▐
+                                ▐ second line ▐
+                                ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                               ▗▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄
+                               ▐ *not italic*  ▐
+                               ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+A Markdown edge label
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the label on the edge is bold, and it is drawn like any other.
+
+image @128,24 c=32 r=7 z=0 C=1 png=320x140
+                                               ▗▄▄▄▄▄▄
+                                            ▗▄▟█ End ▐
+                        ▗▄▄▄▄▄▄▄▄ ▗▄▄▖yes▗▄▄▛  ▐▄▄▄▄▄▟
+                        ▐ Start ▐▄█
+                        ▐▄▄▄▄▄▄▄▟ ▐▄▖no way▗▄  ▗▄▄▄▄▄▄▄▄
+                                            ▐▄▟█ Other ▐
+                                               ▐▄▄▄▄▄▄▄▟
+
+A long Markdown string
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the string wraps at 24 columns, and the box grows to hold the lines. A
+word longer than 24 columns is cut. The style that is on where a line ends is
+closed there and reopened on the next line, which the .ansi.txt golden shows.
+
+image @143,25 c=29 r=16 z=0 C=1 png=290x320
+                                   ▗▄▄▄▄▄▄▄▄
+                                   ▐ Start ▐
+                                   ▐▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                         ▗▄▄▄▄▄▄▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄▄▄▄▄▄▄
+                         ▐ A long string that wraps  ▐
+                         ▐  over several lines in    ▐
+                         ▐         its box           ▐
+                         ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                         ▗▄▄▄▄▄▄▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄▄▄▄▄▄▄
+                         ▐ Averyveryveryveryverylon  ▐
+                         ▐   gwordthatdoesnotfit     ▐
+                         ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+Wrapping turned off
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: front matter turns wrapping off, so the same string stays on one line,
+as wide as the diagram may be. (An edge label that wide is not drawn, so only a
+node shows it.)
+
+image @167,10 c=59 r=8 z=0 C=1 png=590x160
+                                   ▗▄▄▄▄▄▄▄▄
+                                   ▐ Start ▐
+                                   ▐▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+          ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+          ▐ A long string that wraps over several lines in its box  ▐
+          ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+Plain labels stay literal
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the asterisks in a*b*c and the underscores in x_y_z are drawn as they
+are, because only a Markdown string is interpreted. The quoted label is as
+literal.
+
+image @183,19 c=42 r=3 z=0 C=1 png=420x60
+                   ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                   ▐ a*b*c ▐▄▄▄▟█ x_y_z ▐▄▄▄▟█ **not bold** ▐
+                   ▐▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+Wide characters
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: CJK and emoji labels are measured in columns, so the boxes fit them,
+and nothing is split in the middle of a character.
+
+image @193,29 c=21 r=19 z=0 C=1 png=210x380
+                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                              ▐ 日本語のラベル  ▐
+                              ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                       ▐
+                                       ▐
+                                       ▐
+                               ▗▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄
+                               ▐ Party 🎉 time ▐
+                               ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                    ✓ 完了
+                                       ▐
+                                       ▐
+                             ▗▄▄▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄▄▄
+                             ▐ 漢字 and emoji 😀 ▐
+                             ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+Declined
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: shown as source, as the .err golden says, in this order. HTML other
+than a line break; an entity code that is not known; a quote that never closes;
+a Markdown string with HTML in it; a label with a quote inside the quotes.
+
+  graph TD
+      a["<b>bold</b>"] --> b[B]
+
+  graph TD
+      a["#nosuchentity;"] --> b[B]
+
+  graph TD
+      a["unclosed] --> b[B]
+
+  graph TD
+      a["`<i>x</i>`"] --> b[B]
+
+  graph TD
+      a["say "hi""] --> b[B]
+

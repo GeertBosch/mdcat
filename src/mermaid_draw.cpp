@@ -746,19 +746,16 @@ bool drawDiagram(
             g.title + "\033[22m" +
             std::string(static_cast<size_t>(lay.cols - w - (lay.cols - w) / 2), ' ');
     }
-    for (size_t i = 0; i < g.nodes.size(); ++i) {
-        const CellBox& l = lay.nodeLabel[i];
-        byRow[static_cast<size_t>(l.row)].push_back({l.col, l.cols, &g.nodes[i].label.lines[0]});
-    }
-    for (size_t k = 0; k < g.edges.size(); ++k) {
-        const CellBox& l = lay.edgeLabel[k];
-        const std::vector<std::string>& lines = g.edges[k].label.lines;
+    // Each line of a label is centred in the label's cells.
+    auto addLines = [&](const CellBox& l, const std::vector<std::string>& lines) {
         for (size_t j = 0; j < lines.size() && l.cols > 0; ++j) {
             int w = env.width(lines[j]);
             byRow[static_cast<size_t>(l.row) + j].push_back(
                 {l.col + (l.cols - w) / 2, w, &lines[j]});
         }
-    }
+    };
+    for (size_t i = 0; i < g.nodes.size(); ++i) addLines(lay.nodeLabel[i], g.nodes[i].label.lines);
+    for (size_t k = 0; k < g.edges.size(); ++k) addLines(lay.edgeLabel[k], g.edges[k].label.lines);
     for (int r = 0; r < lay.rows; ++r) {
         std::vector<Text>& texts = byRow[static_cast<size_t>(r)];
         std::sort(
@@ -771,6 +768,9 @@ bool drawDiagram(
             at = t.col + t.width;
         }
         line.append(static_cast<size_t>(lay.cols - at), ' ');
+        // Markdown styling must not run on into the next row (or, if a label is cut short, the
+        // next label), so a row with any ends by switching it off.
+        if (line.find('\033') != std::string::npos) line += "\033[22;23;39;49m";
     }
 
     std::vector<uint32_t> pixels(ras.alpha.size());

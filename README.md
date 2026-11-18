@@ -236,11 +236,19 @@ edges with different labels, or none, still share a bus in a split or merge:
 ```mermaid
 graph TD
     input[Input] --> check[Valid?]
-    check -->|yes| build[Build]
+    check -->|yes| build["`**Build** it`"]
     check -->|no| report[Report]
     build == all green ==> ship[Ship]
     report -.-> ship
 ```
+
+Labels follow Mermaid's rules for text. A quoted label, `a["x (y) [z]"]`, may hold
+brackets and other syntax; entity codes such as `#quot;`, `#35;` and `#9829;` stand
+for their characters; `<br>` starts a new line, and the box grows a row for each line,
+each centred. A Markdown string, written ``a["`**bold** and *italic*`"]``, is the one
+kind of label that interprets Markdown, and it wraps long text at 24 columns (`build`
+above): a plain label such as `a*b*c` is drawn exactly as written, and front matter
+`config: markdownAutoWrap: false` turns the wrapping off.
 
 When edges interleave, each bus gets a track of its own between the ranks. An
 edge that has to cross another passes over it on a bridge, and only a dot marks a

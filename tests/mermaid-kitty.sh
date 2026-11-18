@@ -6,13 +6,14 @@
 #
 # Checked here, over tests/mermaid-basic.md (widths 80 and 30), tests/mermaid-dag.md (80 and 44),
 # tests/mermaid-routing.md (80), tests/mermaid-crossings.md (80), tests/mermaid-syntax.md (80),
-# tests/mermaid-links.md (80), tests/mermaid-edge-labels.md (80 and 44) and
-# tests/mermaid-fallback.md:
+# tests/mermaid-links.md (80), tests/mermaid-edge-labels.md (80 and 44),
+# tests/mermaid-label-text.md (80) and tests/mermaid-fallback.md:
 #   - tests/kitty-preview.py's rendering of the output of `mdcat --mermaid builtin` (text plus each
 #     image as quadrant blocks) equals tests/expected/<fixture>.w<N>.txt, and the
 #     MDCAT_MERMAID_DEBUG=1 stderr equals <fixture>.w<N>.err (UPDATE=1 rewrites both). The
 #     previewer also fails on any PNG with a bad signature, CRC, zlib stream or size
-#     (cols*cellW x rows*cellH);
+#     (cols*cellW x rows*cellH). A fixture with a <fixture>.w<N>.ansi.txt golden also has its text
+#     layer, with the styles it carries (ESC shown as \e), compared with it;
 #   - --mermaid / MDCAT_MERMAID precedence: source shows the source, the flag beats the variable,
 #     and an invalid mode exits 2;
 #   - every APC's first chunk carries f=100, C=1, c=, r=, z=0 and q=2, and every chunk carries q=2;
@@ -63,13 +64,15 @@ preview() { python3 "$here/kitty-preview.py" "$@"; }
 
 # Render <fixture> at <width> with the builtin only, and compare the previewer's text and the
 # debug stderr against tests/expected/<name>.w<width>.{txt,err}. Leaves the output in $tmp/out and
-# its preview in $tmp/summary.
+# its preview in $tmp/summary. A third argument, "ansi", also checks the text layer with its
+# styles against <name>.w<width>.ansi.txt.
 golden_case() {
     name=$1
     width=$2
     md=$here/$name.md
     txt=$here/expected/$name.w$width.txt
     err=$here/expected/$name.w$width.err
+    ansi=$here/expected/$name.w$width.ansi.txt
     MDCAT_MERMAID_DEBUG=1 mc --img kitty --mermaid builtin --width "$width" "$md" \
         > "$tmp/out" 2> "$tmp/err"
     if [ "${UPDATE:-}" = 1 ]; then
@@ -77,6 +80,10 @@ golden_case() {
         preview "$tmp/out" > "$txt"
         cp "$tmp/err" "$err"
         echo "mermaid-kitty: wrote $txt and $err"
+        if [ "${3:-}" = ansi ]; then
+            preview --ansi "$tmp/out" > "$ansi"
+            echo "mermaid-kitty: wrote $ansi"
+        fi
     fi
     if preview "$tmp/out" > "$tmp/summary" 2> "$tmp/preview.err"; then
         if diff -u "$txt" "$tmp/summary" > "$tmp/diff"; then
@@ -87,6 +94,14 @@ golden_case() {
         fi
     else
         fail "preview $name.w$width" "$(cat "$tmp/preview.err")"
+    fi
+    if [ -f "$ansi" ]; then
+        if preview --ansi "$tmp/out" | diff -u "$ansi" - > "$tmp/diff"; then
+            pass
+        else
+            fail "ansi $name.w$width" "styled text differs from $ansi"
+            cat "$tmp/diff" >&2
+        fi
     fi
     if [ -f "$err" ]; then
         if diff -u "$err" "$tmp/err" > "$tmp/diff"; then
@@ -107,6 +122,7 @@ golden_case mermaid-syntax 80
 golden_case mermaid-links 80
 golden_case mermaid-edge-labels 80
 golden_case mermaid-edge-labels 44
+golden_case mermaid-label-text 80 ansi
 golden_case mermaid-basic 30
 golden_case mermaid-basic 80
 

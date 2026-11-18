@@ -1,3 +1,3 @@
 mdcat: mermaid: fallback: label too wide: 40 > 24
-mdcat: mermaid: fallback: unsupported label
+mdcat: mermaid: fallback: html in label
 mdcat: mermaid: fallback: unsupported label

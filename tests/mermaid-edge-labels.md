@@ -139,7 +139,8 @@ graph LR
 ## Declined
 
 Expected: shown as source, as the `.err` golden says. A label over 24 columns is too
-wide; a label with markup, or an invisible link with a label, is not plain text.
+wide; a label with HTML other than a line break, or an invisible link with a label, is
+not drawn. (Quoted and Markdown labels are drawn: `mermaid-label-text.md`.)
 
 ```mermaid
 graph TD
@@ -148,7 +149,7 @@ graph TD
 
 ```mermaid
 graph TD
-    a[A] -->|"quoted"| b[B]
+    a[A] -->|<b>bold</b>| b[B]
 ```
 
 ```mermaid

@@ -229,14 +229,15 @@ Declined
 ────────────────────────────────────────────────────────────────────────────────
 
 Expected: shown as source, as the .err golden says. A label over 24 columns is
-too wide; a label with markup, or an invisible link with a label, is not plain
-text.
+too wide; a label with HTML other than a line break, or an invisible link with a
+label, is not drawn. (Quoted and Markdown labels are drawn:
+mermaid-label-text.md.)
 
   graph TD
       a[A] -->|this label is much too long for the edge| b[B]
 
   graph TD
-      a[A] -->|"quoted"| b[B]
+      a[A] -->|<b>bold</b>| b[B]
 
   graph TD
       a[A] ~~~|hidden| b[B]

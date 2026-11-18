@@ -17,6 +17,9 @@ struct Env {
     bool darkTheme = false;     // stroke colour follows the theme
     std::function<int(const std::string&)>
         width;  // display width of a label (mdcat's displayWidth)
+    // A Markdown string as styled lines no wider than the given width, each with its styles closed
+    // at its end and reopened at the start of the next (mdcat's reflow of renderInline).
+    std::function<std::vector<std::string>(const std::string&, int)> markdownLines;
 };
 
 struct Diagram {

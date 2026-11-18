@@ -34,6 +34,9 @@ enum class End { None, Arrow, Circle, Cross };
 
 struct Label {
     std::vector<std::string> lines;  // styled; width via Env::width
+    // The source of a Markdown string, which render() turns into `lines` with Env::markdownLines.
+    // Empty for a plain label, whose `lines` are literal text.
+    std::string markdown;
 };
 
 struct Node {
@@ -104,15 +107,17 @@ enum class Occ : unsigned char { Empty, Node, Label, Edge };
 namespace tune {
 constexpr int kMaxNodes = 60;  // bounds layout cost and clutter
 constexpr int kMaxRanks = 60;  // bounds the dummy nodes that long links create
-constexpr int kNodeRows = 3;   // a node is a box with its label on the middle row
+constexpr int kNodeFrame = 2;  // rows a node adds around its label's lines
 constexpr int kNodePad = 4;    // columns a node adds around its label
 constexpr int kGapTd =
     2;  // rows between two ranks, plus one for each track the edges between them use
 constexpr int kGapLr = 4;  // columns between two ranks, at least; with many tracks, tracks + 2
 constexpr int kSepTd = 2;  // columns between neighbouring footprints in a rank
 constexpr int kSepLr = 1;  // rows between neighbouring footprints in a rank
-constexpr int kMaxCrossings = 3;    // edge crossings (bridges) a diagram may have
-constexpr int kMaxLabelWidth = 24;  // columns an edge label may take
+constexpr int kMaxCrossings = 3;  // edge crossings (bridges) a diagram may have
+constexpr int kMaxLabelWidth =
+    24;                        // columns an edge label may take, and a Markdown string wraps at
+constexpr int kNoWrap = 4096;  // a wrap width that no label reaches, for markdownAutoWrap: false
 }  // namespace tune
 
 // Parse the body of a ```mermaid block. On failure `reason` is one of the stable fallback reasons.

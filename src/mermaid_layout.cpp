@@ -447,17 +447,20 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
     }
     const size_t ranks = static_cast<size_t>(highest) + 1;
 
-    // Footprints of the real nodes, in cells: (label width + 4) x 3. For top-down the width is made
-    // odd so that every footprint's centre lies on a whole column and arrows can be exactly
-    // vertical.
-    std::vector<int> nodeW(n);
+    // Footprints of the real nodes, in cells: (widest line + 4) x (lines + 2). For top-down the
+    // width is made odd so that every footprint's centre lies on a whole column and arrows can be
+    // exactly vertical.
+    std::vector<int> nodeW(n), nodeH(n), labelW(n);
     std::vector<Item> items(n);
     for (size_t i = 0; i < n; ++i) {
-        int w = env.width(g.nodes[i].label.lines[0]) + tune::kNodePad;
+        for (const std::string& line : g.nodes[i].label.lines)
+            labelW[i] = std::max(labelW[i], env.width(line));
+        int w = labelW[i] + tune::kNodePad;
         if (td && w % 2 == 0) ++w;
         nodeW[i] = w;
+        nodeH[i] = static_cast<int>(g.nodes[i].label.lines.size()) + tune::kNodeFrame;
         items[i].rank = rank[i];
-        items[i].ext = td ? w : tune::kNodeRows;
+        items[i].ext = td ? w : nodeH[i];
     }
 
     // Initial order, by depth-first search from the sources of each weakly connected component in
@@ -752,7 +755,7 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
                 return a.first < b.first;
             });
             const int step = td ? 2 : 1;
-            const int lim = td ? nodeW[v] - 3 : tune::kNodeRows - 2;  // keeps clear of the corners
+            const int lim = td ? nodeW[v] - 3 : nodeH[v] - 2;  // keeps clear of the corners
             int first = 0;
             for (size_t i = 0; i < far.size(); ++i)
                 if (far[i].second == list[0]) first = static_cast<int>(i);
@@ -789,7 +792,7 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
     std::vector<int> thick(ranks, 1);
     for (size_t i = 0; i < n; ++i) {
         size_t r = static_cast<size_t>(rank[i]);
-        thick[r] = std::max(thick[r], td ? tune::kNodeRows : nodeW[i]);
+        thick[r] = std::max(thick[r], td ? nodeH[i] : nodeW[i]);
     }
     for (size_t i = n; i < items.size(); ++i) {
         size_t r = static_cast<size_t>(items[i].rank);
@@ -826,12 +829,12 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
         int at = start[static_cast<size_t>(it.rank)];
         CellBox& f = lay.nodeFoot[i];
         f.cols = nodeW[i];
-        f.rows = tune::kNodeRows;
+        f.rows = nodeH[i];
         f.col = td ? it.left : at;
         f.row = td ? at : it.left;
         CellBox& l = lay.nodeLabel[i];
-        l.cols = env.width(g.nodes[i].label.lines[0]);
-        l.rows = 1;
+        l.cols = labelW[i];
+        l.rows = static_cast<int>(g.nodes[i].label.lines.size());
         l.col = f.col + (f.cols - l.cols) / 2;
         l.row = f.row + 1;
     }
@@ -860,7 +863,7 @@ bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reaso
         size_t from = static_cast<size_t>(g.edges[k].from), to = static_cast<size_t>(g.edges[k].to);
         std::vector<Pt> path;
         int leave =
-            2 * (start[static_cast<size_t>(rank[from])] + (td ? tune::kNodeRows : nodeW[from])) - 1;
+            2 * (start[static_cast<size_t>(rank[from])] + (td ? nodeH[from] : nodeW[from])) - 1;
         path.push_back(point(endX(k, 0), leave));
         for (size_t i = 0; i + 1 < c.size(); ++i) {
             int a = endX(k, i), b = endX(k, i + 1);

@@ -3253,6 +3253,9 @@ class SlotSink;
 SlotSink* asSlotSink(std::ostream& out);
 void slotDeferImage(SlotSink* sink, std::future<std::string> fut);
 
+// A Markdown string of a diagram label as styled lines that stand alone (defined below).
+std::vector<std::string> mermaidMarkdownLines(const std::string& md, int width);
+
 // Draw a ```mermaid block with the built-in renderer (mermaid.h) and write it centred. Returns
 // false, writing nothing and setting `reason`, when the builtin does not apply: not a Kitty
 // terminal or images are off, the block is inside a list or quote (whose per-line prefixing would
@@ -3276,6 +3279,7 @@ bool emitBuiltinMermaid(const std::vector<std::string>& body,
     env.cellH = cm.realCellH();
     env.darkTheme = darkBackground();
     env.width = displayWidth;
+    env.markdownLines = mermaidMarkdownLines;
     mermaid::Diagram d;
     if (!mermaid::render(body, env, d, reason)) return false;
     // VSCode misplaces the text of a band taller than the screen (field guide section 10, case K).
@@ -3890,6 +3894,37 @@ std::vector<std::string> splitOnNewlines(const std::string& s) {
         }
     }
     return out;
+}
+
+// The labels of a diagram share their rows with each other and with the strokes' text layer, so
+// each line of a Markdown label must stand alone: a bold or italic style that is on at the end of
+// a line is closed there and reopened at the start of the next. (reflow already does this for code
+// spans.)
+std::vector<std::string> mermaidMarkdownLines(const std::string& md, int width) {
+    std::vector<std::string> lines = splitOnNewlines(reflow(renderInline(md), width));
+    bool bold = false, italic = false;
+    for (std::string& line : lines) {
+        std::string out;
+        if (bold) out += kBoldOn;
+        if (italic) out += kItalicOn;
+        for (size_t i = 0; i < line.size();) {
+            size_t len = unitLength(line, i);
+            if (line.compare(i, len, kBoldOn) == 0)
+                bold = true;
+            else if (line.compare(i, len, kBoldOff) == 0)
+                bold = false;
+            else if (line.compare(i, len, kItalicOn) == 0)
+                italic = true;
+            else if (line.compare(i, len, kItalicOff) == 0)
+                italic = false;
+            out.append(line, i, len);
+            i += len;
+        }
+        if (italic) out += kItalicOff;
+        if (bold) out += kBoldOff;
+        line = out;
+    }
+    return lines;
 }
 
 void emitTable(const std::vector<std::string>& rawRows, std::ostream& out) {

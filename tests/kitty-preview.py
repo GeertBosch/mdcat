@@ -3,8 +3,9 @@
 
 Reads mdcat's output (a file argument or stdin) and emulates just enough of a terminal to place
 each Kitty image: text, LF (as CR LF, like a tty with ONLCR), CR, CSI A/B/C/D, and ESC 7 / ESC 8.
-SGR and every other CSI, and OSC (hyperlinks), are stripped. Kitty APC chunks are collected into
-images, and each PNG is decoded: a bad signature, CRC, zlib stream or size is a failure (exit 1).
+SGR and every other CSI, and OSC (hyperlinks), are stripped (but see --ansi). Kitty APC chunks are
+collected into images, and each PNG is decoded: a bad signature, CRC, zlib stream or size is a
+failure (exit 1).
 
 Output, one line per screen row, with trailing spaces removed. Before the first row of each image
 comes a header line
@@ -13,12 +14,15 @@ comes a header line
 
 and inside an image's cols x rows footprint every cell that holds no text shows a quadrant block
 for which of its 2x2 sub-cells contain stroke pixels (alpha > 0). A cell holding text shows the
-text. With --labels, only the text layer is printed: no headers and no blocks.
+text. With --labels, only the text layer is printed: no headers and no blocks. With --ansi, only
+the rows that images cover are printed, and they keep their SGR sequences, shown as "\\e[...m" before
+the character they precede (or at the end of the row), so a test can check which styles the labels
+carry. A blank line separates images that are not adjacent.
 
 The PNG must measure c*cellW x r*cellH, with the cell size from MDCAT_CELL_W / MDCAT_CELL_H
 (default 10 x 20), the same variables mdcat reads.
 
-Usage: kitty-preview.py [--labels] [FILE]
+Usage: kitty-preview.py [--labels | --ansi] [FILE]
 """
 
 import base64
@@ -96,9 +100,12 @@ def decode_png(png):
     return w, h, rows
 
 
-def parse(text):
-    """Run the terminal emulation. Returns (screen, images); screen is {(row, col): char}."""
-    screen, images = {}, []
+def parse(text, keep_sgr=False):
+    """Run the terminal emulation. Returns (screen, images, tails); screen is {(row, col): char},
+    and with keep_sgr each cell is prefixed by the SGR sequences written since the cell before it,
+    with those that end a row in tails[row]."""
+    screen, images, tails = {}, [], {}
+    sgr = ""
     row = col = 0
     saved = (0, 0)
     pending = None  # [controls, payload parts, anchor] of an image still receiving chunks
@@ -114,6 +121,8 @@ def parse(text):
                 if j >= n:
                     raise PreviewError("unterminated CSI")
                 params, final = text[i + 2 : j], text[j]
+                if keep_sgr and final == "m":
+                    sgr += "\\e[" + params + "m"
                 if final in "ABCD" and re.fullmatch(r"\d*", params):
                     k = int(params) if params else 1
                     if final == "A":
@@ -156,6 +165,9 @@ def parse(text):
             else:
                 i += 2
         elif ch == "\n":
+            if sgr:
+                tails[row] = tails.get(row, "") + sgr
+                sgr = ""
             row, col = row + 1, 0
             i += 1
         elif ch == "\r":
@@ -171,7 +183,8 @@ def parse(text):
                 elif col > 1 and (row, col - 2) in screen:
                     screen[(row, col - 2)] += ch
             else:
-                screen[(row, col)] = ch
+                screen[(row, col)] = sgr + ch
+                sgr = ""
                 if w == 2:
                     screen[(row, col + 1)] = ""
                 col += w
@@ -179,7 +192,7 @@ def parse(text):
     if pending is not None:
         raise PreviewError("image is missing its final chunk (m=0)")
     screen.setdefault((row, 0), "")
-    return screen, images
+    return screen, images, tails
 
 
 def stroke_blocks(keys, payload, cell_w, cell_h):
@@ -207,8 +220,8 @@ def stroke_blocks(keys, payload, cell_w, cell_h):
     return (w, h), blocks
 
 
-def render(text, labels_only, cell_w, cell_h):
-    screen, images = parse(text)
+def render(text, labels_only, cell_w, cell_h, keep_sgr=False):
+    screen, images, tails = parse(text, keep_sgr)
     headers = {}
     blocks = {}
     for keys, payload, (arow, acol) in images:
@@ -221,7 +234,12 @@ def render(text, labels_only, cell_w, cell_h):
             blocks[(arow + cy, acol + cx)] = blocks.get((arow + cy, acol + cx), 0) | q
     last = max(r for r, _ in screen)
     out = []
-    for r in range(last + 1):
+    covered = sorted({arow + k for keys, _, (arow, _c) in images for k in range(int(keys["r"]))})
+    rows = covered if keep_sgr else range(last + 1)
+    for r in rows:
+        if keep_sgr and out and r != prev + 1:
+            out.append("")
+        prev = r
         if not labels_only:
             out.extend(headers.get(r, []))
         cells = {c: ch for (rr, c), ch in screen.items() if rr == r}
@@ -234,12 +252,13 @@ def render(text, labels_only, cell_w, cell_h):
                 line.append(QUADRANTS[blocks[(r, c)]])
             else:
                 line.append(" ")
-        out.append("".join(line).rstrip())
+        out.append("".join(line).rstrip() + tails.get(r, ""))
     return "\n".join(out) + "\n"
 
 
 def main(argv):
-    args = [a for a in argv if a != "--labels"]
+    args = [a for a in argv if a not in ("--labels", "--ansi")]
+    keep_sgr = "--ansi" in argv
     labels_only = len(args) != len(argv)
     if len(args) > 1:
         sys.stderr.write(__doc__)
@@ -248,7 +267,7 @@ def main(argv):
     cell_w = int(os.environ.get("MDCAT_CELL_W", "10"))
     cell_h = int(os.environ.get("MDCAT_CELL_H", "20"))
     try:
-        result = render(data.decode("utf-8", "replace"), labels_only, cell_w, cell_h)
+        result = render(data.decode("utf-8", "replace"), labels_only, cell_w, cell_h, keep_sgr)
     except (PreviewError, ValueError, zlib.error) as e:
         sys.stderr.write("kitty-preview: %s\n" % e)
         return 1

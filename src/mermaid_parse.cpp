@@ -36,8 +36,21 @@ size_t idEnd(const std::string& s, size_t p) {
     return p;
 }
 
-// Characters that are syntax in Mermaid labels (shapes, quoting, entities, HTML, markdown strings);
-// a label containing one is not plain text.
+// The first `ch` at or after `from` that is outside a double-quoted string, or npos. A quote that
+// never closes also gives npos.
+size_t findOutsideQuotes(const std::string& s, size_t from, char ch) {
+    for (size_t i = from; i < s.size(); ++i) {
+        if (s[i] == ch) return i;
+        if (s[i] == '"') {
+            i = s.find('"', i + 1);
+            if (i == std::string::npos) return i;
+        }
+    }
+    return std::string::npos;
+}
+
+// Characters that are syntax in Mermaid labels (shapes, quoting, HTML, pipes); an unquoted label
+// containing one is not plain text. `<` is let through separately, for a line break.
 bool plainLabelChar(char c) {
     switch (c) {
     case '[':
@@ -50,26 +63,215 @@ bool plainLabelChar(char c) {
     case '|':
     case '<':
     case '>':
-    case '`':
-    case '#': return false;
+    case '`': return false;
     default: return static_cast<unsigned char>(c) >= 0x20 && c != 0x7f;
     }
 }
 
-// The text of a plain label, from `raw`: its whitespace collapsed as HTML does, as Mermaid shows
-// it. Text that is empty or holds syntax characters is declined.
-bool plainLabel(const std::string& raw, std::string& label) {
-    for (char c : raw)
-        if (!plainLabelChar(c)) return false;
-    label.clear();
-    for (char c : trim(raw)) {
-        if (c == ' ' || c == '\t') {
-            if (label.empty() || label.back() != ' ') label += ' ';
+// The length of the line break `<br>`, `<br/>` or `<br />` (in any case) at s[p], or 0.
+size_t lineBreakAt(const std::string& s, size_t p) {
+    auto lower = [&](size_t i) {
+        return i < s.size() ? static_cast<char>(std::tolower(static_cast<unsigned char>(s[i])))
+                            : '\0';
+    };
+    if (s[p] != '<' || lower(p + 1) != 'b' || lower(p + 2) != 'r') return 0;
+    size_t q = p + 3;
+    while (q < s.size() && (s[q] == ' ' || s[q] == '\t')) ++q;
+    if (q < s.size() && s[q] == '/') ++q;
+    return q < s.size() && s[q] == '>' ? q + 1 - p : 0;
+}
+
+void appendUtf8(std::string& out, unsigned cp) {
+    if (cp < 0x80) {
+        out += static_cast<char>(cp);
+    } else if (cp < 0x800) {
+        out += static_cast<char>(0xC0 | (cp >> 6));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    } else if (cp < 0x10000) {
+        out += static_cast<char>(0xE0 | (cp >> 12));
+        out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    } else {
+        out += static_cast<char>(0xF0 | (cp >> 18));
+        out += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+        out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        out += static_cast<char>(0x80 | (cp & 0x3F));
+    }
+}
+
+// The entity code at s[p] as Mermaid documents them: `#` and a decimal number or a name, then `;`
+// (`#35;`, `#quot;`, `#amp;`). Returns the code's length, or 0 if s[p] does not start one, so
+// that a lone `#` stays literal. `cp` is the character it stands for, or 0 for a name or number
+// that is not known or is not text (a control character).
+size_t entityAt(const std::string& s, size_t p, unsigned& cp) {
+    size_t e = p + 1;
+    while (e < s.size() && (std::isalnum(static_cast<unsigned char>(s[e])) || s[e] == '_')) ++e;
+    if (e == p + 1 || e >= s.size() || s[e] != ';') return 0;
+    const std::string name = s.substr(p + 1, e - p - 1);
+    cp = 0;
+    if (std::all_of(name.begin(), name.end(), [](char c) {
+            return std::isdigit(static_cast<unsigned char>(c));
+        })) {
+        if (name.size() <= 7) {
+            unsigned long v = std::stoul(name);
+            if (v >= 0x20 && !(v >= 0x7f && v < 0xa0) && !(v >= 0xd800 && v < 0xe000) &&
+                v <= 0x10ffff)
+                cp = static_cast<unsigned>(v);
+        }
+    } else {
+        static const std::map<std::string, unsigned> kNamed = {
+            {"quot", '"'},     {"amp", '&'},       {"lt", '<'},       {"gt", '>'},
+            {"apos", '\''},    {"nbsp", 0xa0},     {"copy", 0xa9},    {"reg", 0xae},
+            {"trade", 0x2122}, {"hellip", 0x2026}, {"mdash", 0x2014}, {"ndash", 0x2013},
+            {"lsquo", 0x2018}, {"rsquo", 0x2019},  {"ldquo", 0x201c}, {"rdquo", 0x201d},
+            {"bull", 0x2022},  {"middot", 0xb7},   {"deg", 0xb0},     {"plusmn", 0xb1},
+            {"times", 0xd7},   {"divide", 0xf7},   {"larr", 0x2190},  {"uarr", 0x2191},
+            {"rarr", 0x2192},  {"darr", 0x2193},   {"harr", 0x2194},  {"hearts", 0x2665},
+            {"check", 0x2713}, {"cross", 0x2717},  {"euro", 0x20ac},  {"pound", 0xa3},
+            {"yen", 0xa5},     {"cent", 0xa2},     {"sect", 0xa7},    {"para", 0xb6},
+            {"infin", 0x221e}, {"ne", 0x2260},     {"le", 0x2264},    {"ge", 0x2265},
+            {"asymp", 0x2248}};
+        auto it = kNamed.find(name);
+        if (it != kNamed.end()) cp = it->second;
+    }
+    return e + 1 - p;
+}
+
+// The lines of a plain label, from `raw`, which is the text between the quotes of a quoted label or
+// the whole of an unquoted one. Whitespace collapses as HTML does, entity codes are decoded, and
+// `<br>` starts a new line; Mermaid shows everything else literally, so a `*` stays a `*`. Text
+// that is empty, or holds other HTML or (when unquoted) syntax characters, is declined.
+bool plainLabel(const std::string& raw, bool quoted, Label& label, std::string& reason) {
+    std::vector<std::string> lines(1);
+    auto trimmed = [](std::string& line) {
+        while (!line.empty() && line.back() == ' ') line.pop_back();
+        size_t b = 0;
+        while (b < line.size() && line[b] == ' ') ++b;
+        line.erase(0, b);
+    };
+    for (size_t i = 0; i < raw.size();) {
+        const char c = raw[i];
+        if (c == '<') {
+            size_t len = lineBreakAt(raw, i);
+            if (len == 0) {
+                reason = "html in label";
+                return false;
+            }
+            trimmed(lines.back());
+            lines.emplace_back();
+            i += len;
+        } else if (c == '#' && i + 1 < raw.size()) {
+            unsigned cp = 0;
+            size_t len = entityAt(raw, i, cp);
+            if (len == 0) {
+                lines.back() += c;
+                ++i;
+            } else if (cp == 0) {
+                reason = "unsupported entity: " + raw.substr(i, len);
+                return false;
+            } else {
+                appendUtf8(lines.back(), cp);
+                i += len;
+            }
+        } else if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+            if (!lines.back().empty() && lines.back().back() != ' ') lines.back() += ' ';
+            ++i;
+        } else if (static_cast<unsigned char>(c) < 0x20 || c == 0x7f ||
+                   !(quoted || plainLabelChar(c))) {
+            reason = "unsupported label";
+            return false;
         } else {
-            label += c;
+            lines.back() += c;
+            ++i;
         }
     }
-    return !label.empty();
+    trimmed(lines.back());
+    while (!lines.empty() && lines.back().empty()) lines.pop_back();
+    size_t first = 0;
+    while (first < lines.size() && lines[first].empty()) ++first;
+    if (first == lines.size()) {
+        reason = "unsupported label";
+        return false;
+    }
+    label.lines.assign(lines.begin() + static_cast<long>(first), lines.end());
+    label.markdown.clear();
+    return true;
+}
+
+// A Markdown string, from `raw` between the backticks of `"`...`"`: the source that render()
+// gives to the Markdown renderer. A newline is a hard break, so it becomes `<br>`; an entity code
+// becomes its character, escaped so that it is never read as Markdown; other HTML is declined.
+bool markdownLabel(const std::string& raw, Label& label, std::string& reason) {
+    std::string md;
+    for (size_t i = 0; i < raw.size();) {
+        const char c = raw[i];
+        if (c == '<') {
+            size_t len = lineBreakAt(raw, i);
+            if (len == 0) {
+                reason = "html in label";
+                return false;
+            }
+            md += "<br>";
+            i += len;
+        } else if (c == '#' && i + 1 < raw.size()) {
+            unsigned cp = 0;
+            size_t len = entityAt(raw, i, cp);
+            if (len == 0) {
+                md += c;
+                ++i;
+            } else if (cp == 0) {
+                reason = "unsupported entity: " + raw.substr(i, len);
+                return false;
+            } else {
+                if (cp < 0x80 && std::ispunct(static_cast<int>(cp))) md += '\\';
+                appendUtf8(md, cp);
+                i += len;
+            }
+        } else if (c == '\n') {
+            md += "<br>";
+            ++i;
+        } else if (c == '\r') {
+            ++i;
+        } else if ((static_cast<unsigned char>(c) < 0x20 && c != '\t') || c == 0x7f) {
+            reason = "unsupported label";
+            return false;
+        } else {
+            md += c;
+            ++i;
+        }
+    }
+    md = trim(md);
+    while (md.compare(0, 4, "<br>") == 0) md = trim(md.substr(4));
+    while (md.size() >= 4 && md.compare(md.size() - 4, 4, "<br>") == 0)
+        md = trim(md.substr(0, md.size() - 4));
+    if (md.empty()) {
+        reason = "unsupported label";
+        return false;
+    }
+    label.lines.clear();
+    label.markdown = md;
+    return true;
+}
+
+// The label of a node or an edge, from the text `raw` that is written for it: plain text, a quoted
+// string `"..."` (which may hold syntax characters), or a Markdown string `"`...`"`.
+bool parseLabel(const std::string& raw, Label& label, std::string& reason) {
+    const std::string t = trim(raw);
+    if (t.size() >= 2 && t.front() == '"') {
+        if (t.back() != '"') {
+            reason = "unsupported label";
+            return false;
+        }
+        const std::string inner = t.substr(1, t.size() - 2);
+        if (inner.find('"') != std::string::npos) {
+            reason = "unsupported label";
+            return false;
+        }
+        if (inner.size() >= 2 && inner.front() == '`' && inner.back() == '`')
+            return markdownLabel(inner.substr(1, inner.size() - 2), label, reason);
+        return plainLabel(inner, /*quoted=*/true, label, reason);
+    }
+    return plainLabel(t, /*quoted=*/false, label, reason);
 }
 
 bool reservedId(const std::string& id) {
@@ -152,7 +354,8 @@ bool parseFrontMatter(const std::vector<std::string>& lines, Graph& g) {
 
 // Splits the text of a diagram into statements, which newlines and `;` separate. Comments
 // (`%%`, also trailing ones) and directives (`%%{ ... }%%`, possibly over several lines) are
-// skipped, and a `[...]` or `{...}` never ends a statement, even over a newline or `;`.
+// skipped, and a `[...]` or `{...}`, or a quoted string, never ends a statement, even over a
+// newline or `;`.
 class StatementReader {
 public:
     enum class Result { Statement, End, Error };
@@ -177,8 +380,14 @@ public:
             size_t j = i;
             bool comment = false;
             while (j < t.size() && t[j] != '\n' && t[j] != ';') {
+                if (t[j] == '"') {
+                    size_t close = t.find('"', j + 1);
+                    if (close == std::string::npos) return Result::Error;
+                    j = close + 1;
+                    continue;
+                }
                 if (t[j] == '[' || t[j] == '{') {
-                    size_t close = t.find(t[j] == '[' ? ']' : '}', j + 1);
+                    size_t close = findOutsideQuotes(t, j + 1, t[j] == '[' ? ']' : '}');
                     j = close == std::string::npos ? t.size() : close + 1;
                     continue;
                 }
@@ -229,12 +438,11 @@ struct Parser {
         if (reservedId(id)) return fail(kUnsupportedSyntax);
         if (s.compare(p, 2, "@{") == 0) return fail(kUnsupportedSyntax);
         bool labelled = false;
-        std::string label;
+        Label label;
         if (p < s.size() && s[p] == '[') {
-            size_t close = s.find(']', p + 1);
+            size_t close = findOutsideQuotes(s, p + 1, ']');
             if (close == std::string::npos) return fail(kUnsupportedSyntax);
-            if (!plainLabel(s.substr(p + 1, close - p - 1), label))
-                return fail("unsupported label");
+            if (!parseLabel(s.substr(p + 1, close - p - 1), label, reason)) return false;
             labelled = true;
             p = close + 1;
         }
@@ -254,7 +462,7 @@ struct Parser {
             n.label.lines.push_back(id);
             g.nodes.push_back(n);
         }
-        if (labelled) g.nodes[static_cast<size_t>(it->second)].label.lines[0] = label;
+        if (labelled) g.nodes[static_cast<size_t>(it->second)].label = label;
         node = it->second;
         return true;
     }
@@ -433,6 +641,12 @@ struct Parser {
         char right = '\0';
         size_t len = 0, end = std::string::npos, after = 0;
         for (size_t j = textAt; j < s.size() && end == std::string::npos;) {
+            if (at(j) == '"') {
+                j = s.find('"', j + 1);
+                if (j == std::string::npos) return fail(kUnsupportedSyntax);
+                ++j;
+                continue;
+            }
             size_t run = 0;
             while (at(j + run) == stroke) ++run;
             if (run == 0) {
@@ -463,15 +677,13 @@ struct Parser {
             j += run;
         }
         if (end == std::string::npos) return fail(kUnsupportedSyntax);
-        std::string text;
-        if (!plainLabel(s.substr(textAt, end - textAt), text)) return fail("unsupported label");
+        if (!parseLabel(s.substr(textAt, end - textAt), edge.label, reason)) return false;
         if (left && !(left == right || (left == '<' && right == '>')))
             return fail(kUnsupportedSyntax);
         edge.line = dotted ? Line::Dotted : thick ? Line::Thick : Line::Solid;
         edge.head = marker(right);
         edge.tail = marker(left);
         edge.minlen = static_cast<int>(std::min<size_t>(len, tune::kMaxRanks));
-        edge.label.lines = {text};
         p = after;
         return true;
     }
@@ -498,13 +710,11 @@ struct Parser {
                 size_t bar = p;
                 while (bar < s.size() && s[bar] == ' ') ++bar;
                 if (bar < s.size() && s[bar] == '|') {
-                    size_t close = s.find('|', bar + 1);
-                    std::string text;
-                    if (close == std::string::npos ||
-                        !plainLabel(s.substr(bar + 1, close - bar - 1), text) ||
-                        link.line == Line::Invisible)
+                    size_t close = findOutsideQuotes(s, bar + 1, '|');
+                    if (close == std::string::npos || link.line == Line::Invisible)
                         return fail("unsupported label");
-                    link.label.lines = {text};
+                    if (!parseLabel(s.substr(bar + 1, close - bar - 1), link.label, reason))
+                        return false;
                     p = close + 1;
                 }
             }

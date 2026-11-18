@@ -1,0 +1,137 @@
+
+                     text (with) [brackets] {and} | pipes
+
+
+
+                                    a --> b
+
+
+
+                                     Plain
+
+
+
+                                     x | y
+
+
+
+                                      End
+
+
+
+            Say "hi"             Tag #1 ♥      R&D      C# and #hash
+
+
+
+                                   One line
+
+
+
+
+
+
+
+                                      Two
+                                     lines
+
+
+
+
+                                        edge
+                                        label
+
+
+
+
+                                Three      Last
+                                short
+                                lines
+
+
+
+                                                           Three
+                                                           short
+                One line              Two                  lines
+                                     lines
+                                                edge
+                                                label
+                                                           Last
+
+
+
+                                \e[1mBold \e[22mand \e[3mitalic\e[23m\e[22;23;39;49m
+
+
+
+
+                                Some \e[48;5;254;38;5;236mcode \e[39;49mhere\e[22;23;39;49m
+
+
+
+
+                                     first
+                                  second line
+
+
+
+
+                                 *not italic*
+
+
+
+                                                 End
+                                      \e[1myes\e[22m\e[22;23;39;49m
+                          Start
+                                     \e[3mno \e[23mway\e[22;23;39;49m
+                                                 Other
+
+
+
+                                     Start
+
+
+
+
+                           A \e[1mlong string that wraps\e[22m\e[22;23;39;49m
+                            \e[1mover several lines \e[22min\e[22;23;39;49m
+                                   its box
+
+
+
+
+                           Averyveryveryveryverylon
+                             gwordthatdoesnotfit
+
+
+
+                                     Start
+
+
+
+
+            A \e[1mlong string that wraps over several lines \e[22min its box\e[22;23;39;49m
+
+
+
+                     a*b*c        x_y_z        **not bold**
+
+
+
+                                日本語のラベル
+
+
+
+
+
+
+
+                                 Party 🎉 time
+
+
+
+                                    ✓ 完了
+
+
+
+                               \e[1m漢字 \e[22mand \e[3memoji \e[23m😀\e[22;23;39;49m
+
