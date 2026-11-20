@@ -128,6 +128,24 @@ graph TD
     b -->|"✓ 完了"| c["`**漢字** and *emoji* 😀`"]
 ```
 
+## Text after a quoted string
+
+Expected: as in Mermaid, text after the closing quote joins the label, and a line
+break there starts a new line. The first node is a bold title over a plain second
+line, the second a plain title with a second line, the third one line, `a b`.
+
+```mermaid
+graph TD
+    engine(["`**engine**`"
+    Chess Engine
+    ])
+    move(["Move"
+    Generation
+    ])
+    engine --> move
+    move --> c["a" b]
+```
+
 ## Declined
 
 Expected: shown as source, as the `.err` golden says, in this order. HTML other than

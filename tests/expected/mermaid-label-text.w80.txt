@@ -217,6 +217,31 @@ image @191,29 c=21 r=17 z=0 C=1 png=210x340
                              ▐ 漢字 and emoji 😀 ▐
                              ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
 
+Text after a quoted string
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: as in Mermaid, text after the closing quote joins the label, and a
+line break there starts a new line. The first node is a bold title over a plain
+second line, the second a plain title with a second line, the third one line, a
+b.
+
+image @217,30 c=19 r=15 z=0 C=1 png=190x300
+                               ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                              ▐▘    engine     ▝▙
+                              ▐▖ Chess Engine  ▗▛
+                               ▀▜▙▄▄▄▄▄▄▄▄▄▄▄▟▛▀
+                                       ▐
+                                       ▐
+                                ▄▄▄▄▄▄▄█▙▄▄▄▄▄▄
+                               ▐▘    Move     ▝▙
+                               ▐▖ Generation  ▗▛
+                                ▀▜▙▄▄▄▄▄▄▄▄▄▟▛▀
+                                       ▐
+                                       ▐
+                                    ▗▄▄█▙▄▄
+                                    ▐ a b ▐
+                                    ▐▄▄▄▄▄▟
+
 Declined
 ────────────────────────────────────────────────────────────────────────────────
 

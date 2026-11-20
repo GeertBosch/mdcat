@@ -253,24 +253,47 @@ bool markdownLabel(const std::string& raw, Label& label, std::string& reason) {
     return true;
 }
 
+// The plain text that follows a quoted string in a label, as `<br>`-separated text that plainLabel
+// and markdownLabel read: a line break and the indent after it become `<br>`. False when the text
+// holds a quote or a syntax character.
+bool quotedTail(const std::string& tail, std::string& out) {
+    for (size_t i = 0; i < tail.size(); ++i) {
+        const char c = tail[i];
+        if (c == '\n' || c == '\r') {
+            while (i + 1 < tail.size() && std::isspace(static_cast<unsigned char>(tail[i + 1])))
+                ++i;
+            out += "<br>";
+        } else if (c == ' ' || c == '\t' || plainLabelChar(c)) {
+            out += c;
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
 // The label of a node or an edge, from the text `raw` that is written for it: plain text, a quoted
-// string `"..."` (which may hold syntax characters), or a Markdown string `"`...`"`.
+// string `"..."` (which may hold syntax characters), or a Markdown string `"`...`"`. Like Mermaid,
+// a quoted string may be followed by plain text, which joins it: a line break after the quote
+// starts a new line, as in `["`**engine**`"` then `Chess Engine` on the next line.
 bool parseLabelText(const std::string& raw, Label& label, std::string& reason) {
     const std::string t = trim(raw);
     if (t.size() >= 2 && t.front() == '"') {
-        if (t.back() != '"') {
-            reason = t.find('"', 1) != std::string::npos ? "unsupported label (text after the quote)"
-                                                          : "unsupported label (unclosed quote)";
+        const size_t close = t.find('"', 1);
+        if (close == std::string::npos) {
+            reason = "unsupported label (unclosed quote)";
             return false;
         }
-        const std::string inner = t.substr(1, t.size() - 2);
-        if (inner.find('"') != std::string::npos) {
+        std::string body = t.substr(1, close - 1);
+        const bool markdown = body.size() >= 2 && body.front() == '`' && body.back() == '`';
+        if (markdown) body = body.substr(1, body.size() - 2);
+        const std::string tail = t.substr(close + 1);
+        if (!trim(tail).empty() && !quotedTail(tail, body)) {
             reason = "unsupported label";
             return false;
         }
-        if (inner.size() >= 2 && inner.front() == '`' && inner.back() == '`')
-            return markdownLabel(inner.substr(1, inner.size() - 2), label, reason);
-        return plainLabel(inner, /*quoted=*/true, label, reason);
+        return markdown ? markdownLabel(body, label, reason)
+                        : plainLabel(body, /*quoted=*/true, label, reason);
     }
     return plainLabel(t, /*quoted=*/false, label, reason);
 }

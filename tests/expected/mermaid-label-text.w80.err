@@ -1,5 +1,5 @@
-mdcat: mermaid-label-text.md:137: mermaid: fallback: html in label
-mdcat: mermaid-label-text.md:142: mermaid: fallback: unsupported entity: #nosuchentity;
-mdcat: mermaid-label-text.md:147: mermaid: fallback: unsupported syntax: a["unclosed] --> b[B]
-mdcat: mermaid-label-text.md:152: mermaid: fallback: html in label
-mdcat: mermaid-label-text.md:157: mermaid: fallback: unsupported label: "say "hi""
+mdcat: mermaid-label-text.md:155: mermaid: fallback: html in label
+mdcat: mermaid-label-text.md:160: mermaid: fallback: unsupported entity: #nosuchentity;
+mdcat: mermaid-label-text.md:165: mermaid: fallback: unsupported syntax: a["unclosed] --> b[B]
+mdcat: mermaid-label-text.md:170: mermaid: fallback: html in label
+mdcat: mermaid-label-text.md:175: mermaid: fallback: unsupported label: "say "hi""
