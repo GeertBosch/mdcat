@@ -1,9 +1,0 @@
-mdcat: mermaid-fallback.md:8: mermaid: fallback: not a flowchart
-mdcat: mermaid-fallback.md:16: mermaid: fallback: not a flowchart
-mdcat: mermaid-fallback.md:24: mermaid: fallback: unsupported syntax: subgraph one
-mdcat: mermaid-fallback.md:33: mermaid: fallback: unsupported syntax: subgraph one
-mdcat: mermaid-fallback.md:43: mermaid: fallback: unsupported syntax: direction LR
-mdcat: mermaid-fallback.md:51: mermaid: fallback: unsupported syntax: A --> end
-mdcat: mermaid-fallback.md:58: mermaid: fallback: unsupported syntax: A o--> B
-mdcat: mermaid-fallback.md:65: mermaid: fallback: unsupported direction
-mdcat: mermaid-fallback.md:72: mermaid: fallback: unsupported shape: doc

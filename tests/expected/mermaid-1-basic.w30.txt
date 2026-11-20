@@ -15,8 +15,9 @@ renders it with --img kitty
 and pinned cell sizes. Other
 terminals, and every diagram
 outside this subset, behave as
-before. mermaid-dag.md covers
-the branching shapes in depth.
+before. mermaid-3-dag.md
+covers the branching shapes in
+depth.
 
 Left to right
 ──────────────────────────────
@@ -27,7 +28,7 @@ arrowhead touches the next
 box's outline, and each label
 is centred in its box.
 
-image @29,0 c=29 r=3 z=0 C=1 png=290x60
+image @30,0 c=29 r=3 z=0 C=1 png=290x60
 ▗▄▄▄▄▄▄   ▗▄▄▄▄▄▄▄   ▗▄▄▄▄▄▄▄
 ▐Parse▐▄▄▟█Render▐▄▄▟█Output▐
 ▐▄▄▄▄▄▟   ▐▄▄▄▄▄▄▟   ▐▄▄▄▄▄▄▟
@@ -43,7 +44,7 @@ run through one column. In
 gmore the diagram scrolls a
 row at a time.
 
-image @44,9 c=11 r=48 z=0 C=1 png=110x960
+image @45,9 c=11 r=48 z=0 C=1 png=110x960
           ▗▄▄▄▄▄▄▄▄
           ▐ Start ▐
           ▐▄▄▄▄▄▄▄▟
@@ -100,7 +101,7 @@ Expected: A above B and C,
 with one arrow from A
 splitting into two.
 
-image @100,9 c=12 r=9 z=0 C=1 png=120x180
+image @101,9 c=12 r=9 z=0 C=1 png=120x180
             ▗▄▄▄▄
             ▐ A ▐
             ▐▄▄▄▟

@@ -5,7 +5,7 @@ a flowchart of boxes is drawn by mdcat itself: the boxes and arrows are one
 transparent image, and the labels are ordinary text in the cells over it. Checked
 by `mermaid-kitty.sh`, which renders it with `--img kitty` and pinned cell sizes.
 Other terminals, and every diagram outside this subset, behave as before.
-`mermaid-dag.md` covers the branching shapes in depth.
+`mermaid-3-dag.md` covers the branching shapes in depth.
 
 ## Left to right
 

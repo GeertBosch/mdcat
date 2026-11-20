@@ -4,13 +4,11 @@
 # PNG (strokes) plus ordinary text rows (labels). Anything else is left to the mmdc / source
 # fallback.
 #
-# Checked here, over tests/mermaid-basic.md (widths 80 and 30, where the LR chain is fitted
-# by tighter spacing), tests/mermaid-dag.md (80 and 44),
-# tests/mermaid-cycles.md (80), tests/mermaid-routing.md (80), tests/mermaid-crossings.md (80),
-# tests/mermaid-syntax.md (80),
-# tests/mermaid-links.md (80), tests/mermaid-edge-labels.md (80 and 44),
-# tests/mermaid-label-text.md (80), tests/mermaid-shapes.md (80), tests/mermaid-fit.md (120, 80 and
-# 50) and tests/mermaid-fallback.md:
+# Checked here, over the fixtures tests/mermaid-<N>-<name>.md, numbered from the basics to the
+# advanced: 1-basic (widths 80 and 30, where the LR chain is fitted by tighter spacing),
+# 2-fallback, 3-dag (80 and 44), 4-routing (80), 5-crossings (80), 6-syntax (80), 7-links (80),
+# 8-edge-labels (80 and 44), 9-label-text (80), 10-shapes (80), 11-cycles (80) and 12-fit (120, 80
+# and 50):
 #   - tests/kitty-preview.py's rendering of the output of `mdcat --mermaid builtin` (text plus each
 #     image as quadrant blocks) equals tests/expected/<fixture>.w<N>.txt, and the
 #     MDCAT_MERMAID_DEBUG=1 stderr equals <fixture>.w<N>.err (UPDATE=1 rewrites both). The
@@ -119,23 +117,23 @@ golden_case() {
     fi
 }
 
-golden_case mermaid-fallback 80
-golden_case mermaid-dag 44
-golden_case mermaid-dag 80
-golden_case mermaid-cycles 80
-golden_case mermaid-routing 80
-golden_case mermaid-crossings 80
-golden_case mermaid-syntax 80
-golden_case mermaid-links 80
-golden_case mermaid-edge-labels 80
-golden_case mermaid-edge-labels 44
-golden_case mermaid-label-text 80 ansi
-golden_case mermaid-shapes 80
-golden_case mermaid-basic 30
-golden_case mermaid-basic 80
-golden_case mermaid-fit 120
-golden_case mermaid-fit 80
-golden_case mermaid-fit 50
+golden_case mermaid-1-basic 30
+golden_case mermaid-1-basic 80
+golden_case mermaid-2-fallback 80
+golden_case mermaid-3-dag 44
+golden_case mermaid-3-dag 80
+golden_case mermaid-4-routing 80
+golden_case mermaid-5-crossings 80
+golden_case mermaid-6-syntax 80
+golden_case mermaid-7-links 80
+golden_case mermaid-8-edge-labels 80
+golden_case mermaid-8-edge-labels 44
+golden_case mermaid-9-label-text 80 ansi
+golden_case mermaid-10-shapes 80
+golden_case mermaid-11-cycles 80
+golden_case mermaid-12-fit 120
+golden_case mermaid-12-fit 80
+golden_case mermaid-12-fit 50
 
 # The quadrant previews are too coarse to show the dashes of a dotted link (a dash is 3s px, under
 # half a cell), so read the pixels: along a dotted link every dash but the first and last is 3s px

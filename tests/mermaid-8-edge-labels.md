@@ -9,7 +9,7 @@ none, still split from one box or merge into one on a single bus.
 Checked by `mermaid-kitty.sh` at widths 80 and 44, with `--img kitty` and pinned
 cell sizes. The `.err` golden names the diagrams that are declined, and so are
 shown as source. A diagram too wide for width 44 is drawn wider than it, after
-fitting (see `mermaid-fit.md`) has done what it can.
+fitting (see `mermaid-12-fit.md`) has done what it can.
 
 ## Every syntax (top down)
 
@@ -141,7 +141,7 @@ graph LR
 
 Expected: shown as source, as the `.err` golden says. A label over 24 columns is too
 wide; a label with HTML other than a line break, or an invisible link with a label, is
-not drawn. (Quoted and Markdown labels are drawn: `mermaid-label-text.md`.)
+not drawn. (Quoted and Markdown labels are drawn: `mermaid-9-label-text.md`.)
 
 ```mermaid
 graph TD

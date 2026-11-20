@@ -2,7 +2,7 @@
 
 Directions, statement forms, and syntax that is understood but has no visual
 effect. Checked by `mermaid-kitty.sh` at width 80, with the fallback reasons in
-`expected/mermaid-syntax.w80.err`.
+`expected/mermaid-6-syntax.w80.err`.
 
 ## Directions
 
@@ -89,7 +89,7 @@ graph LR; A --> B --> C
 ## Chains and `&`
 
 Expected: `a --> b & c --> d` makes `a --> b`, `a --> c`, `b --> d` and `c --> d`.
-(`A & B --> C & D` is in `mermaid-crossings.md`.)
+(`A & B --> C & D` is in `mermaid-5-crossings.md`.)
 
 ```mermaid
 graph TD

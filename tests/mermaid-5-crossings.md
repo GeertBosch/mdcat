@@ -94,7 +94,7 @@ graph TD
 The Mermaid documentation draws `A & B --> C & D`. Written out edge by edge:
 
 Expected: both boxes in the first row link to both boxes in the second. As in
-`mermaid-routing.md`, each source splits its own bus, and they cross twice on
+`mermaid-4-routing.md`, each source splits its own bus, and they cross twice on
 bridges.
 
 ```mermaid

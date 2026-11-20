@@ -12,6 +12,13 @@ Everything outside that subset, and every terminal without the Kitty graphics
 protocol, keeps today's behaviour: an `mmdc` image on a graphics terminal, else
 the source as a code panel.
 
+> **Fixture names.** The steps below name the fixtures as they were written. They
+> have since been numbered in the order they were added: `tests/mermaid-basic.md`
+> is now `tests/mermaid-1-basic.md`, then `2-fallback`, `3-dag`, `4-routing`,
+> `5-crossings`, `6-syntax`, `7-links`, `8-edge-labels`, `9-label-text`,
+> `10-shapes`, `11-cycles` and `12-fit`. For the user-facing description of what is
+> drawn, see [MERMAID.md](MERMAID.md).
+
 It is **not** a goal to resemble Mermaid's rendering. Layouts may differ the way
 Mermaid's own layouts differ from each other: v12 lays flowcharts out with ELK by
 default, and `layout: dagre` selects the classic Dagre layout. It **is** a goal
