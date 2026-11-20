@@ -259,7 +259,8 @@ bool parseLabelText(const std::string& raw, Label& label, std::string& reason) {
     const std::string t = trim(raw);
     if (t.size() >= 2 && t.front() == '"') {
         if (t.back() != '"') {
-            reason = "unsupported label";
+            reason = t.find('"', 1) != std::string::npos ? "unsupported label (text after the quote)"
+                                                          : "unsupported label (unclosed quote)";
             return false;
         }
         const std::string inner = t.substr(1, t.size() - 2);
@@ -277,7 +278,14 @@ bool parseLabelText(const std::string& raw, Label& label, std::string& reason) {
 // parseLabelText, with the label as written named in an "unsupported label" reason.
 bool parseLabel(const std::string& raw, Label& label, std::string& reason) {
     if (parseLabelText(raw, label, reason)) return true;
-    if (reason == "unsupported label") reason += ": " + trim(raw);
+    if (reason.compare(0, 17, "unsupported label") == 0) {
+        std::string shown;  // whitespace runs collapsed, so a multi-line label stays on one line
+        for (char c : trim(raw)) {
+            if (c == '\n' || c == '\r' || c == '\t') c = ' ';
+            if (c != ' ' || shown.empty() || shown.back() != ' ') shown += c;
+        }
+        reason += ": " + shown;
+    }
     return false;
 }
 
