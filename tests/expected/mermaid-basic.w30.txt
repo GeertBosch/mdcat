@@ -27,9 +27,10 @@ arrowhead touches the next
 box's outline, and each label
 is centred in its box.
 
-  graph LR
-      parse[Parse] --> render[Render]
-      render --> output[Output]
+image @29,0 c=29 r=3 z=0 C=1 png=290x60
+▗▄▄▄▄▄▄   ▗▄▄▄▄▄▄▄   ▗▄▄▄▄▄▄▄
+▐Parse▐▄▄▟█Render▐▄▄▟█Output▐
+▐▄▄▄▄▄▟   ▐▄▄▄▄▄▄▟   ▐▄▄▄▄▄▄▟
 
 Top down
 ──────────────────────────────

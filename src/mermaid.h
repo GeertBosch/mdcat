@@ -12,7 +12,7 @@
 namespace mermaid {
 
 struct Env {
-    int availCols = 80;         // columns the diagram may occupy
+    int availCols = 80;         // columns the diagram should fit in
     int cellW = 8, cellH = 16;  // real pixels per character cell
     bool darkTheme = false;     // stroke colour follows the theme
     std::function<int(const std::string&)>
@@ -31,10 +31,11 @@ struct Diagram {
 };
 
 // Render the body of a ```mermaid block. Returns false, leaving `out` unspecified, when the
-// diagram is outside the supported subset, wider than env.availCols, or fails validation; `reason`
-// then says why. `why` says what kind of decline it is: Unsupported ones are left to an image from
-// mmdc, TooComplex ones (too many back edges or crossings for the width) are better shown as
-// source than redrawn by anything else.
+// diagram is outside the supported subset or fails validation; `reason` then says why. A diagram
+// is fitted to env.availCols with tighter spacing and wrapped labels; if that fails it is drawn
+// wider than env.availCols. `why` says what kind of decline it is: Unsupported ones are left to an
+// image from mmdc, TooComplex ones (too many back edges or crossings for the width) are better
+// shown as source than redrawn by anything else.
 enum class Decline { Unsupported, TooComplex };
 bool render(const std::vector<std::string>& body,
             const Env& env,

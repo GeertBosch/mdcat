@@ -16,8 +16,10 @@ into one on a single bus. Checked by
 mermaid-kitty.sh at widths 80 and 44, with
 --img kitty and pinned cell sizes. The .err
 golden names the diagrams that are declined,
-and so are shown as source: at width 44,
-those too wide for it.
+and so are shown as source. A diagram too
+wide for width 44 is drawn wider than it,
+after fitting (see mermaid-fit.md) has done
+what it can.
 
 Every syntax (top down)
 ────────────────────────────────────────────
@@ -32,12 +34,18 @@ a larger arrowhead, and --o and --x end in a
 circle and an X. A space between --> and |
 makes no difference.
 
-  graph TD
-      a1[one] -- text --> b1[arrow]
-      a2[two] -->|pipe| b2[arrow]
-      a3[three] -- open --- b3[open]
-      a4[four] ---|open| b4[open]
-      a5[five] -. dots .-> b5[dotted]
+image @36,1 c=41 r=11 z=0 C=1 png=410x220
+  ▗▄▄▄▄   ▗▄▄▄▄  ▗▄▄▄▄▄▄ ▗▄▄▄▄▄▄  ▗▄▄▄▄▄▄
+  ▐one▐   ▐two▐  ▐three▐ ▐four ▐  ▐five ▐
+  ▐▄▄▄▟   ▐▄▄▄▟  ▐▄▄▄▄▄▟ ▐▄▄▄▄▄▟  ▐▄▄▄▄▄▟
+    ▐       ▐       ▐       ▐        ▐
+    ▐       ▐       ▐       ▐        ▐
+  text    pipe    open    open     dots
+    ▐       ▐       ▐       ▐        ▐
+    ▐       ▐       ▐       ▐        ▐
+ ▗▄▄█▙▄▄ ▗▄▄█▙▄▄ ▗▄▄▟▄▄▄ ▗▄▄▟▄▄▄ ▗▄▄▄█▙▄▄▄
+ ▐arrow▐ ▐arrow▐ ▐open ▐ ▐open ▐ ▐dotted ▐
+ ▐▄▄▄▄▄▟ ▐▄▄▄▄▄▟ ▐▄▄▄▄▄▟ ▐▄▄▄▄▄▟ ▐▄▄▄▄▄▄▄▟
 
 Every syntax, continued (top down)
 ────────────────────────────────────────────
@@ -47,13 +55,18 @@ Expected: the remaining spellings. == text
 dotted, and the marker on the left of <--
 text --> is an arrowhead at the source.
 
-  graph TD
-      a1[one] == text ==> b1[thick]
-      a2[two] ==>|pipe| b2[thick]
-      a3[three] -.->|pipe| b3[dotted]
-      a4[four] -- circle --o b4[circle]
-      a5[five] -- cross --x b5[cross]
-      a6[six] <-- both --> b6[both]
+image @56,0 c=51 r=11 z=0 C=1 png=510x220
+ ▗▄▄▄▄   ▗▄▄▄▄   ▗▄▄▄▄▄▄   ▗▄▄▄▄▄▄  ▗▄▄▄▄▄▄  ▗▄▄▄▄
+ ▐one▐   ▐two▐   ▐three▐   ▐four ▐  ▐five ▐  ▐six▐
+ ▐▄▄▄▟   ▐▄▄▄▟   ▐▄▄▄▄▄▟   ▐▄▄▄▄▄▟  ▐▄▄▄▄▄▟  ▐▄▄▄▟
+   █       █        ▐         ▐        ▐       ▜▘
+   █       █        ▐         ▐        ▐       ▐
+ text    pipe     pipe     circle    cross   both
+   █       █        ▐         ▐        ▐       ▐
+  ▗█▖     ▗█▖       ▐         ▐        ▐       ▐
+▗▄▄█▄▄▄ ▗▄▄█▄▄▄ ▗▄▄▄█▙▄▄▄ ▗▄▄▄█▄▄▄▄ ▗▄▄█▄▄▄ ▗▄▄█▙▄▄
+▐thick▐ ▐thick▐ ▐dotted ▐ ▐circle ▐ ▐cross▐ ▐both ▐
+▐▄▄▄▄▄▟ ▐▄▄▄▄▄▟ ▐▄▄▄▄▄▄▄▟ ▐▄▄▄▄▄▄▄▟ ▐▄▄▄▄▄▟ ▐▄▄▄▄▄▟
 
 A decision (top down)
 ────────────────────────────────────────────
@@ -64,7 +77,7 @@ and carrying their labels in a rank of their
 own halfway down. Both branches then meet at
 Done.
 
-image @66,12 c=20 r=27 z=0 C=1 png=200x540
+image @77,12 c=20 r=27 z=0 C=1 png=200x540
                 ▗▄▄▄▄▄▄▄▄
                 ▐ Input ▐
                 ▐▄▄▄▄▄▄▄▟
@@ -101,12 +114,14 @@ Each label sits on its edge in a column of
 its own between the boxes, and the edge is
 cut a little before it and a little after.
 
-  graph LR
-      input[Input] --> check[Valid?]
-      check -->|yes| run[Run]
-      check -->|no| fix[Fix it]
-      run --> done[Done]
-      fix --> done
+image @113,0 c=46 r=7 z=0 C=1 png=460x140
+                           ▗▄▄▄▄
+                         ▗▟█Run▐▄▄▄▄▄▄▄
+▗▄▄▄▄▄▄   ▗▄▄▄▄▄▄▄ ▗▖yes▗▛ ▐▄▄▄▟      ▐ ▗▄▄▄▄▄
+▐Input▐▄▄▟█Valid?▐▄█                  █▟█Done▐
+▐▄▄▄▄▄▟   ▐▄▄▄▄▄▄▟ ▐▖no▗▄▄ ▗▄▄▄▄▄▄▄   ▐ ▐▄▄▄▄▟
+                         ▐▟█Fix it▐▄▄▄▛
+                           ▐▄▄▄▄▄▄▟
 
 A label on a long link (top down)
 ────────────────────────────────────────────
@@ -118,7 +133,7 @@ past it. The edge a -->|one| d is one step
 long, so its label sits one step down,
 beside nothing.
 
-image @119,7 c=29 r=22 z=0 C=1 png=290x440
+image @131,7 c=29 r=22 z=0 C=1 png=290x440
                   ▗▄▄▄▄▄▄▄▄
                   ▐ Start ▐
                   ▐▄▄▄▄▄▄▄▟
@@ -148,7 +163,7 @@ Other directions (bottom to top, right to left)
 Expected: labels are never mirrored, and the
 arrowheads still point the true way.
 
-image @148,16 c=11 r=19 z=0 C=1 png=110x380
+image @160,16 c=11 r=19 z=0 C=1 png=110x380
                   ▗▄▄▄▄▄▄
                   ▐ End ▐
                   ▐▄▄▄▄▄▟
@@ -169,9 +184,10 @@ image @148,16 c=11 r=19 z=0 C=1 png=110x380
                  ▐ Start ▐
                  ▐▄▄▄▄▄▄▄▟
 
-  graph RL
-      a[Start] -->|left| b[Middle]
-      b -->|more| c[End]
+image @180,2 c=40 r=3 z=0 C=1 png=400x60
+  ▗▄▄▄▄          ▗▄▄▄▄▄▄▄          ▗▄▄▄▄▄▄
+  ▐End▐█▄▖more▗▄▄▟Middle▐█▄▖left▗▄▄▟Start▐
+  ▐▄▄▄▟          ▐▄▄▄▄▄▄▟          ▐▄▄▄▄▄▟
 
 Two labelled edges into one target (top down)
 ────────────────────────────────────────────
@@ -181,7 +197,7 @@ unlabelled one from C all arrive at Target
 through one port, on one bus, with one
 arrowhead.
 
-image @180,12 c=19 r=13 z=0 C=1 png=190x260
+image @192,12 c=19 r=13 z=0 C=1 png=190x260
             ▗▄▄▄▄  ▗▄▄▄▄  ▗▄▄▄▄
             ▐ A ▐  ▐ B ▐  ▐ C ▐
             ▐▄▄▄▟  ▐▄▄▄▟  ▐▄▄▄▟
@@ -201,7 +217,7 @@ Two labelled edges into one target (left to right)
 
 Expected: as above, turned on its side.
 
-image @199,7 c=29 r=11 z=0 C=1 png=290x220
+image @211,7 c=29 r=11 z=0 C=1 png=290x220
        ▗▄▄▄▄
        ▐ A ▐▄▄▄▖first▗▄▄
        ▐▄▄▄▟           ▐
@@ -222,9 +238,14 @@ written on, so in a chain only the second
 link has one, and & gives the same label to
 each edge.
 
-  graph LR
-      a[Start] --> b[Middle] -->|labelled| c[End]
-      c -->|fan| d[One] & e[Two]
+image @231,0 c=51 r=7 z=0 C=1 png=510x140
+                                              ▗▄▄▄▄
+                                            ▗▟█One▐
+▗▄▄▄▄▄▄   ▗▄▄▄▄▄▄▄              ▗▄▄▄▄ ▗▖fan▗▛ ▐▄▄▄▟
+▐Start▐▄▄▟█Middle▐▄▄▖labelled▗▄▟█End▐▄█
+▐▄▄▄▄▄▟   ▐▄▄▄▄▄▄▟              ▐▄▄▄▟ ▐▖fan▗▄ ▗▄▄▄▄
+                                            ▐▟█Two▐
+                                              ▐▄▄▄▟
 
 Declined
 ────────────────────────────────────────────

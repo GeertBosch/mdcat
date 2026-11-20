@@ -261,8 +261,9 @@ inline bool labelFits(Shape sh, const Footprint& f, int labelW, int lines, int c
 // The size of a node of the given shape around a label of labelW columns and `lines` lines, for
 // cells cw x ch pixels. For a top-down graph the width is odd, so that the footprint's centre lies
 // on a whole column and arrows can be exactly vertical.
-inline Footprint footprint(Shape sh, int labelW, int lines, bool td, int cw, int ch) {
-    Footprint f{labelW + tune::kNodePad, lines + tune::kNodeFrame, 1};
+inline Footprint footprint(
+    Shape sh, int labelW, int lines, bool td, int cw, int ch, int nodePad = tune::kNodePad) {
+    Footprint f{labelW + nodePad, lines + tune::kNodeFrame, 1};
     switch (sh) {
     case Shape::Stadium:
     case Shape::Subroutine:
@@ -276,7 +277,7 @@ inline Footprint footprint(Shape sh, int labelW, int lines, bool td, int cw, int
         // The lid is half a row tall whatever the width, so a narrow cylinder would get a lid
         // that looks far deeper than a wide one's. Give it at least the width of a middling label,
         // of the label's parity so that the label is exactly centred.
-        f.cols = std::max(labelW, tune::kMinCylinderLabel + labelW % 2) + tune::kNodePad;
+        f.cols = std::max(labelW, tune::kMinCylinderLabel + labelW % 2) + nodePad;
         f.rows += 1;
         f.labelRow = 2;
         break;

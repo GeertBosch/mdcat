@@ -264,8 +264,9 @@ Graphics make the route easier to read:
 
 - The terminal is not Kitty, or images are disabled.
 - A parse error, an unknown statement, or an unsupported construct.
-- The laid-out width exceeds the available width. That is `terminalWidth()`,
-  which already accounts for list and quote indentation via `gIndent`.
+- ~~The laid-out width exceeds the available width.~~ Since Step 16 this is no
+  gate: the diagram is fitted (below), and if it still is too wide it is drawn
+  wider than `terminalWidth()`, as text rows and an image longer than the line.
 - More edge crossings than the width allows: one per `kColsPerCrossing` (10)
   columns of `terminalWidth()`, so 8 at width 80. A terminal narrower than
   `kMinGateCols` (72) counts as 72 wide for this limit and the next. (It was a flat 2, then 3, before
@@ -1061,7 +1062,13 @@ Work:
    - wrapping labels that contain spaces at 24, then 16, then 12 columns, on
      word boundaries only.
 
-   Never switch direction.
+   Never switch direction. The attempts are tried in turn, each cumulative, and
+   the first that fits `terminalWidth()` is drawn. **Changed from the original
+   plan:** if none fits, the narrowest is drawn anyway, wider than the
+   terminal, instead of falling back. The reader can widen the terminal or
+   scroll sideways in a pager that does not wrap lines. An attempt that fails
+   (for instance validation at the tighter padding) is skipped. Only the first
+   attempt's failure declines the diagram.
 2. **Calibration.** Take the Mermaid docs examples that fall within the subset,
    as a scratch corpus that is not committed. Render them at 80 and 120 columns,
    in the previewer and in a Kitty terminal, and review each picture.
@@ -1076,7 +1083,9 @@ Work:
      tier.
 
 **Tests:** `tests/mermaid-fit.md`, with goldens at w120, w80 and w50 showing
-progressive fitting, and a fallback reason (`.err`) at the narrowest width.
+progressive fitting, the narrowest drawn wider than 50 columns (so the `.err`
+goldens are empty). The `too wide` goldens of `mermaid-basic` (w30) and
+`mermaid-edge-labels` (w44) became drawn diagrams.
 
 ## Out of scope (always fall back)
 

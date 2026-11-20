@@ -257,6 +257,20 @@ boxes, each with ports of its own: `Valid?` and `Report` have one each way, and 
 the same way run side by side too. Of several self-loops on a box only the last is drawn,
 as in `mmdc`.
 
+A diagram wider than the terminal is fitted before anything else: first with tighter
+spacing, then with its labels wrapped at spaces, at 24, 16 and then 12 columns, and never
+turned on its side. This chain is 98 columns wide at its natural size, and draws in about 75
+when the terminal is 80 wide. If nothing makes a diagram fit, it is drawn wider than the
+terminal rather than given up on, so widen the window or scroll sideways in a pager that
+doesn't wrap lines:
+
+```mermaid
+graph LR
+    read[Read the input file] --> parse[Parse every line]
+    parse --> check[Validate the result]
+    check --> write[Write the output]
+```
+
 Labels follow Mermaid's rules for text. A quoted label, `a["x (y) [z]"]`, may hold
 brackets and other syntax; entity codes such as `#quot;`, `#35;` and `#9829;` stand
 for their characters; `<br>` starts a new line, and the box grows a row for each line,

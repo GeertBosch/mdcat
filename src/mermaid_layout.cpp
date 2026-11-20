@@ -334,8 +334,12 @@ void addTitle(Layout& lay, int width) {
 
 }  // namespace
 
-bool layoutGraph(
-    const Graph& original, const Env& env, Layout& lay, std::string& reason, Decline& why) {
+bool layoutGraph(const Graph& original,
+                 const Env& env,
+                 const Fit& fit,
+                 Layout& lay,
+                 std::string& reason,
+                 Decline& why) {
     const size_t n = original.nodes.size();
     if (original.edges.empty()) {
         reason = "no edges";
@@ -522,7 +526,8 @@ bool layoutGraph(
                                                     static_cast<int>(g.nodes[i].label.lines.size()),
                                                     td,
                                                     std::max(1, env.cellW),
-                                                    std::max(1, env.cellH));
+                                                    std::max(1, env.cellH),
+                                                    fit.nodePad);
         nodeW[i] = f.cols;
         nodeH[i] = f.rows;
         labelRow[i] = f.labelRow;
@@ -802,7 +807,7 @@ bool layoutGraph(
 
     // Placement across the flow. Pack each rank, then in one pass from the first rank on, move each
     // item toward the mean centre of the items its edges come from.
-    const int sep = td ? tune::kSepTd : tune::kSepLr;
+    const int sep = td ? fit.sepTd : tune::kSepLr;
     for (const std::vector<int>& row : order) {
         int at = 0;
         for (int id : row) {
@@ -997,7 +1002,7 @@ bool layoutGraph(
         const bool lean = labelled && used == 0 && (plain[r] || plain[r + 1]) && !labelRank[r] &&
             !labelRank[r + 1];
         int gap = td ? (lean ? tune::kGapTd - 1 : tune::kGapTd + used)
-                     : (lean ? tune::kGapLr / 2 : std::max(tune::kGapLr, used + 2));
+                     : (lean ? fit.gapLr / 2 : std::max(fit.gapLr, used + 2));
         start[r + 1] = start[r] + thick[r] + gap;
     }
     const int along = start[ranks - 1] + thick[ranks - 1];

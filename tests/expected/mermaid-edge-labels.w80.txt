@@ -9,7 +9,8 @@ label always has a rank to sit in. A label doesn't stop its edge from sharing a
 port: edges with different labels, or none, still split from one box or merge
 into one on a single bus. Checked by mermaid-kitty.sh at widths 80 and 44, with
 --img kitty and pinned cell sizes. The .err golden names the diagrams that are
-declined, and so are shown as source: at width 44, those too wide for it.
+declined, and so are shown as source. A diagram too wide for width 44 is drawn
+wider than it, after fitting (see mermaid-fit.md) has done what it can.
 
 Every syntax (top down)
 ────────────────────────────────────────────────────────────────────────────────
@@ -20,7 +21,7 @@ midway between the two boxes. -- text --> and -->|text| draw the same arrow, and
 is thick with a larger arrowhead, and --o and --x end in a circle and an X. A
 space between --> and | makes no difference.
 
-image @22,12 c=55 r=11 z=0 C=1 png=550x220
+image @23,12 c=55 r=11 z=0 C=1 png=550x220
              ▗▄▄▄▄▄▄    ▗▄▄▄▄▄▄   ▗▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄   ▗▄▄▄▄▄▄▄▄
              ▐ one ▐    ▐ two ▐   ▐ three ▐  ▐ four  ▐   ▐ five  ▐
              ▐▄▄▄▄▄▟    ▐▄▄▄▄▄▟   ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟   ▐▄▄▄▄▄▄▄▟
@@ -40,7 +41,7 @@ Expected: the remaining spellings. == text ==> and ==>|text| are thick,
 -.->|text| is dotted, and the marker on the left of <-- text --> is an arrowhead
 at the source.
 
-image @41,6 c=68 r=11 z=0 C=1 png=680x220
+image @42,6 c=68 r=11 z=0 C=1 png=680x220
        ▗▄▄▄▄▄▄    ▗▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄   ▗▄▄▄▄▄▄▄▄   ▗▄▄▄▄▄▄
        ▐ one ▐    ▐ two ▐    ▐ three ▐    ▐ four  ▐   ▐ five  ▐   ▐ six ▐
        ▐▄▄▄▄▄▟    ▐▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▟   ▐▄▄▄▄▄▄▄▟   ▐▄▄▄▄▄▟
@@ -60,7 +61,7 @@ Expected: Valid? has two labelled branches, yes and no, both leaving it through
 one port and carrying their labels in a rank of their own halfway down. Both
 branches then meet at Done.
 
-image @60,30 c=20 r=27 z=0 C=1 png=200x540
+image @61,30 c=20 r=27 z=0 C=1 png=200x540
                                   ▗▄▄▄▄▄▄▄▄
                                   ▐ Input ▐
                                   ▐▄▄▄▄▄▄▄▟
@@ -96,7 +97,7 @@ Expected: the same graph turned on its side. Each label sits on its edge in a
 column of its own between the boxes, and the edge is cut a little before it and
 a little after.
 
-image @95,10 c=60 r=7 z=0 C=1 png=600x140
+image @96,10 c=60 r=7 z=0 C=1 png=600x140
                                              ▗▄▄▄▄▄▄
                                           ▗▄▟█ Run ▐▄▄▄▄▄▄▄▄
           ▗▄▄▄▄▄▄▄▄     ▗▄▄▄▄▄▄▄▄▄ ▗▄▖yes▗▛  ▐▄▄▄▄▄▟       ▐  ▗▄▄▄▄▄▄▄
@@ -112,7 +113,7 @@ Expected: a -- skip ---> c is two steps long, so its label sits beside Middle,
 the box halfway down, and the edge runs straight past it. The edge a -->|one| d
 is one step long, so its label sits one step down, beside nothing.
 
-image @110,25 c=29 r=22 z=0 C=1 png=290x440
+image @111,25 c=29 r=22 z=0 C=1 png=290x440
                                     ▗▄▄▄▄▄▄▄▄
                                     ▐ Start ▐
                                     ▐▄▄▄▄▄▄▄▟
@@ -142,7 +143,7 @@ Other directions (bottom to top, right to left)
 Expected: labels are never mirrored, and the arrowheads still point the true
 way.
 
-image @139,34 c=11 r=19 z=0 C=1 png=110x380
+image @140,34 c=11 r=19 z=0 C=1 png=110x380
                                     ▗▄▄▄▄▄▄
                                     ▐ End ▐
                                     ▐▄▄▄▄▄▟
@@ -163,7 +164,7 @@ image @139,34 c=11 r=19 z=0 C=1 png=110x380
                                    ▐ Start ▐
                                    ▐▄▄▄▄▄▄▄▟
 
-image @159,15 c=50 r=3 z=0 C=1 png=500x60
+image @160,15 c=50 r=3 z=0 C=1 png=500x60
                ▗▄▄▄▄▄▄            ▗▄▄▄▄▄▄▄▄▄            ▗▄▄▄▄▄▄▄▄
                ▐ End ▐█▄▄▖more▗▄▄▄▟ Middle ▐█▄▄▖left▗▄▄▄▟ Start ▐
                ▐▄▄▄▄▄▟            ▐▄▄▄▄▄▄▄▄▟            ▐▄▄▄▄▄▄▄▟
@@ -174,7 +175,7 @@ Two labelled edges into one target (top down)
 Expected: the two labelled edges and the unlabelled one from C all arrive at
 Target through one port, on one bus, with one arrowhead.
 
-image @169,30 c=19 r=13 z=0 C=1 png=190x260
+image @170,30 c=19 r=13 z=0 C=1 png=190x260
                               ▗▄▄▄▄  ▗▄▄▄▄  ▗▄▄▄▄
                               ▐ A ▐  ▐ B ▐  ▐ C ▐
                               ▐▄▄▄▟  ▐▄▄▄▟  ▐▄▄▄▟
@@ -194,7 +195,7 @@ Two labelled edges into one target (left to right)
 
 Expected: as above, turned on its side.
 
-image @188,25 c=29 r=11 z=0 C=1 png=290x220
+image @189,25 c=29 r=11 z=0 C=1 png=290x220
                          ▗▄▄▄▄
                          ▐ A ▐▄▄▄▖first▗▄▄
                          ▐▄▄▄▟           ▐
@@ -213,7 +214,7 @@ Chains and groups
 Expected: a label belongs to the link it is written on, so in a chain only the
 second link has one, and & gives the same label to each edge.
 
-image @206,7 c=65 r=7 z=0 C=1 png=650x140
+image @207,7 c=65 r=7 z=0 C=1 png=650x140
                                                                  ▗▄▄▄▄▄▄
                                                               ▗▄▟█ One ▐
        ▗▄▄▄▄▄▄▄▄     ▗▄▄▄▄▄▄▄▄▄                ▗▄▄▄▄▄▄ ▗▄▖fan▗▛  ▐▄▄▄▄▄▟

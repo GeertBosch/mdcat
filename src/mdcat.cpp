@@ -30,7 +30,8 @@
 // renderMath and scanMath. A ```mermaid fenced code block is rendered as a diagram via the mermaid
 // CLI (mmdc) when it and a graphics terminal are available; otherwise it falls back to ordinary
 // code. See renderMermaidBlock. On a Kitty-graphics terminal, a flowchart that mermaid.h
-// understands is drawn by mdcat itself instead: strokes as one PNG, labels as real text.
+// understands is drawn by mdcat itself instead: strokes as one PNG, labels as real text, fitted to
+// the width by tighter spacing and wrapped labels, or drawn wider than the terminal if need be.
 // --mermaid / $MDCAT_MERMAID picks the chain; $MDCAT_MERMAID_DEBUG=1 reports builtin rejections.
 //
 // Build:  c++ -std=c++17 -O2 -o mdcat mdcat.cpp

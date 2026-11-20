@@ -125,6 +125,13 @@ constexpr int kMinCylinderLabel =
     8;  // columns a cylinder is at least as wide as its label ("database")
 }  // namespace tune
 
+// The spacing the layout uses. Fitting a diagram to the width tries tighter ones in turn.
+struct Fit {
+    int sepTd = tune::kSepTd;      // columns between neighbouring footprints in a top-down rank
+    int gapLr = tune::kGapLr;      // columns between two left-to-right ranks, at least
+    int nodePad = tune::kNodePad;  // columns a node adds around its label
+};
+
 // Parse the body of a ```mermaid block. On failure `reason` is one of the stable fallback reasons.
 bool parseFlowchart(const std::vector<std::string>& body, Graph& g, std::string& reason);
 
@@ -136,7 +143,8 @@ bool parseFlowchart(const std::vector<std::string>& body, Graph& g, std::string&
 // node's item holds after it. Does not check the width against the environment; the caller
 // compares `lay.cols` with Env::availCols. Declines with Decline::TooComplex, instead of the usual
 // Unsupported, a graph with more back edges or crossings than the width allows.
-bool layoutGraph(const Graph& g, const Env& env, Layout& lay, std::string& reason, Decline& why);
+bool layoutGraph(
+    const Graph& g, const Env& env, const Fit& fit, Layout& lay, std::string& reason, Decline& why);
 
 // The points, in half-cell units, where one edge's path crosses another's without either path
 // ending or bending there. Where one edge bends off a run that another passes straight along, the

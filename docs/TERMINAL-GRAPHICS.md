@@ -521,7 +521,9 @@ bands taller than the screen on VSCode (case K).
 **Rule:** if a terminal fails case A or case C at `z=-1` and also fails them at
 `z=0` (B and H), the built-in diagram renderer is denied on that terminal (matched on
 `TERM_PROGRAM`, in Step 1 of the Mermaid plan or as a follow-up) and mdcat falls back
-to the existing `mmdc` image or code panel. Cases D, E, F and G (and I–L) tune the
+to the second tier, the `mmdc` image, or else the code panel. A diagram too wide for the
+terminal is not a reason to fall back: it is fitted, and if it still does not fit it is
+drawn wider than the terminal, with text rows longer than the screen. Cases D, E, F and G (and I–L) tune the
 emission (which `z` to send, whether the text rows may contain plain spaces, whether
 a tall band is safe) rather than gate the feature.
 

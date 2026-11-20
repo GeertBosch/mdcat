@@ -8,7 +8,8 @@ has a rank to sit in. A label doesn't stop its edge from sharing a port: edges w
 none, still split from one box or merge into one on a single bus.
 Checked by `mermaid-kitty.sh` at widths 80 and 44, with `--img kitty` and pinned
 cell sizes. The `.err` golden names the diagrams that are declined, and so are
-shown as source: at width 44, those too wide for it.
+shown as source. A diagram too wide for width 44 is drawn wider than it, after
+fitting (see `mermaid-fit.md`) has done what it can.
 
 ## Every syntax (top down)
 
