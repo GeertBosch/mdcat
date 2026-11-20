@@ -1043,9 +1043,8 @@ Work:
   arrowhead. It adds `ceil(2 * arrowhead length / cell size)` columns (TD) or rows
   (LR) to the node's item, 2 columns and 1 row at 10×20 px cells, so that the
   arrowhead and a rounded corner fit in the run. A label sits beyond the loop and
-  adds its width (TD) or height (LR) as well. A node has at most one self-loop:
-  repeats with the same label (or none) are dropped, as `mmdc` does, and different
-  labels on several ⇒ fallback.
+  adds its width (TD) or height (LR) as well. A node has one self-loop: of
+  several, the last is drawn and the rest are dropped, as `mmdc` does.
 - **Parallel edges** (A→B more than once, or A→B together with B→A): each gets
   its own port pair and track, however many there are. Labels still go on label
   nodes.

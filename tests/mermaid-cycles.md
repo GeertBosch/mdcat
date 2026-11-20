@@ -376,9 +376,10 @@ graph TD
 
 ## Repeated self-loops
 
-Expected: as in `mmdc`, a self-loop repeated with the same label (or with none) is drawn
-once, so the first diagram is a single plain loop on `A` and the second a single loop
-labelled `x`.
+Expected: as in `mmdc`, a node has one self-loop, the last one written, whatever the labels
+of the others. So the first diagram is a single plain loop on `A`, the second a single loop
+labelled `x`, and the third a single loop labelled `last`, as the plain loop and the `first`
+one before it are dropped.
 
 ```mermaid
 graph TD
@@ -394,13 +395,10 @@ graph TD
     A --> B
 ```
 
-## Two different self-loops on one node (declined)
-
-Expected: a box has room for one loop. With different labels on several the builtin declines
-with `parallel edges`, and the source is shown.
-
 ```mermaid
 graph TD
     A --> A
-    A -->|x| A
+    A -->|first| A
+    A -->|last| A
+    A --> B
 ```

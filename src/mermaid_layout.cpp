@@ -345,21 +345,19 @@ bool layoutGraph(
         reason = "too many nodes";
         return false;
     }
-    // Like mmdc, draw a repeat of a self-loop with the same label (or none) once: the repeats are
-    // dropped, by making them invisible links, which are not drawn. A node keeps one loop; with
-    // different labels on several the layout has no room, so such a diagram is declined.
+    // Like mmdc, draw only the last of several self-loops on a node, whatever their labels: the
+    // others are dropped, by making them invisible links, which are not drawn.
     Graph source = original;
     {
-        std::set<std::pair<int, std::vector<std::string>>> seenLoop;
-        std::map<int, int> loops;
-        for (Edge& e : source.edges) {
-            if (e.from != e.to || e.line == Line::Invisible) continue;
-            if (!seenLoop.insert({e.from, e.label.lines}).second) {
+        std::map<int, size_t> last;
+        for (size_t k = 0; k < source.edges.size(); ++k) {
+            const Edge& e = source.edges[k];
+            if (e.from == e.to && e.line != Line::Invisible) last[e.from] = k;
+        }
+        for (size_t k = 0; k < source.edges.size(); ++k) {
+            Edge& e = source.edges[k];
+            if (e.from == e.to && e.line != Line::Invisible && last[e.from] != k)
                 e.line = Line::Invisible;
-            } else if (++loops[e.from] > 1) {
-                reason = "parallel edges";
-                return false;
-            }
         }
     }
     // A self-loop is no part of the ranked graph: it is drawn beside its node (see below).

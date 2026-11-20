@@ -610,11 +610,12 @@ image @561,32 c=15 r=17 z=0 C=1 png=150x340
 Repeated self-loops
 ────────────────────────────────────────────────────────────────────────────────
 
-Expected: as in mmdc, a self-loop repeated with the same label (or with none) is
-drawn once, so the first diagram is a single plain loop on A and the second a
-single loop labelled x.
+Expected: as in mmdc, a node has one self-loop, the last one written, whatever
+the labels of the others. So the first diagram is a single plain loop on A, the
+second a single loop labelled x, and the third a single loop labelled last, as
+the plain loop and the first one before it are dropped.
 
-image @586,36 c=7 r=8 z=0 C=1 png=70x160
+image @587,36 c=7 r=8 z=0 C=1 png=70x160
                                     ▗▄▄▄▄
                                     ▐ A ▐██
                                     ▐▄▄▄▟▀▘
@@ -624,7 +625,7 @@ image @586,36 c=7 r=8 z=0 C=1 png=70x160
                                     ▐ B ▐
                                     ▐▄▄▄▟
 
-image @595,36 c=8 r=8 z=0 C=1 png=80x160
+image @596,36 c=8 r=8 z=0 C=1 png=80x160
                                     ▗▄▄▄▄
                                     ▐ A ▐██x
                                     ▐▄▄▄▟▀▘
@@ -634,13 +635,13 @@ image @595,36 c=8 r=8 z=0 C=1 png=80x160
                                     ▐ B ▐
                                     ▐▄▄▄▟
 
-Two different self-loops on one node (declined)
-────────────────────────────────────────────────────────────────────────────────
-
-Expected: a box has room for one loop. With different labels on several the
-builtin declines with parallel edges, and the source is shown.
-
-  graph TD
-      A --> A
-      A -->|x| A
+image @605,34 c=11 r=8 z=0 C=1 png=110x160
+                                  ▗▄▄▄▄
+                                  ▐ A ▐██last
+                                  ▐▄▄▄▟▀▘
+                                    ▐
+                                    ▐
+                                  ▗▄█▙▄
+                                  ▐ B ▐
+                                  ▐▄▄▄▟
 

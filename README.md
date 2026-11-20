@@ -254,8 +254,8 @@ tangled to read: it is shown as source, and `mmdc` is not asked to redraw it.
 A box may point at itself, as `Ship` does: the loop is drawn beside the box, to its right
 (below it, left to right), and its label sits beyond it. Two edges may join the same pair of
 boxes, each with ports of its own: `Valid?` and `Report` have one each way, and any number
-the same way run side by side too. A repeated self-loop with the same label is drawn once,
-as in `mmdc`; a node with two differently labelled loops is declined.
+the same way run side by side too. Of several self-loops on a box only the last is drawn,
+as in `mmdc`.
 
 Labels follow Mermaid's rules for text. A quoted label, `a["x (y) [z]"]`, may hold
 brackets and other syntax; entity codes such as `#quot;`, `#35;` and `#9829;` stand
