@@ -201,171 +201,24 @@ and the terminal supports graphics. Otherwise — `mmdc` missing, or a terminal
 that can't draw graphics — the block falls back to showing its source as an
 ordinary code panel, so the document is never worse off than plain text.
 
-```mermaid
-graph LR
-    parse[Parse] --> render[Render]
-    render --> terminal[Terminal]
-    render --> pager[Pager]
-```
-
-Several edges leaving a box split off one bus, and several arriving merge into one
-arrowhead. Extra dashes make a link span more ranks: `a ---> b` puts `b` two steps
-after `a`, and `a ----> b` three.
-
-Link styles are drawn as they are in Mermaid: `-->` has an arrowhead, `---` is open,
-`-.->` is dotted, `==>` is thick, `--o` and `--x` end in a circle or a cross,
-`<-->`, `o--o` and `x--x` mark both ends, and `~~~` draws nothing but still places
-the boxes. Edges of different styles never share a bus, so below `Build` leaves
-through one port for its dotted link and another for its plain one:
+This one shows a bit of everything: node shapes, a Markdown label, link styles
+(thick, dotted, circle and cross ends), edge labels, a cycle closed by a back edge
+and a self-loop. A diagram wider than the terminal is fitted to it first.
 
 ```mermaid
 graph LR
-    src[Source] ==> build[Build]
-    build -.-> docs[Docs]
-    build --> test[Test]
-    test <--> ci[CI]
-    build --x lint[Lint]
-```
-
-Edges can carry text: `a -->|yes| b`, `a -- yes --> b`, `a -. yes .-> b` and
-`a == yes ==> b`. The label is ordinary, selectable text that sits on its edge,
-halfway between the boxes, and the edge stops just short of it on either side.
-It gets a rank of its own, so diagrams with labels are spaced out twice as far, and
-edges with different labels, or none, still share a bus in a split or merge:
-
-```mermaid
-graph TD
-    input[Input] --> check[Valid?]
-    check -->|yes| build["`**Build** it`"]
-    check -->|no| report[Report]
-    build == all green ==> ship[Ship]
-    report -.-> ship
-    report -->|retry| check
+    src[/Source/] ==> build["`**Build** it`"]
+    build -.-> docs[(Docs)]
+    build --> test{Pass?}
+    test -->|yes| ship([Ship])
+    test -->|no| fix[Fix]
+    fix -->|retry| build
     ship -->|again| ship
+    test --x lint((Lint))
 ```
 
-A graph may have cycles: the edge that closes one, here `retry`, is drawn against the
-flow, from `Report` up to `Valid?`, with an arrowhead at its real target. It leaves and
-arrives through ports of its own, a cell beside the middle, so it never merges with the
-edges running the other way. A box with many ports grows to hold them. A diagram with more
-back edges, or more crossings, than one per ten columns of the terminal's width is too
-tangled to read: it is shown as source, and `mmdc` is not asked to redraw it.
-
-A box may point at itself, as `Ship` does: the loop is drawn beside the box, to its right
-(below it, left to right), and its label sits beyond it. Two edges may join the same pair of
-boxes, each with ports of its own: `Valid?` and `Report` have one each way, and any number
-the same way run side by side too. Of several self-loops on a box only the last is drawn,
-as in `mmdc`.
-
-A diagram wider than the terminal is fitted before anything else: first with tighter
-spacing, then with its labels wrapped at spaces, at 24, 16 and then 12 columns, and never
-turned on its side. This chain is 98 columns wide at its natural size, and draws in about 75
-when the terminal is 80 wide. If nothing makes a diagram fit, it is drawn wider than the
-terminal rather than given up on, so widen the window or scroll sideways in a pager that
-doesn't wrap lines:
-
-```mermaid
-graph LR
-    read[Read the input file] --> parse[Parse every line]
-    parse --> check[Validate the result]
-    check --> write[Write the output]
-```
-
-Labels follow Mermaid's rules for text. A quoted label, `a["x (y) [z]"]`, may hold
-brackets and other syntax; entity codes such as `#quot;`, `#35;` and `#9829;` stand
-for their characters; `<br>` starts a new line, and the box grows a row for each line,
-each centred. A Markdown string, written ``a["`**bold** and *italic*`"]``, is the one
-kind of label that interprets Markdown, and it wraps long text at 24 columns (`build`
-above): a plain label such as `a*b*c` is drawn exactly as written, and front matter
-`config: markdownAutoWrap: false` turns the wrapping off.
-
-Nodes come in the shapes Mermaid has for them: `(rounded)`, `([stadium])`, `((circle))`,
-`(((double circle)))`, `[[subroutine]]`, `[(cylinder)]`, `{rhombus}` and `{{hexagon}}`,
-besides the `[box]`. The curves and slants are drawn as graphics, and an arrowhead
-touches the outline exactly where the edge meets it, even off the middle of a side. Each
-shape takes the room its outline needs to clear the label, so a rhombus is wider and
-taller than a box:
-
-```mermaid
-graph TD
-    start([Start]) --> check{Valid?}
-    check -->|yes| save[(Database)]
-    check -->|no| report((Error))
-    save --> done(((Done)))
-    report --> done
-```
-
-The slanted shapes are there too: the parallelograms `[/in/]` and `[\out\]`, the
-trapezoids `[/priority\]` and `[\manual/]`, and the flag `>odd]`, with a notch in its
-left side. Mermaid's newer form names a shape instead of drawing it, `a@{ shape: db,
-label: "Store" }`, and every short name or alias of the shapes above (`rect`, `rounded`,
-`stadium`, `circle`, `dbl-circ`, `fr-rect`, `cyl`, `diam`, `hex`, `lean-r`, `lean-l`,
-`trap-b`, `trap-t`, `odd`, `decision`, `database`, …) works; a name for a shape that
-isn't drawn here sends the diagram to the fallback, with the name on stderr under
-`MDCAT_MERMAID_DEBUG=1`:
-
-```mermaid
-graph TD
-    read[/Read input/] --> parse{Valid?}
-    parse -->|yes| store@{ shape: db, label: "Store" }
-    parse -->|no| fail>Report error]
-    store --> write[\Write output\]
-```
-
-When edges interleave, each bus gets a track of its own between the ranks. An
-edge that has to cross another passes over it on a bridge, and only a dot marks a
-join. Edges share strokes only in a split from one box or a merge into one box,
-so a drawing never suggests a link that isn't there: below, `Lexer` and `Document`
-each merge their own sources, and `Source` and `Config` each leave through two
-ports, one per merge, instead of joining buses that would lead from one source up
-into another:
-
-```mermaid
-graph TD
-    src[Source] --> lex[Lexer]
-    src --> doc[Document]
-    cfg[Config] --> lex
-    cfg --> doc
-    ext[Extensions] --> lex
-```
-
-Every direction works — `TB`, `TD`, `BT`, `LR`, `RL`, and the `>`, `<`, `^`, `v`
-aliases — with arrowheads pointing the true way and labels never mirrored. Chains
-(`a --> b --> c`), `&` (`a --> b & c`), `;`, comments, a front-matter `title:`
-(shown in bold above the diagram), and syntax that has no visual effect here
-(`style`, `classDef`, `class`, `linkStyle`, `click`, `:::cls`, edge ids,
-accessibility text) are all understood:
-
-```mermaid
----
-title: Right to left, with a chain and a fan-out
----
-graph RL
-    a[Source] --> b[Build] --> c[Test] %% a chain
-    c --> d[Ship] & e[Report]
-    style d fill:#bbf
-```
-
-A diagram taller than the terminal isn't shrunk to fit — `gmore` scrolls
-through it like any other content, revealing more of it a row at a time. This
-one is a sequence diagram, which mdcat's own renderer doesn't draw, so it goes
-to `mmdc`:
-
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant M as mdcat
-    participant C as mmdc
-    participant T as Terminal
-    U->>M: mdcat README.md
-    M->>M: parse the Markdown
-    M->>C: mermaid source
-    C-->>M: PNG
-    M->>T: image, then text
-    T-->>U: rendered document
-    U->>T: scroll in gmore
-    T-->>U: next rows of the diagram
-```
+[docs/MERMAID.md](docs/MERMAID.md) documents all of it: the syntax that is drawn,
+how edges are routed, what is declined and why, and the limits.
 
 ### Unicode 🌍
 
@@ -627,6 +480,8 @@ ssh -o SendEnv=MDCAT_* host mdcat doc.md  # forward MDCAT_GRAPHICS / MDCAT_CELL_
 
 ## Further reading
 
+- [Mermaid diagrams](docs/MERMAID.md) — what the built-in renderer draws, from
+  basic flowcharts to cycles and fitting, what it declines, and its limits.
 - [Terminal graphics ground truth — a field guide](docs/TERMINAL-GRAPHICS.md) —
   the nerd-focused companion: what we measured across terminals, the dead ends, and
   the facts we now rely on for image placement, paging, tables, and SSH.
