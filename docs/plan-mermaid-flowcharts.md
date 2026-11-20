@@ -110,7 +110,7 @@ an override that mirrors `--img` / `MDCAT_GRAPHICS`:
 - **Invalid value:** an error (exit 2 plus usage), exactly like `--img=bogus`.
 - **No Kitty:** `builtin` degrades to source.
 - **Debugging:** with `MDCAT_MERMAID_DEBUG=1`, every builtin rejection prints one
-  line to stderr: `mdcat: mermaid: fallback: <reason>`. Reasons are short,
+  line to stderr: `mdcat: <file>:<line>: mermaid: fallback: <reason>` (`<stdin>` for piped input; `<line>` is the diagram's opening fence, or that of the enclosing block inside a list or quote). Reasons are short,
   stable strings so tests can assert them, for example:
   - `not kitty`, `not a flowchart`, `subgraph`, `overlap`
   - `unsupported shape: doc`
@@ -630,7 +630,7 @@ Work:
      `gMermaidMode` global and add it to `usage()`.
    - Implement the four modes from *Fallback chain and override*.
    - With `MDCAT_MERMAID_DEBUG=1`, print
-     `mdcat: mermaid: fallback: <reason>` whenever the builtin declines. Step 1's
+     `mdcat: <file>:<line>: mermaid: fallback: <reason>` (`<stdin>` for piped input; `<line>` is the diagram's opening fence, or that of the enclosing block inside a list or quote) whenever the builtin declines. Step 1's
      reasons become stable strings: `not kitty`, `not a flowchart`,
      `unsupported syntax: <line>`, `not a simple path`, `too wide: W > N`.
 2. **Harness**: render with `--mermaid builtin`, and compare stderr against

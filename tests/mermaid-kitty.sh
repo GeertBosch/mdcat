@@ -78,8 +78,9 @@ golden_case() {
     txt=$here/expected/$name.w$width.txt
     err=$here/expected/$name.w$width.err
     ansi=$here/expected/$name.w$width.ansi.txt
-    MDCAT_MERMAID_DEBUG=1 mc --img kitty --mermaid builtin --width "$width" "$md" \
-        > "$tmp/out" 2> "$tmp/err"
+    # Run from the fixture's directory so the file:line in the debug output is machine-independent.
+    (cd "$here" && MDCAT_MERMAID_DEBUG=1 mc --img kitty --mermaid builtin --width "$width" \
+        "$name.md") > "$tmp/out" 2> "$tmp/err"
     if [ "${UPDATE:-}" = 1 ]; then
         mkdir -p "$(dirname "$txt")"
         preview "$tmp/out" > "$txt"

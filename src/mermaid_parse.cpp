@@ -255,7 +255,7 @@ bool markdownLabel(const std::string& raw, Label& label, std::string& reason) {
 
 // The label of a node or an edge, from the text `raw` that is written for it: plain text, a quoted
 // string `"..."` (which may hold syntax characters), or a Markdown string `"`...`"`.
-bool parseLabel(const std::string& raw, Label& label, std::string& reason) {
+bool parseLabelText(const std::string& raw, Label& label, std::string& reason) {
     const std::string t = trim(raw);
     if (t.size() >= 2 && t.front() == '"') {
         if (t.back() != '"') {
@@ -272,6 +272,13 @@ bool parseLabel(const std::string& raw, Label& label, std::string& reason) {
         return plainLabel(inner, /*quoted=*/true, label, reason);
     }
     return plainLabel(t, /*quoted=*/false, label, reason);
+}
+
+// parseLabelText, with the label as written named in an "unsupported label" reason.
+bool parseLabel(const std::string& raw, Label& label, std::string& reason) {
+    if (parseLabelText(raw, label, reason)) return true;
+    if (reason == "unsupported label") reason += ": " + trim(raw);
+    return false;
 }
 
 bool reservedId(const std::string& id) {
@@ -846,7 +853,7 @@ struct Parser {
                 if (bar < s.size() && s[bar] == '|') {
                     size_t close = findOutsideQuotes(s, bar + 1, '|');
                     if (close == std::string::npos || link.line == Line::Invisible)
-                        return fail("unsupported label");
+                        return fail("unsupported label: " + trim(s.substr(bar)));
                     if (!parseLabel(s.substr(bar + 1, close - bar - 1), link.label, reason))
                         return false;
                     p = close + 1;

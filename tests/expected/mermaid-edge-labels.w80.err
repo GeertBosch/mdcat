@@ -1,3 +1,3 @@
-mdcat: mermaid: fallback: label too wide: 40 > 24
-mdcat: mermaid: fallback: html in label
-mdcat: mermaid: fallback: unsupported label
+mdcat: mermaid-edge-labels.md:146: mermaid: fallback: label too wide: 40 > 24
+mdcat: mermaid-edge-labels.md:151: mermaid: fallback: html in label
+mdcat: mermaid-edge-labels.md:156: mermaid: fallback: unsupported label: |hidden| b[B]

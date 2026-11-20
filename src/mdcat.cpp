@@ -148,6 +148,11 @@ MermaidMode gMermaidMode = MermaidMode::Auto;
 // Empty string means the current working directory. Set by main() before each render() call.
 std::string gFileDir;
 
+// Name of the file being rendered ("<stdin>" when empty) and the 1-based source line of the
+// top-level block being emitted, so a diagnostic can say where its diagram starts.
+std::string gSourceName;
+size_t gBlockLine = 0;
+
 // --- Remote image trust ----------------------------------------------------------------------
 //
 // Viewing a Markdown file should not fetch arbitrary network resources. mdcat will fetch a remote
@@ -4571,6 +4576,7 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
             continue;
         }  // blank lines separate blocks
         curLine = i;  // the source line separate()'s provenance marker will tag
+        if (gIndent == 0) gBlockLine = i + 1;
 
         // Stream incrementally: flush the output sink before starting the next block, so each block
         // (and any subprocess-rendered image it contains) reaches the terminal as soon as it is
@@ -4631,8 +4637,12 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
                         i = (j < n) ? j + 1 : j;  // skip the closing fence if present
                         continue;
                     }
+                    // Inside a list or quote the lines are re-based, so the location is that of
+                    // the enclosing top-level block.
                     if (std::getenv("MDCAT_MERMAID_DEBUG"))
-                        std::cerr << "mdcat: mermaid: fallback: " << why << "\n";
+                        std::cerr << "mdcat: " << (gSourceName.empty() ? "<stdin>" : gSourceName)
+                                  << ":" << gBlockLine
+                                  << ": mermaid: fallback: " << why << "\n";
                     if (gMermaidMode == MermaidMode::Builtin || tooComplex) {
                         emitCodeBlock(body, lang, out);
                         i = (j < n) ? j + 1 : j;
@@ -5146,9 +5156,11 @@ int main(int argc, char** argv) {
                 }
                 size_t slash = path.rfind('/');
                 gFileDir = (slash != std::string::npos) ? path.substr(0, slash) : std::string();
+                gSourceName = path;
                 render(splitLines(f), out);
             }
             gFileDir.clear();
+            gSourceName.clear();
         } else {
             render(splitLines(std::cin), out);
         }
@@ -5175,6 +5187,7 @@ int main(int argc, char** argv) {
         struct Segment {
             std::string fileDir;
             std::vector<std::string> lines;
+            std::string name;
         };
         std::vector<Segment> segments;
         if (!files.empty()) {
@@ -5187,10 +5200,11 @@ int main(int argc, char** argv) {
                 size_t slash = path.rfind('/');
                 segments.push_back(
                     {slash != std::string::npos ? path.substr(0, slash) : std::string(),
-                     splitLines(f)});
+                     splitLines(f),
+                     path});
             }
         } else {
-            segments.push_back({std::string(), splitLines(std::cin)});
+            segments.push_back({std::string(), splitLines(std::cin), std::string()});
         }
 
         // Page one segment (file) at a time: each gets its own render thread/pipe/gmore::run(),
@@ -5240,9 +5254,11 @@ int main(int argc, char** argv) {
                     SlotSink sink(wfd);
                     std::ostream out(&sink);
                     gFileDir = seg.fileDir;
+                    gSourceName = seg.name;
                     render(seg.lines, out);
                     out.flush();
                     gFileDir.clear();
+                    gSourceName.clear();
                     sink.finish();
                     close(wfd);
                 });

@@ -18,7 +18,7 @@ bool renderMarkdown(Graph& g, const Env& env, int wrap, std::string& reason) {
         int width = 0;
         for (const std::string& line : label.lines) width += env.width(line);
         if (width == 0) {
-            reason = "unsupported label";
+            reason = "unsupported label: " + label.markdown;
             return false;
         }
         return true;
