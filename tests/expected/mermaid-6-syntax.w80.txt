@@ -219,14 +219,14 @@ accessibility text, edge ids and edge properties are all read and dropped.
 
 image @203,34 c=12 r=9 z=0 C=1 png=120x180
                                      ▗▄▄▄▄
-                                     ▐ A ▐
-                                     ▐▄▄▄▟
+                                     ▐█A██
+                                     ▐████
                                        ▐
                                     ▗▄▄█▄▄▄▄
                                     ▐      ▐
                                   ▗▄█▙▄  ▗▄█▙▄
-                                  ▐ B ▐  ▐ C ▐
-                                  ▐▄▄▄▟  ▐▄▄▄▟
+                                  ▐█B██  ▐█C██
+                                  ▐████  ▐████
 
 Multi-line accessibility description
 ────────────────────────────────────────────────────────────────────────────────

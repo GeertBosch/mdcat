@@ -312,6 +312,21 @@ bool parseLabel(const std::string& raw, Label& label, std::string& reason) {
     return false;
 }
 
+// A CSS colour `#rgb` or `#rrggbb` as 0xRRGGBB, or -1 for anything else.
+int parseColor(const std::string& v) {
+    if ((v.size() != 4 && v.size() != 7) || v[0] != '#') return -1;
+    int rgb = 0;
+    for (size_t i = 1; i < v.size(); ++i) {
+        const char c = v[i];
+        if (!std::isxdigit(static_cast<unsigned char>(c))) return -1;
+        const int d = std::isdigit(static_cast<unsigned char>(c))
+            ? c - '0'
+            : std::tolower(static_cast<unsigned char>(c)) - 'a' + 10;
+        rgb = v.size() == 4 ? rgb << 8 | d * 17 : rgb << 4 | d;
+    }
+    return rgb;
+}
+
 bool reservedId(const std::string& id) {
     static const char* const kReserved[] = {"end",
                                             "subgraph",
@@ -514,6 +529,11 @@ struct Parser {
     std::map<std::string, int> index;
     std::set<std::string> edgeIds;
     std::string reason;
+    // Styling is applied once all statements are read, as a class may be defined after its use:
+    // each node gets the styles of its classes in the order they were applied, then its own.
+    std::map<std::string, Style> classDefs;
+    std::map<int, std::vector<std::string>> nodeClasses;
+    std::map<int, Style> nodeStyles;
 
     bool fail(const std::string& why) {
         reason = why;
@@ -556,10 +576,10 @@ struct Parser {
     }
 
     // The node `id` or `id` followed by a shape and its text (`id[text]`, `id(text)`, `id{text}`
-    // and so on, or `id@{ shape: name, label: "text" }`), with an optional `:::class` that has no
-    // effect, at s[p], with surrounding spaces skipped. A later text or shape for a node replaces
-    // the earlier one.
+    // and so on, or `id@{ shape: name, label: "text" }`), with an optional `:::class`, at s[p],
+    // with surrounding spaces skipped. A later text or shape for a node replaces the earlier one.
     bool parseNode(const std::string& s, size_t& p, int& node) {
+        std::string cls;
         while (p < s.size() && s[p] == ' ') ++p;
         size_t b = p;
         p = idEnd(s, p);
@@ -620,6 +640,7 @@ struct Parser {
         if (s.compare(p, 3, ":::") == 0) {
             size_t e = idEnd(s, p + 3);
             if (e == p + 3) return fail(kUnsupportedSyntax);
+            cls = s.substr(p + 3, e - p - 3);
             p = e;
         }
         while (p < s.size() && s[p] == ' ') ++p;
@@ -636,6 +657,7 @@ struct Parser {
         if (labelled) g.nodes[static_cast<size_t>(it->second)].label = label;
         if (shaped) g.nodes[static_cast<size_t>(it->second)].shape = shape;
         node = it->second;
+        if (!cls.empty()) nodeClasses[node].push_back(cls);
         return true;
     }
 
@@ -687,7 +709,7 @@ struct Parser {
         if (r >= s.size()) return false;
         if (word == "accTitle") return s[r] == ':';
         if (word == "accDescr") return s[r] == ':' || (s[r] == '{' && s.back() == '}');
-        static const char* const kStyling[] = {"style", "classDef", "class", "linkStyle", "click"};
+        static const char* const kStyling[] = {"linkStyle", "click"};
         // `click --> B` is a reserved word misused, not a click statement.
         for (const char* k : kStyling)
             if (word == k) return r > w && isIdChar(s[r]);
@@ -906,7 +928,90 @@ struct Parser {
         return true;
     }
 
+    // `style ids props`, `classDef names props` and `class ids name`: sets `handled` if `s` is one.
+    // Only the colour properties (`fill`, `stroke`, `color`) have an effect; others are read and
+    // ignored.
+    bool parseStyling(const std::string& s, bool& handled) {
+        handled = false;
+        size_t w = 0;
+        while (w < s.size() && std::isalpha(static_cast<unsigned char>(s[w]))) ++w;
+        const std::string word = s.substr(0, w);
+        if ((word != "style" && word != "classDef" && word != "class") || w >= s.size() ||
+            s[w] != ' ')
+            return true;
+        const std::string rest = trim(s.substr(w));
+        const size_t sp = rest.find(' ');
+        if (sp == std::string::npos) return true;
+        const std::string names = rest.substr(0, sp), arg = trim(rest.substr(sp));
+        if (names.empty() || !isIdChar(names[0])) return true;  // `class --> B`
+        std::vector<std::string> list;
+        for (size_t at = 0; at <= names.size();) {
+            size_t comma = names.find(',', at);
+            if (comma == std::string::npos) comma = names.size();
+            const std::string n = trim(names.substr(at, comma - at));
+            if (n.empty() || idEnd(n, 0) != n.size()) return fail(kUnsupportedSyntax);
+            list.push_back(n);
+            at = comma + 1;
+        }
+        handled = true;
+        if (word == "class") {
+            if (idEnd(arg, 0) != arg.size()) return fail(kUnsupportedSyntax);
+            for (const std::string& id : list) {
+                auto it = index.find(id);
+                if (it != index.end()) nodeClasses[it->second].push_back(arg);
+            }
+            return true;
+        }
+        Style st;
+        for (size_t at = 0; at <= arg.size();) {
+            size_t comma = arg.find(',', at);
+            if (comma == std::string::npos) comma = arg.size();
+            const std::string item = arg.substr(at, comma - at);
+            at = comma + 1;
+            const size_t colon = item.find(':');
+            if (colon == std::string::npos) continue;
+            const std::string key = trim(item.substr(0, colon));
+            const int c = parseColor(trim(item.substr(colon + 1)));
+            if (key == "fill")
+                st.fill = c;
+            else if (key == "stroke")
+                st.stroke = c;
+            else if (key == "color")
+                st.color = c;
+        }
+        for (const std::string& n : list) {
+            if (word == "classDef") {
+                classDefs[n] = st;
+            } else {
+                auto it = index.find(n);
+                if (it != index.end()) nodeStyles[it->second] = st;
+            }
+        }
+        return true;
+    }
+
+    // Give each node the styles of its classes, then its own.
+    void applyStyles() {
+        auto merge = [](Style& to, const Style& from) {
+            if (from.fill >= 0) to.fill = from.fill;
+            if (from.stroke >= 0) to.stroke = from.stroke;
+            if (from.color >= 0) to.color = from.color;
+        };
+        for (size_t i = 0; i < g.nodes.size(); ++i) {
+            const int id = static_cast<int>(i);
+            for (const std::string& c : nodeClasses[id]) {
+                auto it = classDefs.find(c);
+                if (it != classDefs.end()) merge(g.nodes[i].style, it->second);
+            }
+            auto it = nodeStyles.find(id);
+            if (it != nodeStyles.end()) merge(g.nodes[i].style, it->second);
+        }
+    }
+
     bool parseStatement(const std::string& s) {
+        bool styling = false;
+        if (!parseStyling(s, styling)) return false;
+        if (styling) return true;
         if (isIgnored(s)) return true;
         bool handled = false;
         if (!parseEdgeProperties(s, handled)) return false;
@@ -964,6 +1069,7 @@ bool parseFlowchart(const std::vector<std::string>& body, Graph& g, std::string&
         reason = "empty diagram";
         return false;
     }
+    ps.applyStyles();
     g = std::move(ps.g);
     return true;
 }

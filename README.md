@@ -215,10 +215,15 @@ graph LR
     fix -->|retry| build
     ship -->|again| ship
     test --x lint((Lint))
+    classDef warm fill:#fda,stroke:#333,color:#000
+    class fix warm
+    style ship fill:#cec,stroke:#363,color:#000
 ```
 
 [docs/MERMAID.md](docs/MERMAID.md) documents all of it: the syntax that is drawn,
-how edges are routed, what is declined and why, and the limits.
+how edges are routed, what is declined and why, and the limits. Node colours
+from `style`, `classDef` and `class` (`fill`, `stroke`, `color`) are drawn, as in
+the diagram above.
 
 ### Unicode 🌍
 
