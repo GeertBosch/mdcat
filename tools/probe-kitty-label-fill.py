@@ -29,6 +29,9 @@ Round 2 asks whether another way to skip the cells avoids it:
      below the label, where the hole meets the text background?). M also uses CHA.
   N  as A, but CUF is written as two moves, ESC[2C ESC[2C.
 
+Round 3 (PROBE_ROUND=3) is about the image's position, see below: which X= makes the image flush
+with the row of peach text cells under it?
+
 Read: for each block, is "Fix" on an unbroken peach fill, with no dark bar beside it?
 
 Usage: tools/probe-kitty-label-fill.py      (run in the terminal under test; PROBE_ROUND=1 for A-F)
@@ -72,13 +75,13 @@ def png(hole, opaque_hole=False, inset=0):
             chunk(b"IDAT", raw) + chunk(b"IEND", b""))
 
 
-def apc(data, z):
+def apc(data, z, x=0):
     b64 = base64.b64encode(data).decode()
     out = []
     for i in range(0, len(b64), 4096):
         more = 1 if i + 4096 < len(b64) else 0
         if i == 0:
-            out.append(f"{ESC}_Ga=T,f=100,q=2,C=1,c={C},r={R},z={z},m={more};{b64[i:i+4096]}{ESC}\\")
+            out.append(f"{ESC}_Ga=T,f=100,q=2,C=1,c={C},r={R},z={z}{f",X={x}" if x else ""},m={more};{b64[i:i+4096]}{ESC}\\")
         else:
             out.append(f"{ESC}_Gq=2,m={more};{b64[i:i+4096]}{ESC}\\")
     return "".join(out)
@@ -108,13 +111,24 @@ v2 = [
     ("M", png((40, 70), inset=1), 0, f"{ESC}[5G{bg}{fg}Fix{off}"),
     ("N", png((40, 70)), 0, f"{ESC}[2C{ESC}[2C{bg}{fg}Fix{off}"),
 ]
-variants = v1 if ROUND == "1" else v2
+# Round 3: does the image sit where the text grid says, and does X= (a pixel offset inside the
+# first cell) move it? Each block is an opaque z=-1 image of 12x3 cells with X=<n>, and directly
+# under it a row of 12 cells of text with the same peach as background. If the image is on the
+# grid, its left and right edges are flush with that row. If iTerm draws it left of the grid, the
+# row sticks out on the right and is short on the left; the X= that makes them flush is the fix.
+v3 = [(f"X={x}", png(None), -1, None, x) for x in (0, 3, 5, 7, 10)]
+variants = v1 if ROUND == "1" else v3 if ROUND == "3" else v2
 
 for k, v in (("TERM_PROGRAM", None), ("TERM", None), ("SSH_CONNECTION", None)):
     print(f"{k}={os.environ.get(k, '')}")
 print()
-for title, data, z, mid in variants:
+for item in variants:
+    title, data, z, mid = item[:4]
+    x = item[4] if len(item) > 4 else 0
     sys.stdout.write(f"{title}\n")
-    sys.stdout.write(f"{ESC}7{apc(data, z)}{ESC}8")
-    sys.stdout.write("\r\n" + mid + "\r\n\r\n")
+    sys.stdout.write(f"{ESC}7{apc(data, z, x)}{ESC}8")
+    if mid is None:  # round 3: the band is 3 rows, then the reference row of peach cells
+        sys.stdout.write("\r\n\r\n\r\n" + bg + NB * C + off + "\r\n\r\n")
+    else:
+        sys.stdout.write("\r\n" + mid + "\r\n\r\n")
     sys.stdout.flush()
