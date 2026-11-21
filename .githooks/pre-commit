@@ -1,0 +1,7 @@
+#!/bin/sh
+
+echo "Checking C++ formatting..."
+if ! make format-check; then
+	echo "Commit refused: run 'make format' to fix formatting errors."
+	exit 1
+fi

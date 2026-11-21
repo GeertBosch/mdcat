@@ -37,7 +37,7 @@
 // Build:  c++ -std=c++17 -O2 -o mdcat mdcat.cpp
 // Usage:  mdcat [--width N] [--img[=kitty|sixel|none]] [--mermaid MODE] [--] [file ...]
 //         (reads standard input when given no file arguments)
-//         --mermaid auto|builtin|image|source picks how ```mermaid blocks render.
+//         --mermaid auto|builtin|mmdc|source picks how ```mermaid blocks render.
 //         --width N forces the render width, overriding $COLUMNS and the terminal size.
 //         --img forces image output even when piped; an optional protocol pins the graphics
 //         backend.
@@ -139,9 +139,9 @@ bool gForceGraphics = false;
 int gForcedBackend = -1;  // -1 = unset; else a GraphicsBackend value
 
 // How a ```mermaid block is rendered (--mermaid, MDCAT_MERMAID): Auto tries the built-in renderer,
-// then mmdc, then the source; Builtin skips mmdc; Image skips the built-in renderer; Source always
+// then mmdc, then the source; Builtin skips mmdc; Mmdc skips the built-in renderer; Source always
 // shows the source. Set by main() before rendering.
-enum class MermaidMode { Auto, Builtin, Image, Source };
+enum class MermaidMode { Auto, Builtin, Mmdc, Source };
 MermaidMode gMermaidMode = MermaidMode::Auto;
 
 // Directory of the file currently being rendered, used to resolve relative image paths.
@@ -4661,7 +4661,7 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
             if (mlang == "mermaid" && gMermaidMode == MermaidMode::Source) {
                 emitCodeBlock(body, lang, out);
             } else if (mlang == "mermaid") {
-                if (gMermaidMode != MermaidMode::Image) {
+                if (gMermaidMode != MermaidMode::Mmdc) {
                     std::string why;
                     bool tooComplex = false;
                     if (emitBuiltinMermaid(body, out, why, tooComplex)) {
@@ -5063,7 +5063,7 @@ int main(int argc, char** argv) {
     std::vector<std::string> files;
     auto usage = [&] {
         std::cerr << "usage: mdcat [--width N] [--img[=kitty|sixel|none]]\n"
-                     "             [--mermaid auto|builtin|image|source] [--] [file ...]\n";
+                     "             [--mermaid auto|builtin|mmdc|source] [--] [file ...]\n";
     };
     // Map a --mermaid / MDCAT_MERMAID mode name; false for an unrecognized value.
     auto parseMermaidMode = [](const std::string& s, MermaidMode& m) {
@@ -5071,8 +5071,8 @@ int main(int argc, char** argv) {
             m = MermaidMode::Auto;
         else if (s == "builtin")
             m = MermaidMode::Builtin;
-        else if (s == "image")
-            m = MermaidMode::Image;
+        else if (s == "mmdc")
+            m = MermaidMode::Mmdc;
         else if (s == "source")
             m = MermaidMode::Source;
         else

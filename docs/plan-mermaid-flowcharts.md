@@ -97,7 +97,7 @@ For each ```` ```mermaid ```` block, mdcat tries in order:
    and image output is on, which is the same test other images use:
    `terminalSupportsGraphics() && graphicsBackend() == GraphicsBackend::Kitty`.
    It needs neither `timg` nor `mmdc`.
-2. **image**: the existing `renderMermaidBlock` (`mmdc` → PNG → `timg`). It
+2. **mmdc**: the existing `renderMermaidBlock` (`mmdc` → PNG → `timg`). It
    covers diagrams the builtin declines and all sixel terminals. It is already
    gated on `mmdcAvailable()`, which is false when graphics are off.
 3. **source**: `emitCodeBlock(body, lang, out)`, as today.
@@ -107,9 +107,9 @@ an override that mirrors `--img` / `MDCAT_GRAPHICS`:
 
 | Mode | Chain | Use |
 | ---- | ----- | --- |
-| `auto` (default) | builtin → image → source | |
+| `auto` (default) | builtin → mmdc → source | |
 | `builtin` | builtin → source | never spawns `mmdc` (tests use this) |
-| `image` | image → source | the pre-plan behaviour |
+| `mmdc` | mmdc → source | the pre-plan behaviour |
 | `source` | source | always show the Mermaid source |
 
 - **Spelling:** `--mermaid <mode>` / `--mermaid=<mode>`, or the environment

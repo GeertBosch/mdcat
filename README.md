@@ -307,13 +307,13 @@ mdcat [--width N] [--img[=kitty|sixel|none]] [--mermaid MODE] [--] [file ...]
 | `--width N` / `-w N` | Force render width in columns (overrides `$COLUMNS` and terminal size) |
 | `--img` | Emit image output even when stdout is not a TTY (for piping into gmore) |
 | `--img <kitty\|sixel\|none>` | As `--img`, but also force the graphics protocol (`none` = text only). Same effect as `MDCAT_GRAPHICS`. Accepts `--img sixel` or `--img=sixel` |
-| `--mermaid <mode>` | How ```` ```mermaid ```` blocks render: `auto` (default: built-in drawing, then `mmdc`, then source), `builtin` (never runs `mmdc`), `image` (`mmdc` only), or `source` (always the code panel). Accepts `--mermaid source` or `--mermaid=source`; overrides `MDCAT_MERMAID` |
+| `--mermaid <mode>` | How ```` ```mermaid ```` blocks render: `auto` (default: built-in drawing, then `mmdc`, then source), `builtin` (never runs `mmdc`), `mmdc` (`mmdc` only, no built-in drawing), or `source` (always the code panel). Accepts `--mermaid source` or `--mermaid=source`; overrides `MDCAT_MERMAID` |
 | `--` | End option parsing (allows filenames starting with `-`) |
 
 | Environment | Description |
 | ----------- | ----------- |
 | `MDCAT_GRAPHICS` | Force the image protocol: `kitty`, `sixel`, or `none` |
-| `MDCAT_MERMAID` | Default for `--mermaid`: `auto`, `builtin`, `image`, or `source` |
+| `MDCAT_MERMAID` | Default for `--mermaid`: `auto`, `builtin`, `mmdc`, or `source` |
 | `MDCAT_MERMAID_DEBUG` | Set to `1` to print `mdcat: <file>:<line>: mermaid: fallback: <reason>` on stderr (the line is where the diagram's code block starts) whenever the built-in renderer declines a diagram |
 | `MDCAT_IMAGE_X` | Pixels to shift a built-in diagram's image right with the Kitty `X=` key, to line it up with the text. iTerm draws images left of the text grid by its window's side margin, so mdcat sends 5 points' worth (10 px on a 2x display) there by itself; set this if you changed that margin, or `0` to turn it off |
 | `MDCAT_CELL_W` / `MDCAT_CELL_H` | Local terminal cell size in pixels (for remote sessions that can't query it) |
@@ -419,6 +419,15 @@ make check   # run the test suite
 ```
 
 Produces `./mdcat` and `./gmore`.
+
+For development, set up the pinned formatter and the local pre-commit hook:
+
+```sh
+make setup
+```
+
+The pre-commit hook runs `make format-check` and refuses commits with formatting
+errors. Run `make format` to format the C++ sources.
 
 ## Installation
 
