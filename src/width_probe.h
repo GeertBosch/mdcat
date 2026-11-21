@@ -16,8 +16,8 @@
 
 namespace uw {
 
-// The column (1-based) from a cursor position report ESC [ row ; col R, or 0 if none arrived.
-inline int readCursorColumn(int fd) {
+// Read a cursor position report ESC [ row ; col R (1-based) from `fd`; false if none arrived.
+inline bool readCursorPosition(int fd, int& row, int& col) {
     std::string reply;
     char c;
     while (reply.size() < 32) {
@@ -25,9 +25,20 @@ inline int readCursorColumn(int fd) {
         reply += c;
         if (c == 'R') break;
     }
+    size_t open = reply.rfind('[');
     size_t semi = reply.rfind(';');
-    if (semi == std::string::npos || reply.back() != 'R') return 0;
-    return std::atoi(reply.c_str() + semi + 1);
+    if (open == std::string::npos || semi == std::string::npos || semi < open ||
+        reply.back() != 'R')
+        return false;
+    row = std::atoi(reply.c_str() + open + 1);
+    col = std::atoi(reply.c_str() + semi + 1);
+    return row > 0 && col > 0;
+}
+
+// The column (1-based) from a cursor position report, or 0 if none arrived.
+inline int readCursorColumn(int fd) {
+    int row = 0, col = 0;
+    return readCursorPosition(fd, row, col) ? col : 0;
 }
 
 // The columns this terminal advances for each sample, in one exchange over the controlling tty

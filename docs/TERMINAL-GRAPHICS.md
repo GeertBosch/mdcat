@@ -291,8 +291,11 @@ MDCAT_GRAPHICS override  →  env allowlist (TERM_PROGRAM ghostty/iTerm.app/vsco
 (where `TERM_PROGRAM` is stripped, so the env allowlist's `Apple_Terminal` guard
 never fires) ignores the Kitty query, has no sixel, and would receive a Kitty APC
 it can't render — printing `a=q,f=24,s=1,v=1;AAAA` as text. Worse, Apple Terminal
-*echoes the inner bytes* of the APC it passes through, so even the probe itself
-leaks if echo isn't off.
+*draws the inner bytes* of the APC itself, so even the probe's own query leaks. Turning
+echo off is not enough: that only stops the tty driver from echoing the replies, and
+Terminal.app over SSH (to an OrbStack VM) still showed the text. So the probe takes a cursor
+position report (`CSI 6n`) before and after its query, and if the cursor moved, moves back
+(`CUP`) and erases from there (`ED`). The width probe (section 8) cleans up the same way.
 
 So the probe sends the Kitty query **and Primary DA (`CSI c`) in one round-trip**:
 

@@ -487,6 +487,11 @@ ProbeResult probeGraphics() {
     raw.c_cc[VTIME] = 2;  // 0.2s between bytes before giving up
     tcsetattr(fd, TCSANOW, &raw);
     ttyguard::enter(fd, saved);
+    // A terminal that does not parse APC prints part of the query as text (Terminal.app showed
+    // "a=q,f=24,s=1,v=1;AAAA"). Note where the cursor is before and after, and erase whatever moved
+    // it. A terminal that answers no cursor report just skips the cleanup.
+    int row0 = 0, col0 = 0;
+    bool havePos = write(fd, "\033[6n", 4) == 4 && uw::readCursorPosition(fd, row0, col0);
     // a=q: validate + reply, do not draw ("AAAA" is one 1x1 black pixel). Then Primary DA (CSI c).
     static const char query[] = "\033_Gi=1,a=q,f=24,s=1,v=1;AAAA\033\\\033[c";
     ProbeResult result = ProbeResult::Unknown;
@@ -512,6 +517,13 @@ ProbeResult probeGraphics() {
         else if (sawDA)
             result = ProbeResult::Unsupported;  // answered, speaks neither (Apple Terminal)
         // else: total silence -> Unknown (slow/lost reply, or env-stripped Kitty-capable remote)
+    }
+    int row1 = 0, col1 = 0;
+    if (havePos && write(fd, "\033[6n", 4) == 4 && uw::readCursorPosition(fd, row1, col1) &&
+        (row1 != row0 || col1 != col0)) {
+        std::string erase = "\033[" + std::to_string(row0) + ';' + std::to_string(col0) + "H\033[J";
+        ssize_t ignored = write(fd, erase.data(), erase.size());
+        (void)ignored;
     }
     tcsetattr(fd, TCSANOW, &saved);
     ttyguard::leave();
