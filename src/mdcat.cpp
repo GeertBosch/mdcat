@@ -4641,8 +4641,7 @@ void render(const std::vector<std::string>& lines, std::ostream& out) {
                     // the enclosing top-level block.
                     if (std::getenv("MDCAT_MERMAID_DEBUG"))
                         std::cerr << "mdcat: " << (gSourceName.empty() ? "<stdin>" : gSourceName)
-                                  << ":" << gBlockLine
-                                  << ": mermaid: fallback: " << why << "\n";
+                                  << ":" << gBlockLine << ": mermaid: fallback: " << why << "\n";
                     if (gMermaidMode == MermaidMode::Builtin || tooComplex) {
                         emitCodeBlock(body, lang, out);
                         i = (j < n) ? j + 1 : j;
