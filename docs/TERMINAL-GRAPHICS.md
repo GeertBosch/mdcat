@@ -446,6 +446,7 @@ exist to be re-run on a new terminal before trusting it. Notable ones:
 | `probe-remote-cellinfo.sh` | CSI queries answer over SSH (§6) |
 | `probe-remote-image.sh` | timg can't fetch a URL on the image path; curl→timg works (§7) |
 | `probe-kitty-text-overlay.sh` | text over a transparent Kitty image, both paint orders (§10) |
+| `probe-kitty-label-fill.py` | a text label on a filled node: image hole + SGR background, six variants (§10) |
 
 `tools/probe-common.sh` holds the shared raw-mode `term_query` helper (with the
 dash workaround above).
@@ -523,14 +524,18 @@ The PNG therefore leaves the label's cells transparent, and the label text carri
 fill as its SGR background (case J), with U+00A0 for blanks because plain spaces are
 skipped on output. Not yet probed on VSCode: whether U+00A0 cells behave like case J.
 
-**Rule:** if a terminal fails case A or case C at `z=-1` and also fails them at
-`z=0` (B and H), the built-in diagram renderer is denied on that terminal (matched on
-`TERM_PROGRAM`, in Step 1 of the Mermaid plan or as a follow-up) and mdcat falls back
-to the second tier, the `mmdc` image, or else the code panel. A diagram too wide for the
-terminal is not a reason to fall back: it is fitted, and if it still does not fit it is
-drawn wider than the terminal, with text rows longer than the screen. Cases D, E, F and G (and I–L) tune the
-emission (which `z` to send, whether the text rows may contain plain spaces, whether
-a tall band is safe) rather than gate the feature.
+**iTerm draws the image about half a cell left of the text grid** (measured with
+`tools/probe-kitty-label-fill.py`: the node's left edge is at x≈0 while text column 0 starts at
+x≈5, with the window's side margin). The transparent label hole moves with the image, so its left
+edge exposes the terminal's own background in the cell before the label, as a dark bar. How the
+cells were skipped (CUF, CHA, a default-background NBSP, two moves) made no difference.
+
+The offset is fixed with the Kitty `X=` key (a pixel offset inside the first cell), which iTerm
+honours: probe round 3 drew opaque images at `X=` 0, 3, 5, 7 and 10 above a row of text cells in
+the same colour, and `X=10` was flush on a 2x display, the default 5 pt side margin in device
+pixels. So on iTerm mdcat sends `X=` of 5 pt times the display scale, taken as 2 for a cell at
+least 12 px wide; `MDCAT_IMAGE_X` overrides it. A vertical offset (the 2 pt top margin) was not
+measured and is not corrected. gmore, which re-places the images itself, has not been checked.
 
 ---
 

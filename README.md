@@ -315,6 +315,7 @@ mdcat [--width N] [--img[=kitty|sixel|none]] [--mermaid MODE] [--] [file ...]
 | `MDCAT_GRAPHICS` | Force the image protocol: `kitty`, `sixel`, or `none` |
 | `MDCAT_MERMAID` | Default for `--mermaid`: `auto`, `builtin`, `mmdc`, or `source` |
 | `MDCAT_MERMAID_DEBUG` | Set to `1` to print `mdcat: <file>:<line>: mermaid: fallback: <reason>` on stderr (the line is where the diagram's code block starts) whenever the built-in renderer declines a diagram |
+| `MDCAT_IMAGE_X` | Pixels to shift a built-in diagram's image right with the Kitty `X=` key, to line it up with the text. iTerm draws images left of the text grid by its window's side margin, so mdcat sends 5 points' worth (10 px on a 2x display) there by itself; set this if you changed that margin, or `0` to turn it off |
 | `MDCAT_CELL_W` / `MDCAT_CELL_H` | Local terminal cell size in pixels (for remote sessions that can't query it) |
 | `MDCAT_AREA_W` / `MDCAT_AREA_H` | Local terminal text-area size in pixels (for an exact pixel↔cell ratio) |
 

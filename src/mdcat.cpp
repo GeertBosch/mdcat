@@ -3179,12 +3179,30 @@ std::string base64Encode(const std::string& in) {
     return out;
 }
 
+bool isITerm() {
+    const char* tp = std::getenv("TERM_PROGRAM");
+    const char* lc = std::getenv("LC_TERMINAL");
+    return (tp && std::string(tp) == "iTerm.app") || (lc && std::string(lc) == "iTerm2");
+}
+
+// The X= pixel offset to send with a diagram's image. iTerm draws a Kitty image at the cell's left
+// edge without the window's side margin, 5 points by default, so it sits that far left of the text
+// grid; X= moves it back (measured with tools/probe-kitty-label-fill.py, round 3: X=10 is flush on
+// a 2x display). Points are device pixels over the display scale, guessed as 2 for a cell at least
+// 12 px wide. MDCAT_IMAGE_X sets the offset in pixels for another margin setting, or 0 for none.
+int imageXOffset(int cellW) {
+    if (const char* v = std::getenv("MDCAT_IMAGE_X")) return std::max(0, std::atoi(v));
+    if (!isITerm()) return 0;
+    return std::min(5 * (cellW >= 12 ? 2 : 1), std::max(0, cellW - 1));
+}
+
 // A Kitty APC that transmits and displays `png` (f=100) in a `cols` x `rows` cell box, written by
-// mdcat itself rather than by timg (ADR 0004). C=1 leaves the cursor where it was, and z=0 draws
-// the image over the text, which stays readable because the label cells are transparent. The
-// payload is split into chunks of at most 4096 base64 bytes, and every chunk carries q=2 (suppress
-// all replies; see kittyQ2).
-std::string kittyApcFromPng(const std::string& png, int cols, int rows, uint32_t id) {
+// mdcat itself rather than by timg (ADR 0004). C=1 leaves the cursor where it was. Draw the image
+// over the text. Images must use transparency where the text needs to be visible. The payload
+// is split into chunks of at most 4096 base64 bytes, and every chunk carries q=2 (suppress all
+// replies; see kittyQ2).
+std::string kittyApcFromPng(
+    const std::string& png, int cols, int rows, uint32_t id, int xOffset = 0) {
     constexpr size_t kChunk = 4096;
     std::string b64 = base64Encode(png);
     std::string apc;
@@ -3195,7 +3213,9 @@ std::string kittyApcFromPng(const std::string& png, int cols, int rows, uint32_t
         apc += "\033_G";
         if (first)
             apc += "a=T,f=100,i=" + std::to_string(id) + ",q=2,C=1,c=" + std::to_string(cols) +
-                ",r=" + std::to_string(rows) + ",z=0" + (more ? ",m=1" : "");
+                ",r=" + std::to_string(rows) + ",z=0" +
+                (xOffset > 0 ? ",X=" + std::to_string(xOffset) : std::string()) +
+                (more ? ",m=1" : "");
         else
             apc += std::string("q=2,m=") + (more ? "1" : "0");
         apc += ';';
@@ -3313,7 +3333,8 @@ bool emitBuiltinMermaid(const std::vector<std::string>& body,
     // one.
     uint32_t id = asSlotSink(out) ? 1 : nextKittyId();
     int pad = std::max(0, (terminalWidth() - d.cols) / 2);
-    out << overlayParagraphBytes(d.textRows, kittyApcFromPng(d.png, d.cols, d.rows, id), pad);
+    out << overlayParagraphBytes(
+        d.textRows, kittyApcFromPng(d.png, d.cols, d.rows, id, imageXOffset(env.cellW)), pad);
     return true;
 }
 
