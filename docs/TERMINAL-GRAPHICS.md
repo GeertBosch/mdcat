@@ -533,6 +533,12 @@ removed the bar was a cell of the fill's background colour on the label's left, 
 So a filled label gets one such cell on each side (box-like shapes, where the neighbour is
 inside the outline). The hole itself stays exactly the label's cells.
 
+That left the filled box looking clipped on its right in iTerm, and variant D of the probe (an
+opaque image at `z=-1`, no hole, no background on the text) was clean there. So on iTerm
+(`TERM_PROGRAM=iTerm.app`, or `LC_TERMINAL=iTerm2` over SSH) the builtin renderer sends `z=-1`
+and draws fills without holes or text backgrounds (`Env::underText`); every other terminal keeps
+`z=0` with holes, since VSCode draws nothing at `z=-1`.
+
 **Rule:** if a terminal fails case A or case C at `z=-1` and also fails them at
 `z=0` (B and H), the built-in diagram renderer is denied on that terminal (matched on
 `TERM_PROGRAM`, in Step 1 of the Mermaid plan or as a follow-up) and mdcat falls back

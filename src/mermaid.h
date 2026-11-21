@@ -15,6 +15,9 @@ struct Env {
     int availCols = 80;         // columns the diagram should fit in
     int cellW = 8, cellH = 16;  // real pixels per character cell
     bool darkTheme = false;     // stroke colour follows the theme
+    // The image is drawn under the text (Kitty z=-1), so a node's fill needs no transparent label
+    // cells and no background colour on the label text.
+    bool underText = false;
     std::function<int(const std::string&)>
         width;  // display width of a label (mdcat's displayWidth)
     // A Markdown string as styled lines no wider than the given width, each with its styles closed

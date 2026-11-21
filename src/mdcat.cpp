@@ -3179,12 +3179,22 @@ std::string base64Encode(const std::string& in) {
     return out;
 }
 
+// Whether to draw a diagram's image under the text (z=-1) rather than over it (z=0). iTerm draws
+// the image about half a cell left of the text grid, which makes the transparent label cells of a
+// filled node show the terminal's background at their edge, and it draws z=-1 correctly (field
+// guide section 10); VSCode draws nothing at z=-1.
+bool drawsImagesUnderText() {
+    const char* tp = std::getenv("TERM_PROGRAM");
+    const char* lc = std::getenv("LC_TERMINAL");
+    return (tp && std::string(tp) == "iTerm.app") || (lc && std::string(lc) == "iTerm2");
+}
+
 // A Kitty APC that transmits and displays `png` (f=100) in a `cols` x `rows` cell box, written by
 // mdcat itself rather than by timg (ADR 0004). C=1 leaves the cursor where it was, and z=0 draws
 // the image over the text, which stays readable because the label cells are transparent. The
 // payload is split into chunks of at most 4096 base64 bytes, and every chunk carries q=2 (suppress
 // all replies; see kittyQ2).
-std::string kittyApcFromPng(const std::string& png, int cols, int rows, uint32_t id) {
+std::string kittyApcFromPng(const std::string& png, int cols, int rows, uint32_t id, int z = 0) {
     constexpr size_t kChunk = 4096;
     std::string b64 = base64Encode(png);
     std::string apc;
@@ -3195,7 +3205,7 @@ std::string kittyApcFromPng(const std::string& png, int cols, int rows, uint32_t
         apc += "\033_G";
         if (first)
             apc += "a=T,f=100,i=" + std::to_string(id) + ",q=2,C=1,c=" + std::to_string(cols) +
-                ",r=" + std::to_string(rows) + ",z=0" + (more ? ",m=1" : "");
+                ",r=" + std::to_string(rows) + ",z=" + std::to_string(z) + (more ? ",m=1" : "");
         else
             apc += std::string("q=2,m=") + (more ? "1" : "0");
         apc += ';';
@@ -3287,6 +3297,7 @@ bool emitBuiltinMermaid(const std::vector<std::string>& body,
     env.cellW = cm.realCellW();
     env.cellH = cm.realCellH();
     env.darkTheme = darkBackground();
+    env.underText = drawsImagesUnderText();
     env.width = displayWidth;
     env.markdownLines = mermaidMarkdownLines;
     mermaid::Diagram d;
@@ -3313,7 +3324,8 @@ bool emitBuiltinMermaid(const std::vector<std::string>& body,
     // one.
     uint32_t id = asSlotSink(out) ? 1 : nextKittyId();
     int pad = std::max(0, (terminalWidth() - d.cols) / 2);
-    out << overlayParagraphBytes(d.textRows, kittyApcFromPng(d.png, d.cols, d.rows, id), pad);
+    out << overlayParagraphBytes(
+        d.textRows, kittyApcFromPng(d.png, d.cols, d.rows, id, env.underText ? -1 : 0), pad);
     return true;
 }
 

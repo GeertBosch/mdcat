@@ -888,7 +888,7 @@ bool drawDiagram(
     // to show. Their fill is the background colour of the text instead (see addLines).
     for (size_t i = 0; i < g.nodes.size(); ++i) {
         const CellBox& l = lay.nodeLabel[i];
-        if (g.nodes[i].style.fill < 0 || l.cols <= 0) continue;
+        if (env.underText || g.nodes[i].style.fill < 0 || l.cols <= 0) continue;
         for (int y = l.row * m.ch; y < (l.row + l.rows) * m.ch; ++y)
             for (int x = l.col * m.cw; x < (l.col + l.cols) * m.cw; ++x)
                 ras.alpha[static_cast<size_t>(y) * static_cast<size_t>(ras.w) +
@@ -935,7 +935,7 @@ bool drawDiagram(
     auto addLines =
         [&](const CellBox& l, const std::vector<std::string>& lines, const Style& st, int margin) {
             if (l.cols <= 0) return;
-            const bool filled = st.fill >= 0;
+            const bool filled = st.fill >= 0 && !env.underText;
             const int n = filled ? l.rows : static_cast<int>(lines.size());
             for (int j = 0; j < n; ++j) {
                 const std::string& line =
