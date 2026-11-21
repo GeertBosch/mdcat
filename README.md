@@ -414,6 +414,15 @@ make check   # run the test suite
 
 Produces `./mdcat` and `./gmore`.
 
+For development, set up the pinned formatter and the local pre-commit hook:
+
+```sh
+make setup
+```
+
+The pre-commit hook runs `make format-check` and refuses commits with formatting
+errors. Run `make format` to format the C++ sources.
+
 ## Installation
 
 `make install` copies both binaries to `$(PREFIX)/bin` (default `/usr/local/bin`):

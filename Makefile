@@ -114,6 +114,14 @@ setup-clang-format:
 	$(CLANG_FORMAT_VENV)/bin/python -m pip install --upgrade pip
 	$(CLANG_FORMAT_VENV)/bin/python -m pip install $(CLANG_FORMAT_PIP_SPEC)
 
+setup-git-hooks:
+	git config core.hooksPath .githooks
+	@echo "Configured Git hooks at .githooks."
+
+setup-hooks: setup-git-hooks
+
+setup: setup-clang-format setup-git-hooks
+
 format-tool-check:
 	@major=`$(CLANG_FORMAT) --version 2>/dev/null | sed -E 's/.*version ([0-9]+).*/\1/'`; \
 	if [ -z "$$major" ]; then \
@@ -201,4 +209,4 @@ install-git-pager:
 	git config --global core.pager gmore
 	@echo "Set git's global core.pager to gmore."
 
-.PHONY: all check clean install uninstall install-git-pager compile_commands.json format format-check setup-clang-format format-tool-check
+.PHONY: all check clean install uninstall install-git-pager compile_commands.json format format-check setup setup-clang-format setup-git-hooks setup-hooks format-tool-check
