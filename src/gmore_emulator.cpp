@@ -549,8 +549,11 @@ struct Emulator::Impl {
     void put(char32_t cp) {
         int w = uw::codePointWidth(cp);
         // A follower of the current cluster (combining mark, selector, ZWJ part, flag half) joins
-        // the cell already written; if it makes the cluster wider, the cell grows to match.
-        if (atBase() && uw::continuesCluster(lastCp, cp)) {
+        // the cell already written; if it makes the cluster wider, the cell grows to match. A
+        // terminal that measures code points one by one (uw::Mode::CodePoint) gives a follower
+        // with a width (the emoji after a ZWJ, a skin tone, a flag half) cells of its own.
+        bool ownCells = uw::gMode == uw::Mode::CodePoint && w > 0;
+        if (atBase() && !ownCells && uw::continuesCluster(lastCp, cp)) {
             Cell& base = screen(baseRow)[baseCol];
             if (base.width == 1 && uw::widthWithFollower(1, cp) == 2 && cc < W) {
                 base.width = 2;

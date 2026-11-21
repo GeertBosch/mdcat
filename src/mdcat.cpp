@@ -76,6 +76,7 @@
 #include "mermaid.h"
 #include "tty_guard.h"
 #include "unicode_width.h"
+#include "width_probe.h"
 
 namespace {
 
@@ -5193,6 +5194,9 @@ int main(int argc, char** argv) {
     (void)cellMetrics();
     (void)queryBackgroundColor();
     initTheme();
+    // Measure text the way this terminal does (grapheme clusters or code point by code point), so
+    // a line laid out to fit never wraps there. The built-in pager shares the choice.
+    uw::initMode(isatty(STDOUT_FILENO));
 
     // On a TTY, page through gmore by default. A render THREAD (not a forked child, so the
     // source and the renderer stay resident) streams bytes into a pipe while gmore parses the

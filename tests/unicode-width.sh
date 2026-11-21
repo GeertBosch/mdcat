@@ -204,6 +204,135 @@ check_roundtrip "emulator preserves table clusters" "$emoji_table" \
 check_roundtrip "emulator preserves hard clusters" "$hard_para" \
     "👨‍👩‍👧‍👦" "🇯🇵" "👋🏽"
 
+
+# --- terminals that measure code point by code point (MDCAT_WIDTH=codepoint...) ---------------
+# VSCode's xterm.js and Apple Terminal add up each code point's width: no grapheme clustering,
+# VS16 widens nothing (tools/probe-grapheme-width.py, measured on VSCode 1.145 and Apple Terminal
+# 455.1). They differ only in a ZWJ (0 on VSCode, 1 on Apple Terminal) and an enclosing mark such as
+# the keycap U+20E3 (0 and 1). This oracle is written from those measurements, independently of
+# unicode_width.h: Mn/Me/Cf and Hangul medial/final jamo are 0 (but ZWJ and Me take $CP_ZWJ and
+# $CP_ENC), East Asian Wide/Fullwidth is 2, everything else 1.
+cat > "$tmp/cporacle.py" <<'PY'
+import os, sys, re, unicodedata
+
+ZWJ = int(os.environ.get('CP_ZWJ', '0'))
+ENC = int(os.environ.get('CP_ENC', '0'))
+
+def cpw(cp):
+    if cp == 0x200D:
+        return ZWJ
+    if unicodedata.category(chr(cp)) == 'Me':
+        return ENC
+    if cp == 0xAD:
+        return 1
+    if 0x1160 <= cp <= 0x11FF or 0xD7B0 <= cp <= 0xD7FF:
+        return 0
+    if unicodedata.category(chr(cp)) in ('Mn', 'Cf'):
+        return 0
+    return 2 if unicodedata.east_asian_width(chr(cp)) in ('W', 'F') else 1
+
+def dwidth(s):
+    s = re.sub(r'\x1b\[[0-9;?]*[A-Za-z]', '', s)
+    s = re.sub(r'\x1b\]8;;.*?(\x07|\x1b\\)', '', s)
+    return sum(cpw(ord(c)) for c in s)
+
+mode = sys.argv[1]
+if mode == 'cases':  # lines of "<expected> <text>": a terminal's measured widths
+    bad = [l for l in sys.stdin.read().splitlines() if l and dwidth(l.split(' ', 1)[1]) != int(l.split(' ', 1)[0])]
+    for l in bad:
+        sys.stderr.write('  oracle disagrees with the terminal: %s\n' % l)
+    sys.exit(1 if bad else 0)
+lines = [l for l in sys.stdin.read().split('\n')]
+if lines and lines[-1] == '':
+    lines.pop()
+if mode == 'equal':
+    widths = [dwidth(l) for l in lines if l.strip() != '']
+    if len(set(widths)) > 1:
+        for l in lines:
+            sys.stderr.write('    %2d | %s\n' % (dwidth(l), l))
+        sys.exit(1)
+elif mode == 'maxwidth':
+    limit = int(sys.argv[2])
+    bad = [(dwidth(l), l) for l in lines if dwidth(l) > limit]
+    for wdt, l in bad:
+        sys.stderr.write('  line exceeds %d columns (%d): %s\n' % (limit, wdt, l))
+    sys.exit(1 if bad else 0)
+PY
+
+# The oracle itself must reproduce what each terminal measured.
+printf '%s\n' '1 ❤️' '1 ✈️' '4 👩‍🚀' '8 👨‍👩‍👧‍👦' '3 🏳️‍🌈' '2 🇺🇸' '4 👍🏽' '1 1️⃣' '1 ☂️' \
+    '4 🧑‍💻' '2 가' '5 عربية' '4 漢字' '2 🎉' |
+    "$py" "$tmp/cporacle.py" cases 2>"$tmp/err" || {
+    echo "unicode-width: FAIL [codepoint oracle vs VSCode measurements]" >&2
+    cat "$tmp/err" >&2
+    status=1
+}
+printf '%s\n' '1 ❤️' '1 ✈️' '5 👩‍🚀' '11 👨‍👩‍👧‍👦' '4 🏳️‍🌈' '2 🇺🇸' '4 👍🏽' '2 1️⃣' '1 ☂️' \
+    '5 🧑‍💻' '2 가' '5 عربية' '4 漢字' '2 🎉' |
+    CP_ZWJ=1 CP_ENC=1 "$py" "$tmp/cporacle.py" cases 2>"$tmp/err" || {
+    echo "unicode-width: FAIL [codepoint oracle vs Apple Terminal measurements]" >&2
+    cat "$tmp/err" >&2
+    status=1
+}
+
+cp_table='| Cluster | Name |
+|---|---|
+| 👨‍👩‍👧‍👦 | ZWJ family |
+| 👩‍🚀 | astronaut |
+| ❤️ | VS16 heart |
+| 🏳️‍🌈 | rainbow flag |
+| 🇺🇸 | flag |
+| 👍🏽 | skin tone |
+| 1️⃣ | keycap |
+| 漢字 | CJK |
+'
+
+# check_codepoint LABEL SETTING ZWJ ENC: mdcat under MDCAT_WIDTH=SETTING lays out tables and reflow
+# by the oracle's widths for that terminal, and gmore's grid gains no wrapped row (an extra row is
+# what shifted VSCode's diagrams; docs/TERMINAL-GRAPHICS.md section 8) and keeps every cluster.
+check_codepoint() {
+    label=$1 setting=$2 zwj=$3 enc=$4
+    if printf '%s' "$cp_table" | MDCAT_WIDTH=$setting "$mdcat" |
+        CP_ZWJ=$zwj CP_ENC=$enc "$py" "$tmp/cporacle.py" equal 2>"$tmp/err"; then
+        :
+    else
+        echo "unicode-width: FAIL [$label table] — columns misaligned under its widths" >&2
+        cat "$tmp/err" >&2
+        status=1
+    fi
+    for n in 24 40 57 96; do
+        for para in "$hard_para" "$vs16_para"; do
+            if printf '%s' "$para" | MDCAT_WIDTH=$setting COLUMNS="$n" "$mdcat" |
+                CP_ZWJ=$zwj CP_ENC=$enc "$py" "$tmp/cporacle.py" maxwidth "$n" 2>"$tmp/err"; then
+                :
+            else
+                echo "unicode-width: FAIL [$label reflow at $n]" >&2
+                cat "$tmp/err" >&2
+                status=1
+            fi
+        done
+    done
+    for n in 40 96; do
+        printf '%s%s%s' "$hard_para" "$vs16_para" "$cp_table" |
+            MDCAT_WIDTH=$setting COLUMNS="$n" "$mdcat" > "$tmp/m"
+        MDCAT_WIDTH=$setting LINES=60 COLUMNS="$n" "$gmore" --dump "$tmp/m" > "$tmp/g"
+        want=$(wc -l < "$tmp/m" | tr -d ' ')
+        got=$(wc -l < "$tmp/g" | tr -d ' ')
+        if [ "$got" -gt "$want" ]; then
+            echo "unicode-width: FAIL [$label gmore rows at $n] — $want rows became $got" >&2
+            status=1
+        fi
+        for cluster in "👨‍👩‍👧‍👦" "🏳️‍🌈" "👍🏽" "1️⃣"; do
+            grep -qF "$cluster" "$tmp/g" || {
+                echo "unicode-width: FAIL [$label gmore at $n] — lost $cluster" >&2
+                status=1
+            }
+        done
+    done
+}
+check_codepoint "VSCode" codepoint 0 0
+check_codepoint "Apple Terminal" "codepoint,zwj=1,enclosing=1" 1 1
+
 if [ "$status" -eq 0 ]; then
     echo "unicode-width: OK"
 fi

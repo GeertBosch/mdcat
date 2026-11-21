@@ -229,10 +229,17 @@ the diagram above.
 
 Text is measured by *display width*, not byte or code-point count, so everything
 stays aligned no matter the script. Wide characters (emoji 🎉 and CJK 漢字 かな
-한글) take two columns; combining marks (café, naïve, Å), variation selectors
-(❤️, ✈️), and ZWJ sequences (👩‍🚀, 👨‍👩‍👧‍👦, 🏳️‍🌈) collapse to a single
-grapheme. Right-to-left scripts (العربية, עברית) and the full range of symbols
+한글) take two columns, combining marks (café, naïve, Å) take none of their own,
+and right-to-left scripts (العربية, עברית) and the full range of symbols
 (✓ ✗ ★ ☂ ♞ ∑ ∞ ≈ µ Ω) pass through untouched.
+
+Emoji built from several code points are where terminals disagree: variation
+selectors (❤️, ✈️), skin tones (👍🏽) and ZWJ sequences (👩‍🚀, 👨‍👩‍👧‍👦, 🏳️‍🌈).
+Ghostty, iTerm and Kitty draw 👨‍👩‍👧‍👦 as one two-column character, VSCode gives each
+person its own two columns (eight in all), and Apple Terminal also counts the three
+joiners between them (eleven). mdcat asks the terminal at startup and measures text
+the way it draws it, so these paragraphs wrap cleanly on all of them, and such a
+sequence is never split across lines (`MDCAT_WIDTH` overrides the choice).
 
 Because alignment uses true width, a table of mixed scripts and emoji keeps its
 columns flush — count the cells, not the bytes:
@@ -316,6 +323,7 @@ mdcat [--width N] [--img[=kitty|sixel|none]] [--mermaid MODE] [--] [file ...]
 | `MDCAT_MERMAID` | Default for `--mermaid`: `auto`, `builtin`, `mmdc`, or `source` |
 | `MDCAT_MERMAID_DEBUG` | Set to `1` to print `mdcat: <file>:<line>: mermaid: fallback: <reason>` on stderr (the line is where the diagram's code block starts) whenever the built-in renderer declines a diagram |
 | `MDCAT_IMAGE_X` | Pixels to shift a built-in diagram's image right with the Kitty `X=` key, to line it up with the text. iTerm draws images left of the text grid by its window's side margin, so mdcat sends 5 points' worth (10 px on a 2x display) there by itself; set this if you changed that margin, or `0` to turn it off |
+| `MDCAT_WIDTH` | How to measure emoji sequences: `grapheme` (a ZWJ, VS16 or flag sequence is one character, as in Ghostty, iTerm and Kitty) or `codepoint` (each code point counts on its own, as in VSCode), optionally with `,zwj=1` and `,enclosing=1` when the terminal also gives a column to a joiner and to an enclosing mark such as the keycap U+20E3 (Apple Terminal: `codepoint,zwj=1,enclosing=1`). By default mdcat asks the terminal |
 | `MDCAT_CELL_W` / `MDCAT_CELL_H` | Local terminal cell size in pixels (for remote sessions that can't query it) |
 | `MDCAT_AREA_W` / `MDCAT_AREA_H` | Local terminal text-area size in pixels (for an exact pixel↔cell ratio) |
 

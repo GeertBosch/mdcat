@@ -18,13 +18,13 @@ $(B):
 
 GMORE_OBJS = $(B)/gmore_attrs.o $(B)/gmore_emulator.o $(B)/gmore_run.o
 
-$(B)/gmore_attrs.o: $(S)/gmore_attrs.cpp $(S)/gmore_attrs.h $(S)/gmore_types.h $(S)/unicode_width.h | $(B)
+$(B)/gmore_attrs.o: $(S)/gmore_attrs.cpp $(S)/gmore_attrs.h $(S)/gmore_types.h $(S)/unicode_width.h $(S)/unicode_width_table.h | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
 
-$(B)/gmore_emulator.o: $(S)/gmore_emulator.cpp $(S)/gmore_emulator.h $(S)/gmore_attrs.h $(S)/gmore_types.h $(S)/unicode_width.h | $(B)
+$(B)/gmore_emulator.o: $(S)/gmore_emulator.cpp $(S)/gmore_emulator.h $(S)/gmore_attrs.h $(S)/gmore_types.h $(S)/unicode_width.h $(S)/unicode_width_table.h | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
 
-$(B)/gmore_run.o: $(S)/gmore_run.cpp $(S)/gmore_run.h $(S)/gmore_emulator.h $(S)/gmore_attrs.h $(S)/gmore_types.h $(S)/unicode_width.h $(S)/tty_guard.h | $(B)
+$(B)/gmore_run.o: $(S)/gmore_run.cpp $(S)/gmore_run.h $(S)/gmore_emulator.h $(S)/gmore_attrs.h $(S)/gmore_types.h $(S)/unicode_width.h $(S)/unicode_width_table.h $(S)/tty_guard.h | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
 
 $(B)/highlight.o: $(S)/highlight.cpp $(S)/highlight.h | $(B)
@@ -38,10 +38,10 @@ MERMAID_OBJS = $(B)/mermaid.o $(B)/mermaid_parse.o $(B)/mermaid_layout.o $(B)/me
 $(MERMAID_OBJS): $(B)/%.o: $(S)/%.cpp $(S)/mermaid.h $(S)/mermaid_model.h $(S)/mermaid_shape.h $(S)/png_write.h | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
 
-$(B)/mdcat: $(S)/mdcat.cpp $(S)/unicode_width.h $(S)/highlight.h $(S)/mermaid.h $(S)/gmore_run.h $(S)/tty_guard.h $(GMORE_OBJS) $(B)/highlight.o $(MERMAID_OBJS) $(B)/png_write.o | $(B)
+$(B)/mdcat: $(S)/mdcat.cpp $(S)/width_probe.h $(S)/unicode_width.h $(S)/unicode_width_table.h $(S)/highlight.h $(S)/mermaid.h $(S)/gmore_run.h $(S)/tty_guard.h $(GMORE_OBJS) $(B)/highlight.o $(MERMAID_OBJS) $(B)/png_write.o | $(B)
 	$(CXX) $(CXXFLAGS) $(PTHREAD) -I$(S) -o $@ $(S)/mdcat.cpp $(B)/highlight.o $(MERMAID_OBJS) $(B)/png_write.o $(GMORE_OBJS)
 
-$(B)/gmore: $(S)/gmore.cpp $(S)/gmore_run.h $(GMORE_OBJS) | $(B)
+$(B)/gmore: $(S)/gmore.cpp $(S)/width_probe.h $(S)/unicode_width.h $(S)/unicode_width_table.h $(S)/tty_guard.h $(S)/gmore_run.h $(GMORE_OBJS) | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -o $@ $(S)/gmore.cpp $(GMORE_OBJS)
 
 # Hard links in the project root so tests (and ad-hoc use) can run ./mdcat and ./gmore.
@@ -106,6 +106,7 @@ FMT_SRCS := \
 	$(S)/png_write.h \
 	$(S)/tty_guard.h \
 	$(S)/unicode_width.h \
+	$(S)/width_probe.h \
 	$(S)/mdcat.cpp \
 	$(S)/gmore.cpp
 

@@ -31,6 +31,7 @@
 #include <string>
 
 #include "gmore_run.h"
+#include "width_probe.h"
 
 static std::string readAll(int fd) {
     std::string s;
@@ -118,6 +119,11 @@ int main(int argc, char** argv) {
         } else
             path = argv[i];
     }
+
+    // Model the terminal's text widths (grapheme clusters or code point by code point) so the
+    // emulated grid wraps exactly where the terminal will. Only when paging to a terminal.
+    uw::initMode(isatty(STDOUT_FILENO) && !dump && !imginfo && !navTrace &&
+                 !std::getenv("GMORE_KEYS"));
 
     // Fast passthrough: when stdout is not a terminal, gmore behaves like cat and
     // forwards bytes incrementally instead of buffering all input.
