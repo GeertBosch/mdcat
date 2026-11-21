@@ -446,6 +446,7 @@ exist to be re-run on a new terminal before trusting it. Notable ones:
 | `probe-remote-cellinfo.sh` | CSI queries answer over SSH (§6) |
 | `probe-remote-image.sh` | timg can't fetch a URL on the image path; curl→timg works (§7) |
 | `probe-kitty-text-overlay.sh` | text over a transparent Kitty image, both paint orders (§10) |
+| `probe-kitty-label-fill.py` | a text label on a filled node: image hole + SGR background, six variants (§10) |
 
 `tools/probe-common.sh` holds the shared raw-mode `term_query` helper (with the
 dash workaround above).
