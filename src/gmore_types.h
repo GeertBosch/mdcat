@@ -116,6 +116,8 @@ struct Image {
     /** Kitty image id (parsed from the APC's i=). */
     uint32_t kid = 0;
     int footCols = 0, footRows = 0;
+    /** Kitty X= pixel offset inside the first cell, re-sent on every placement. */
+    int xOffset = 0;
 
     bool isKitty() const { return !kitty.empty(); }
     int heightCells(int cellH) const {

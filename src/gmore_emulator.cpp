@@ -385,8 +385,15 @@ static int kittyCtrlInt(const std::string& controls, const char* key) {
 // re-deriving one from the pixel size, or a width-bound table image paints at its native width and
 // overflows its column. footCols/footRows are 0 if the producer set no c=/r= (then the caller falls
 // back to pixels).
-static bool kittyParse(
-    const std::string& apc, uint32_t& id, int& pw, int& ph, int& footCols, int& footRows) {
+// xOffset is the producer's X= (a pixel offset inside the first cell; mdcat sends it on iTerm,
+// whose images otherwise sit left of the text grid by the window's side margin), 0 if absent.
+static bool kittyParse(const std::string& apc,
+                       uint32_t& id,
+                       int& pw,
+                       int& ph,
+                       int& footCols,
+                       int& footRows,
+                       int& xOffset) {
     size_t g = apc.find("\033_G");
     if (g == std::string::npos) return false;
     size_t semi = apc.find(';', g);
@@ -397,6 +404,7 @@ static bool kittyParse(
         (ip != std::string::npos) ? static_cast<uint32_t>(std::atoi(controls.c_str() + ip + 2)) : 0;
     footCols = kittyCtrlInt(controls, "c=");
     footRows = kittyCtrlInt(controls, "r=");
+    xOffset = kittyCtrlInt(controls, "X=");
     size_t end = apc.find("\033\\", semi);
     if (end == std::string::npos) return false;
     std::string png = kittyB64DecodePrefix(apc.substr(semi + 1, end - semi - 1), 24);
@@ -417,8 +425,10 @@ static std::string kittyTransmitOnly(const std::string& apc) {
 // SOURCE-PIXEL crop rectangle (x,0..)+(w=pw,h=keepPx, starting at y=skipPx) scaled into
 // a `cols`x`rows` cell box. q=2 suppresses the terminal's OK reply. No payload, so it is
 // cheap to re-emit on every scroll — this is how a partially-scrolled image is clipped
-// without re-encoding pixels (validated by tools/probe-kitty-clip.sh).
-static std::string kittyPlace(uint32_t id, int pw, int skipPx, int keepPx, int cols, int rows) {
+// without re-encoding pixels (validated by tools/probe-kitty-clip.sh). `xOffset` re-sends the
+// producer's X= so the placement lines up with the text exactly as mdcat's own a=T did.
+static std::string kittyPlace(
+    uint32_t id, int pw, int skipPx, int keepPx, int cols, int rows, int xOffset) {
     if (keepPx < 1) keepPx = 1;
     if (cols < 1) cols = 1;
     if (rows < 1) rows = 1;
@@ -434,6 +444,7 @@ static std::string kittyPlace(uint32_t id, int pw, int skipPx, int keepPx, int c
     out += std::to_string(cols);
     out += ",r=";
     out += std::to_string(rows);
+    if (xOffset > 0) out += ",X=" + std::to_string(xOffset);
     out += "\033\\";
     return out;
 }
@@ -906,8 +917,8 @@ struct Emulator::Impl {
     // the PNG; it keeps the verbatim chunks and paints visible bands via crop placements.
     void finishKitty() {
         uint32_t id = 0;
-        int pw = 0, ph = 0, footCols = 0, footRows = 0;
-        if (!kittyParse(kittyAcc, id, pw, ph, footCols, footRows)) {
+        int pw = 0, ph = 0, footCols = 0, footRows = 0, xOffset = 0;
+        if (!kittyParse(kittyAcc, id, pw, ph, footCols, footRows, xOffset)) {
             kittyAcc.clear();
             bandPhase = NO_BAND;
             return;
@@ -918,6 +929,7 @@ struct Emulator::Impl {
         img.Pv = ph;
         img.footCols = footCols;
         img.footRows = footRows;
+        img.xOffset = xOffset;
         // C=1 on the first chunk: the producer asks that the cursor not move (mdcat's builtin
         // diagrams, which print their text rows after the image). Anchor at the cursor and leave
         // it, with no band reservation and no LF to absorb.
@@ -1217,7 +1229,7 @@ struct Emulator::Impl {
         // aspect; round to nearest (not ceil) so an unclipped image is exactly fullRows, never one
         // row tall-er.
         int rows = img.Pv > 0 ? std::max(1, (fullRows * keepPx + img.Pv / 2) / img.Pv) : fullRows;
-        out += kittyPlace(img.kid, img.Ph, skipPx, keepPx, fullCols, rows);
+        out += kittyPlace(img.kid, img.Ph, skipPx, keepPx, fullCols, rows, img.xOffset);
     }
 
     // `withImages` inline-paints sixels (the --dump-images path); the interactive pager

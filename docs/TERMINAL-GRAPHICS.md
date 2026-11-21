@@ -535,7 +535,9 @@ honours: probe round 3 drew opaque images at `X=` 0, 3, 5, 7 and 10 above a row 
 the same colour, and `X=10` was flush on a 2x display, the default 5 pt side margin in device
 pixels. So on iTerm mdcat sends `X=` of 5 pt times the display scale, taken as 2 for a cell at
 least 12 px wide; `MDCAT_IMAGE_X` overrides it. A vertical offset (the 2 pt top margin) was not
-measured and is not corrected. gmore, which re-places the images itself, has not been checked.
+measured and is not corrected. gmore re-places each image itself with a payload-free `a=p` crop,
+so it reads the `X=` from the producer's `a=T` and sends it again on every placement; without that
+the paged diagram slid back left of its text.
 
 ---
 

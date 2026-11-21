@@ -142,6 +142,18 @@ else
     fails=$((fails + 1))
 fi
 
+# The producer's X= (mdcat's iTerm side-margin correction) must survive into gmore's
+# own a=p placements, or the image slides back left of the text it overlays.
+sed 's/c=1,r=4;/c=1,r=4,X=10;/' "$tmp/tall" > "$tmp/tallx"
+GMORE_NO_RIS=0 GMORE_KEYS=q LINES=3 COLUMNS=20 GMORE_CELLW=8 GMORE_CELLH=16 \
+    "$gmore" +3 "$tmp/tallx" > "$tmp/paint" 2> "$tmp/err"
+if grep -aFq "$(printf '\033_Ga=p,i=8,q=2,x=0,y=8,w=16,h=16,c=1,r=2,X=10\033\\')" "$tmp/paint"; then
+    n=$((n + 1))
+else
+    echo "gmore-repaint: FAIL [kitty X= offset kept on placement]" >&2
+    fails=$((fails + 1))
+fi
+
 # --- Quiet clear (avoid RIS) --------------------------------------------------
 # xterm rings the bell on RIS (ESC c), so gmore can clear with ESC[3J ESC[2J ESC[H
 # instead. GMORE_NO_RIS forces the choice; XTERM_VERSION auto-selects the quiet
