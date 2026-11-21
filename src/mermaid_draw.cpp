@@ -929,42 +929,56 @@ bool drawDiagram(
         return std::string(b);
     };
     const std::string none;
-    auto addLines = [&](const CellBox& l, const std::vector<std::string>& lines, const Style& st) {
-        if (l.cols <= 0) return;
-        const bool filled = st.fill >= 0;
-        const int n = filled ? l.rows : static_cast<int>(lines.size());
-        for (int j = 0; j < n; ++j) {
-            const std::string& line =
-                j < static_cast<int>(lines.size()) ? lines[static_cast<size_t>(j)] : none;
-            const int w = env.width(line);
-            if (!filled) {
+    // `margin` cells of the same background go on each side of a filled label, under the image's
+    // fill: iTerm shows the terminal's own background at the edge of the transparent label cells
+    // when the image sits half a cell off the text grid.
+    auto addLines =
+        [&](const CellBox& l, const std::vector<std::string>& lines, const Style& st, int margin) {
+            if (l.cols <= 0) return;
+            const bool filled = st.fill >= 0;
+            const int n = filled ? l.rows : static_cast<int>(lines.size());
+            for (int j = 0; j < n; ++j) {
+                const std::string& line =
+                    j < static_cast<int>(lines.size()) ? lines[static_cast<size_t>(j)] : none;
+                const int w = env.width(line);
+                if (!filled) {
+                    byRow[static_cast<size_t>(l.row + j)].push_back(
+                        {l.col + (l.cols - w) / 2, w, &line, st.color});
+                    continue;
+                }
+                std::string text = sgr("48", st.fill);
+                if (st.color >= 0) text += sgr("38", st.color);
+                auto blanks = [&](int count) {
+                    for (int k = 0; k < count; ++k) text += "\xc2\xa0";
+                };
+                blanks(margin + (l.cols - w) / 2);
+                for (char c : line) {
+                    if (c == ' ')
+                        text += "\xc2\xa0";
+                    else
+                        text += c;
+                }
+                blanks(margin + l.cols - w - (l.cols - w) / 2);
+                text += "\033[49m";
+                if (st.color >= 0) text += "\033[39m";
+                owned.push_back(text);
                 byRow[static_cast<size_t>(l.row + j)].push_back(
-                    {l.col + (l.cols - w) / 2, w, &line, st.color});
-                continue;
+                    {l.col - margin, l.cols + 2 * margin, &owned.back(), -1});
             }
-            std::string text = sgr("48", st.fill);
-            if (st.color >= 0) text += sgr("38", st.color);
-            auto blanks = [&](int count) {
-                for (int k = 0; k < count; ++k) text += "\xc2\xa0";
-            };
-            blanks((l.cols - w) / 2);
-            for (char c : line) {
-                if (c == ' ')
-                    text += "\xc2\xa0";
-                else
-                    text += c;
-            }
-            blanks(l.cols - w - (l.cols - w) / 2);
-            text += "\033[49m";
-            if (st.color >= 0) text += "\033[39m";
-            owned.push_back(text);
-            byRow[static_cast<size_t>(l.row + j)].push_back({l.col, l.cols, &owned.back(), -1});
-        }
-    };
-    for (size_t i = 0; i < g.nodes.size(); ++i)
-        addLines(lay.nodeLabel[i], g.nodes[i].label.lines, g.nodes[i].style);
+        };
+    for (size_t i = 0; i < g.nodes.size(); ++i) {
+        // Only where the cell beside the label is inside the outline, on every side: a box, or a
+        // shape whose silhouette fills its footprint's rows.
+        const CellBox &l = lay.nodeLabel[i], &f = lay.nodeFoot[i];
+        const Shape sh = g.nodes[i].shape;
+        const bool boxy = sh == Shape::Rect || sh == Shape::Round || sh == Shape::Stadium ||
+            sh == Shape::Subroutine;
+        const int margin =
+            boxy && l.col - 1 >= f.col + 1 && l.col + l.cols <= f.col + f.cols - 2 ? 1 : 0;
+        addLines(lay.nodeLabel[i], g.nodes[i].label.lines, g.nodes[i].style, margin);
+    }
     for (size_t k = 0; k < g.edges.size(); ++k)
-        addLines(lay.edgeLabel[k], g.edges[k].label.lines, Style());
+        addLines(lay.edgeLabel[k], g.edges[k].label.lines, Style(), 0);
     for (int r = 0; r < lay.rows; ++r) {
         std::vector<Text>& texts = byRow[static_cast<size_t>(r)];
         std::sort(
