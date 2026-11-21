@@ -302,13 +302,13 @@ mdcat [--width N] [--img[=kitty|sixel|none]] [--mermaid MODE] [--] [file ...]
 | `--width N` / `-w N` | Force render width in columns (overrides `$COLUMNS` and terminal size) |
 | `--img` | Emit image output even when stdout is not a TTY (for piping into gmore) |
 | `--img <kitty\|sixel\|none>` | As `--img`, but also force the graphics protocol (`none` = text only). Same effect as `MDCAT_GRAPHICS`. Accepts `--img sixel` or `--img=sixel` |
-| `--mermaid <mode>` | How ```` ```mermaid ```` blocks render: `auto` (default: built-in drawing, then `mmdc`, then source), `builtin` (never runs `mmdc`), `image` (`mmdc` only), or `source` (always the code panel). Accepts `--mermaid source` or `--mermaid=source`; overrides `MDCAT_MERMAID` |
+| `--mermaid <mode>` | How ```` ```mermaid ```` blocks render: `auto` (default: built-in drawing, then `mmdc`, then source), `builtin` (never runs `mmdc`), `mmdc` (`mmdc` only, no built-in drawing), or `source` (always the code panel). Accepts `--mermaid source` or `--mermaid=source`; overrides `MDCAT_MERMAID` |
 | `--` | End option parsing (allows filenames starting with `-`) |
 
 | Environment | Description |
 | ----------- | ----------- |
 | `MDCAT_GRAPHICS` | Force the image protocol: `kitty`, `sixel`, or `none` |
-| `MDCAT_MERMAID` | Default for `--mermaid`: `auto`, `builtin`, `image`, or `source` |
+| `MDCAT_MERMAID` | Default for `--mermaid`: `auto`, `builtin`, `mmdc`, or `source` |
 | `MDCAT_MERMAID_DEBUG` | Set to `1` to print `mdcat: <file>:<line>: mermaid: fallback: <reason>` on stderr (the line is where the diagram's code block starts) whenever the built-in renderer declines a diagram |
 | `MDCAT_CELL_W` / `MDCAT_CELL_H` | Local terminal cell size in pixels (for remote sessions that can't query it) |
 | `MDCAT_AREA_W` / `MDCAT_AREA_H` | Local terminal text-area size in pixels (for an exact pixel↔cell ratio) |

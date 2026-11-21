@@ -93,10 +93,10 @@ For each block mdcat tries, in order:
 
 1. **builtin**: the renderer described here, when the backend is Kitty and the
    diagram is in the supported subset and passes the legibility gates;
-2. **image**: the existing `mmdc` → PNG → `timg` path, when `mmdc` is available;
+2. **mmdc**: the existing `mmdc` → PNG → `timg` path, when `mmdc` is available;
 3. **source**: the Mermaid source in a code panel.
 
-`--mermaid <mode>` / `MDCAT_MERMAID` selects `auto`, `builtin`, `image` or `source`
+`--mermaid <mode>` / `MDCAT_MERMAID` selects `auto`, `builtin`, `mmdc` or `source`
 (plan Step 3). Rejections are reported with `MDCAT_MERMAID_DEBUG=1`. When in doubt,
 the builtin falls back: it must never emit an illegible or misleading diagram.
 

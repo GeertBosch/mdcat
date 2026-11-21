@@ -387,12 +387,12 @@ else
 fi
 mc --img kitty --mermaid=builtin --width 80 "$lr" 2>/dev/null | grep -q "$(printf '\033_G')" \
     && pass || fail "--mermaid=builtin" "expected the builtin diagram"
-# image mode never runs the builtin, so with no mmdc on PATH it shows the source.
-mc --img kitty --width 80 --mermaid image "$lr" > "$tmp/m-image" 2>/dev/null
-if src_has "$tmp/m-image" && ! grep -q "$(printf '\033_G')" "$tmp/m-image"; then
+# mmdc mode never runs the builtin, so with no mmdc on PATH it shows the source.
+mc --img kitty --width 80 --mermaid mmdc "$lr" > "$tmp/m-mmdc" 2>/dev/null
+if src_has "$tmp/m-mmdc" && ! grep -q "$(printf '\033_G')" "$tmp/m-mmdc"; then
     pass
 else
-    fail "--mermaid image" "expected the source (no mmdc)"
+    fail "--mermaid mmdc" "expected the source (no mmdc)"
 fi
 mc --mermaid bogus "$lr" > /dev/null 2> "$tmp/bad.err"
 rc=$?

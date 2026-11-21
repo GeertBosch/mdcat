@@ -40,14 +40,14 @@ There are three renderers, tried in this order (`--mermaid auto`, the default):
 3. **Source.** Otherwise the block is shown as an ordinary code panel, so the
    document is never worse off than plain text.
 
-Choose a renderer with `--mermaid auto|builtin|image|source` or `MDCAT_MERMAID`; the
+Choose a renderer with `--mermaid auto|builtin|mmdc|source` or `MDCAT_MERMAID`; the
 flag wins over the variable.
 
 | Mode      | Built-in | `mmdc` | Source |
 | --------- | :------: | :----: | :----: |
 | `auto`    | first    | second | last   |
 | `builtin` | yes      | never  | when declined |
-| `image`   | no       | yes    | when `mmdc` can't draw it |
+| `mmdc`    | no       | yes    | when `mmdc` can't draw it |
 | `source`  | no       | no     | always |
 
 `MDCAT_MERMAID_DEBUG=1` prints a line on stderr whenever the built-in renderer
