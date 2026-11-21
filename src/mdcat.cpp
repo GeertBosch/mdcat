@@ -2297,7 +2297,7 @@ bool parseMdImage(const std::string& text, std::map<std::string, std::string>& a
 
 // Parse a single HTML start tag of the form <img key="value" key2="value2" ...> into a map of
 // attribute names (lowercased) to values. Only the simple quoted-value form described by the task
-// is recognised. Returns false if `text` (already trimmed) is not exactly one <img ...> tag with
+// is recognized. Returns false if `text` (already trimmed) is not exactly one <img ...> tag with
 // nothing before or after it. Values may be single- or double-quoted.
 bool parseImgTag(const std::string& text, std::map<std::string, std::string>& attrs) {
     const std::string& s = text;
@@ -3849,7 +3849,7 @@ void emitCodeBlock(const std::vector<std::string>& lines,
                    std::ostream& out) {
     // Fenced code: print with the light-gray background used for inline code, padded to the
     // width of the widest line so the block reads as a solid panel.  Syntax highlighting is
-    // applied when a recognised language tag is present.
+    // applied when a recognized language tag is present.
     //
     // kCodeOff only resets fg/bg; cancel bold+italic explicitly so highlighted attributes
     // cannot leak past the line boundary into subsequent terminal output.

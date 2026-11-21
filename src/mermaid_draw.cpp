@@ -45,7 +45,7 @@ struct Metrics {
     int crossArm() const { return 3 * s; }  // reach of an X end, along each axis
 
     // How far a marker reaches along its link from the outline it touches to where the shaft stops:
-    // the base of an arrowhead, or the centre of a circle or an X.
+    // the base of an arrowhead, or the center of a circle or an X.
     int shaftStop(const Stroke& st) const {
         switch (st.kind) {
         case Stroke::Arrowhead: return len(st.line);
@@ -561,7 +561,7 @@ bool rasterize(const Graph& g,
                 reason = "segment too short";
                 return false;
             }
-            // Where a stroke goes on beyond the centre of the cell next to a label: to a quarter of
+            // Where a stroke goes on beyond the center of the cell next to a label: to a quarter of
             // a cell's height short of the label.
             const int gap = std::max(0, (vertical ? m.ch : m.cw) / 2 - m.ch / 4);
             // A run that ends at a shaped node reaches its silhouette, wherever that is in the

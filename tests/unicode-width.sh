@@ -5,7 +5,7 @@
 # a fullwidth emoji or CJK character must count as two columns and a combining mark or
 # ZWJ/variation-selector as zero. If it miscounts, a table column with such a character
 # is padded wrong and the whole grid misaligns. This test renders tables/paragraphs
-# containing widely-recognised wide emoji, CJK text, combining sequences and a couple of
+# containing widely-recognized wide emoji, CJK text, combining sequences and a couple of
 # famously-tricky clusters (a 4-person ZWJ family, a regional-indicator flag), then
 # checks the result with an INDEPENDENT width oracle (a small Python wcwidth-style
 # function — deliberately NOT mdcat's own code, so the two can disagree).
@@ -156,7 +156,7 @@ check_roundtrip() {
 }
 
 # --- fixtures ---------------------------------------------------------------
-# Widely-recognised wide emoji + CJK + a combining sequence, all in one table. If any
+# Widely-recognized wide emoji + CJK + a combining sequence, all in one table. If any
 # is mis-measured the rows won't share a display width.
 emoji_table='| Symbol | Meaning |
 |--------|---------|

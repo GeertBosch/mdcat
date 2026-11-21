@@ -91,7 +91,7 @@ struct Stroke {  // what the rasterizer consumes, in hu
     Line line = Line::Solid;
     Shape shape = Shape::Rect;  // for Outline
     // Segment: its two ends. Outline: the box's top-left and bottom-right. Arrowhead: the tip, then
-    // the point the path comes from. Dot: the centre. Corner: the bend, then a point on its
+    // the point the path comes from. Dot: the center. Corner: the bend, then a point on its
     // vertical leg and one on its horizontal leg (only their sides of the bend matter).
     std::vector<Pt> pts;
     int node = -1;  // Outline: the node it outlines
@@ -99,7 +99,7 @@ struct Stroke {  // what the rasterizer consumes, in hu
     // straight piece stops short of the bend.
     unsigned char round = 0;
     // Segment: bit 0 (bit 1) is set when the end at pts[0] (pts[1]) is the gap before an edge's
-    // label. The point is then the centre of the cell next to the label, and the stroke goes on
+    // label. The point is then the center of the cell next to the label, and the stroke goes on
     // from it until it is a quarter of a cell's height short of the label.
     unsigned char reach = 0;
     // Segment, horizontal only: the x of each vertical stroke that crosses it, where the stroke

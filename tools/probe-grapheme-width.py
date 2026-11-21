@@ -71,7 +71,7 @@ def main():
             if buf.endswith(b"y"):
                 break
         m = re.search(rb"\?2027;(\d)\$y", buf)
-        mode2027 = {"0": "not recognised", "1": "set", "2": "reset", "3": "permanently set",
+        mode2027 = {"0": "not recognized", "1": "set", "2": "reset", "3": "permanently set",
                     "4": "permanently reset"}.get(m.group(1).decode(), "?") if m else "no reply"
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)

@@ -380,7 +380,7 @@ we don't re-walk them.
   VSCode 1.145 showed it simply adds up each code point's exact East Asian Width
   (0 for Mn/Me/Cf and Hangul medial/final jamo, 2 for W/F, else 1): ❤️ 1, 👩‍🚀 4,
   👨‍👩‍👧‍👦 8, 🏳️‍🌈 3 (🏳 is narrow), 🇺🇸 2 (each flag half is narrow), 👍🏽 4, 1️⃣ 1.
-  It answers DECRQM for grapheme mode 2027 with "not recognised". Apple Terminal
+  It answers DECRQM for grapheme mode 2027 with "not recognized". Apple Terminal
   455.1 (no DECRQM reply) adds up code points the same way, except that a ZWJ and the
   enclosing keycap mark U+20E3 take one column each: 👩‍🚀 5, 👨‍👩‍👧‍👦 11, 🏳️‍🌈 4,
   🧑‍💻 5, 1️⃣ 2, and still ❤️ 1, 👍🏽 4, 🇺🇸 2. Those are the columns its cursor advances and

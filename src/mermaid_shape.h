@@ -25,7 +25,7 @@ inline bool isBox(Shape s) {
 
 class Geom {
 public:
-    // The outline's box (the top-left and bottom-right of the strokes' centre lines, as the
+    // The outline's box (the top-left and bottom-right of the strokes' center lines, as the
     // drawer's Stroke::Outline has them) in pixels, for cells cw x ch pixels and strokes s wide.
     Geom(Shape sh, int left, int top, int right, int bottom, int cw, int ch, int s)
         : shape(sh),
@@ -45,7 +45,7 @@ public:
 
     long half() const { return hw; }
 
-    // Whether (x, y), in eighths, is inside the shape's centre line grown by g (shrunk if g is
+    // Whether (x, y), in eighths, is inside the shape's center line grown by g (shrunk if g is
     // negative).
     bool in(long x, long y, long g) const {
         const long cx = (l + r) / 2, cy = (t + b) / 2;
@@ -138,7 +138,7 @@ private:
     }
 
     // A rectangle with corners of radius rad, grown by g: with q the distance beyond the straight
-    // parts (all doubled, to keep the centre integral), a corner is a circle.
+    // parts (all doubled, to keep the center integral), a corner is a circle.
     bool rounded(long x, long y, long g) const {
         if (rad + g <= 0) return false;
         const long qx = std::max(std::labs(2 * x - (l + r)) - (r - l) + 2 * rad, 0L);
@@ -231,7 +231,7 @@ private:
     }
 
     Shape shape;
-    long l, t, r, b;  // the centre lines' box
+    long l, t, r, b;  // the center lines' box
     long hw;          // half a stroke
     long gap;         // between the two outlines of a double circle
     long cap;         // the vertical radius of a cylinder's lid
@@ -259,7 +259,7 @@ inline bool labelFits(Shape sh, const Footprint& f, int labelW, int lines, int c
 }
 
 // The size of a node of the given shape around a label of labelW columns and `lines` lines, for
-// cells cw x ch pixels. For a top-down graph the width is odd, so that the footprint's centre lies
+// cells cw x ch pixels. For a top-down graph the width is odd, so that the footprint's center lies
 // on a whole column and arrows can be exactly vertical.
 inline Footprint footprint(
     Shape sh, int labelW, int lines, bool td, int cw, int ch, int nodePad = tune::kNodePad) {
@@ -287,7 +287,7 @@ inline Footprint footprint(
         break;
     default: break;
     }
-    // A cylinder's label is centred whatever its parity, even if that puts the footprint's centre
+    // A cylinder's label is centred whatever its parity, even if that puts the footprint's center
     // half a column off the edges' line: its lid is flat enough there to hide it.
     if (td && f.cols % 2 == 0 && sh != Shape::Cylinder) ++f.cols;
     if (sh == Shape::Circle || sh == Shape::DoubleCircle || sh == Shape::Rhombus)

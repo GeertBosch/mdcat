@@ -163,7 +163,7 @@ outputs:
 **Coordinates** are in **half-cell units** (hu), so that ½-cell positions are
 integers:
 
-- Cell `(c, r)` spans `x ∈ [2c, 2c+2]` and `y ∈ [2r, 2r+2]`, with its centre at
+- Cell `(c, r)` spans `x ∈ [2c, 2c+2]` and `y ∈ [2r, 2r+2]`, with its center at
   `(2c+1, 2r+1)`.
 - Pixels are `px = hu·cellW/2` and `py = hu·cellH/2`, using integer floor.
 
@@ -557,11 +557,11 @@ Work:
    - **Node footprint:** (label width + 4) columns × 3 rows. The outline is a
      rectangle inset ½ cell, which leaves 1½ cells between label and outline
      horizontally and ½ row vertically.
-   - **TD:** round each footprint width up to odd, so every centre lies on a
+   - **TD:** round each footprint width up to odd, so every center lies on a
      whole column and the arrows are exactly vertical. The label goes in the
      middle row, centred, with any odd leftover cell on the right. There are 2
      rows between footprints, and each arrow runs from the source outline's
-     bottom centre to the target outline's top centre.
+     bottom center to the target outline's top center.
    - **LR:** 4 columns between footprints; each arrow runs from the source
      outline's right middle to the target's left middle.
    - **Rasterize** with the parameters in *Two layers*. Outlines and shafts are
@@ -703,12 +703,12 @@ Work, in `mermaid_layout.cpp` unless stated:
    Components stay contiguous, in order of first appearance.
 4. **Placement**:
    - Pack each rank, with 2 columns between footprints in TD and 1 row in LR.
-   - Then, in one top-down pass, shift each node toward the mean centre of its
+   - Then, in one top-down pass, shift each node toward the mean center of its
      predecessors, without reordering, using the pool-adjacent-violators block
      merge. Each node is placed at its desired position; overlapping neighbours
      merge into a block placed at the mean of their desired positions.
 5. **Ports and nets**:
-   - All of a node's out-edges share one port: bottom centre in TD, right middle
+   - All of a node's out-edges share one port: bottom center in TD, right middle
      in LR. So a fan-out is a **bus**.
    - All in-edges share one target port, so a fan-in **merges** into one
      arrowhead.
@@ -1021,7 +1021,7 @@ Work:
 - Do a depth-first search in order of first appearance to find back edges.
   Reverse them for layout, as Dagre does.
 - Draw each reversed edge with its arrowhead at the *original* target:
-  - It gets its own ports, offset from the shared centre ports.
+  - It gets its own ports, offset from the shared center ports.
   - In TD it runs from the original source's top outline, up through its dummies,
     to the original target's bottom outline. LR mirrors this.
 - Gate the number of back edges by the width: one per `kColsPerBackEdge` columns,

@@ -25,7 +25,7 @@ struct Item {
     int rank = 0;
     int ext = 1;     // extent across the flow, in cells
     int pad = 0;     // the cells at the far end of `ext` that hold a self-loop, not the node
-    int skew = 0;    // how far the item's centre lies from the middle of its extent, in hu
+    int skew = 0;    // how far the item's center lies from the middle of its extent, in hu
     int thick = 1;   // extent along the flow, in cells (of a label; nodes have their own)
     int left = 0;    // start across the flow, in cells
     int weight = 1;  // how strongly placement honours its desired position
@@ -514,7 +514,7 @@ bool layoutGraph(const Graph& original,
 
     // Footprints of the real nodes, in cells: (widest line + 4) x (lines + 2) for a box, and what
     // each shape needs for its outline to clear the label (see shape::footprint). For top-down the
-    // width is made odd so that every footprint's centre lies on a whole column and arrows can be
+    // width is made odd so that every footprint's center lies on a whole column and arrows can be
     // exactly vertical.
     std::vector<int> nodeW(n), nodeH(n), labelW(n), labelRow(n);
     std::vector<Item> items(n);
@@ -780,8 +780,8 @@ bool layoutGraph(const Graph& original,
     // A node with many ports on a side is made wider (taller, left to right), by two cells at a
     // time to keep it symmetric, until they fit a cell (half a cell, left to right) apart, clear of
     // the corners.
-    // A node with an even number of ports on a side leaves its centre slot empty, so that no edge
-    // sits straight ahead and seems to take priority; with an odd number the centre is used. The
+    // A node with an even number of ports on a side leaves its center slot empty, so that no edge
+    // sits straight ahead and seems to take priority; with an odd number the center is used. The
     // empty slot counts as one slot more.
     auto slots = [&](size_t v, size_t cnt) {
         const bool skip = cnt >= 2 && cnt % 2 == 0;
@@ -822,7 +822,7 @@ bool layoutGraph(const Graph& original,
     reduceCrossings(order, items.size(), preds, succs);
 
     // Placement across the flow. Pack each rank, then in one pass from the first rank on, move each
-    // item toward the mean centre of the items its edges come from.
+    // item toward the mean center of the items its edges come from.
     const int sep = td ? fit.sepTd : tune::kSepLr;
     for (const std::vector<int>& row : order) {
         int at = 0;
@@ -831,7 +831,7 @@ bool layoutGraph(const Graph& original,
             at += items[static_cast<size_t>(id)].ext + sep;
         }
     }
-    auto centre = [&](int id) {  // in hu
+    auto center = [&](int id) {  // in hu
         const Item& it = items[static_cast<size_t>(id)];
         return 2 * it.left + it.ext - it.pad + it.skew;
     };
@@ -843,7 +843,7 @@ bool layoutGraph(const Graph& original,
             const std::vector<int>& from = preds[static_cast<size_t>(row[i])];
             if (from.empty()) continue;
             int sum = 0;
-            for (int p : from) sum += centre(p);
+            for (int p : from) sum += center(p);
             int count = static_cast<int>(from.size());
             int mean = floorDiv(2 * sum + count, 2 * count);
             const Item& it = items[static_cast<size_t>(row[i])];
@@ -865,7 +865,7 @@ bool layoutGraph(const Graph& original,
         }
         placeRank(items, row, desire, sep);
     }
-    // Refine: alternate passes down and up, moving each item toward the median centre of its
+    // Refine: alternate passes down and up, moving each item toward the median center of its
     // neighbours in the rank before (or after) it, until a round moves nothing, or after four. The
     // result is the best placement seen, by total edge slant, the initial one on ties.
     auto slant = [&] {
@@ -874,7 +874,7 @@ bool layoutGraph(const Graph& original,
             for (int u : preds[v])
                 sum += static_cast<long>(
                            std::max(items[v].weight, items[static_cast<size_t>(u)].weight)) *
-                    std::abs(centre(u) - centre(static_cast<int>(v)));
+                    std::abs(center(u) - center(static_cast<int>(v)));
         return sum;
     };
     auto lefts = [&] {
@@ -895,7 +895,7 @@ bool layoutGraph(const Graph& original,
                 for (size_t i = 0; i < row.size(); ++i) {
                     const Item& it = items[static_cast<size_t>(row[i])];
                     std::vector<int> cs;
-                    for (int p : nbr[static_cast<size_t>(row[i])]) cs.push_back(centre(p));
+                    for (int p : nbr[static_cast<size_t>(row[i])]) cs.push_back(center(p));
                     if (cs.empty()) {
                         desire[i] = it.left;
                         continue;
@@ -923,22 +923,22 @@ bool layoutGraph(const Graph& original,
         across = std::max(across, it.left + it.ext);
     }
 
-    // Where each port sits on its side, as an offset from the centre in hu. The ports of one side
+    // Where each port sits on its side, as an offset from the center in hu. The ports of one side
     // are ordered by where their edges' far ends lie, so that their runs do not cross, and spaced a
-    // cell apart in TD and half a cell in LR. An odd count uses the centre; an even one leaves it
+    // cell apart in TD and half a cell in LR. An odd count uses the center; an even one leaves it
     // empty.
     std::vector<int> portOff(ports.size(), 0);
     for (size_t side = 0; side < 2; ++side) {
         for (size_t v = 0; v < n; ++v) {
             const std::vector<int>& list = (side == 0 ? outPorts : inPorts)[v];
             if (list.size() < 2) continue;
-            std::vector<std::pair<long, int>> far;  // mean far-end centre (x size), port
+            std::vector<std::pair<long, int>> far;  // mean far-end center (x size), port
             for (int p : list) {
                 const std::vector<int>& es = ports[static_cast<size_t>(p)].edges;
                 long sum = 0;
                 for (int k : es) {
                     const std::vector<int>& c = chain[static_cast<size_t>(k)];
-                    sum += centre(side == 0 ? c[1] : c[c.size() - 2]);
+                    sum += center(side == 0 ? c[1] : c[c.size() - 2]);
                 }
                 far.push_back({sum * 1000 / static_cast<long>(es.size()), p});
             }
@@ -958,7 +958,7 @@ bool layoutGraph(const Graph& original,
                 return false;
             }
             for (size_t i = 0; i < far.size(); ++i) {
-                // Past the middle of an even count, step over the empty centre slot.
+                // Past the middle of an even count, step over the empty center slot.
                 const int slot = static_cast<int>(i) + (skip && 2 * i >= far.size() ? 1 : 0);
                 portOff[static_cast<size_t>(far[i].second)] = lo + shift + slot * step;
             }
@@ -974,7 +974,7 @@ bool layoutGraph(const Graph& original,
     };
     auto endX = [&](size_t k, size_t i) {
         const std::vector<int>& c = chain[k];
-        int x = centre(c[i]);
+        int x = center(c[i]);
         if (i == 0) x += portOff[static_cast<size_t>(outPort[k])];
         if (i + 1 == c.size()) x += portOff[static_cast<size_t>(inPort[k])];
         return x;
