@@ -524,6 +524,15 @@ The PNG therefore leaves the label's cells transparent, and the label text carri
 fill as its SGR background (case J), with U+00A0 for blanks because plain spaces are
 skipped on output. Not yet probed on VSCode: whether U+00A0 cells behave like case J.
 
+**iTerm draws the image about half a cell left of the text grid** (measured with
+`tools/probe-kitty-label-fill.py`: the node's left edge is at x≈0 while text column 0 starts at
+x≈5, with the window's side margin). The transparent label hole moves with the image, so its left
+edge exposes the terminal's own background in the cell before the label, as a dark bar. How the
+cells were skipped (CUF, CHA, a default-background NBSP, two moves) made no difference; what
+removed the bar was a cell of the fill's background colour on the label's left, written as text.
+So a filled label gets one such cell on each side (box-like shapes, where the neighbour is
+inside the outline). The hole itself stays exactly the label's cells.
+
 **Rule:** if a terminal fails case A or case C at `z=-1` and also fails them at
 `z=0` (B and H), the built-in diagram renderer is denied on that terminal (matched on
 `TERM_PROGRAM`, in Step 1 of the Mermaid plan or as a follow-up) and mdcat falls back
