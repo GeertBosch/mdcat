@@ -539,6 +539,13 @@ opaque image at `z=-1`, no hole, no background on the text) was clean there. So 
 and draws fills without holes or text backgrounds (`Env::underText`); every other terminal keeps
 `z=0` with holes, since VSCode draws nothing at `z=-1`.
 
+The offset itself is fixed with the Kitty `X=` key (a pixel offset inside the first cell), which
+iTerm honours: probe round 3 drew opaque images at `X=` 0, 3, 5, 7 and 10 above a row of text cells
+in the same colour, and `X=10` was flush on a 2x display, the default 5 pt side margin in device
+pixels. So on iTerm mdcat sends `X=` of 5 pt times the display scale, taken as 2 for a cell at
+least 12 px wide; `MDCAT_IMAGE_X` overrides it. A vertical offset (the 2 pt top margin) was not
+measured and is not corrected. gmore, which re-places the images itself, has not been checked.
+
 **Rule:** if a terminal fails case A or case C at `z=-1` and also fails them at
 `z=0` (B and H), the built-in diagram renderer is denied on that terminal (matched on
 `TERM_PROGRAM`, in Step 1 of the Mermaid plan or as a follow-up) and mdcat falls back
