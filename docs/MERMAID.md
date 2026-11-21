@@ -119,6 +119,21 @@ graph TD
     root ---> late[Skips a rank]
 ```
 
+Ports sit symmetrically on every box, arriving or leaving: an odd number of ports
+uses the middle one, an even number leaves it empty, so no edge sits straight ahead
+and seems to take priority. A decision (`{…}`) is also the exception to sharing:
+each outcome leaves through a port of its own, never a bus. Below, `Ok?` has two
+outcomes and `Which?` has three.
+
+```mermaid
+graph TD
+    ok{Ok?} -->|yes| ship[Ship]
+    ok -->|no| fix[Fix]
+    pick{Which?} --> a[One]
+    pick --> b[Two]
+    pick --> c[Three]
+```
+
 Separate parts of one diagram, with no edge between them, are drawn side by side
 (top down) or one below the other (left to right).
 

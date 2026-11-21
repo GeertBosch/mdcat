@@ -469,7 +469,7 @@ pie title Pets
 printf '```mermaid\ngraph TD\n    A --> E\n    A --> F\n    A --> G\n    A --> H\n    B --> E\n    B --> F\n    B --> G\n    B --> H\n    C --> E\n    C --> F\n    C --> G\n    C --> H\n    D --> E\n    D --> F\n    D --> G\n    D --> H\n```\n' > "$tmp/narrow.md"
 unset MDCAT_MERMAID  # the invalid-mode case above leaves it set, as sh keeps a function's assignment
 MDCAT_MERMAID_DEBUG=1 mc --img kitty --mermaid builtin --width 30 "$tmp/narrow.md" \
-    2>&1 > /dev/null | grep -q 'crossings: 24 > 7$' && pass || fail "narrow gate" "expected 24 > 7"
+    2>&1 > /dev/null | grep -q 'crossings: 21 > 7$' && pass || fail "narrow gate" "expected 21 > 7"
 
 if [ "$fails" -eq 0 ]; then
     echo "mermaid-kitty: OK ($n cases)"

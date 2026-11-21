@@ -172,7 +172,7 @@ graph TD
 ## Too many crossings (declined)
 
 Expected: each of four boxes links to each of four others, twenty-four crossings and
-more than the eight that fit 80 columns. It declines with `crossings: 24 > 8`, and the
+more than the eight that fit 80 columns. It declines with `crossings: 21 > 8`, and the
 source is shown, without trying `mmdc`.
 
 ```mermaid

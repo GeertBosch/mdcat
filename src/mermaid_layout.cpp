@@ -711,8 +711,12 @@ bool layoutGraph(const Graph& original,
                     }
                 }
             }
+            // A decision's outgoing edges each leave through a port of their own, never a bus.
+            const bool fan = bestS.size() == 1 && bestT.size() > 1 &&
+                g.nodes[static_cast<size_t>(*bestS.begin())].shape == Shape::Rhombus;
             std::map<int, int> outOf, inOf;
             for (int a : bestS) {
+                if (fan) break;
                 outOf[a] = static_cast<int>(ports.size());
                 outPorts[static_cast<size_t>(a)].push_back(static_cast<int>(ports.size()));
                 ports.push_back({});
@@ -727,9 +731,14 @@ bool layoutGraph(const Graph& original,
                     size_t k = static_cast<size_t>(edgeOf.at({a, b}));
                     outLeft[static_cast<size_t>(a)].erase(b);
                     inLeft[static_cast<size_t>(b)].erase(a);
+                    if (fan) {
+                        outOf[a] = static_cast<int>(ports.size());
+                        outPorts[static_cast<size_t>(a)].push_back(outOf[a]);
+                        ports.push_back({});
+                    }
                     outPort[k] = outOf[a];
                     inPort[k] = inOf[b];
-                    lay.edgeGroup[k] = static_cast<int>(groups);
+                    lay.edgeGroup[k] = static_cast<int>(fan ? groups++ : groups);
                     ports[static_cast<size_t>(outOf[a])].edges.push_back(static_cast<int>(k));
                     ports[static_cast<size_t>(inOf[b])].edges.push_back(static_cast<int>(k));
                     ++placed;
@@ -771,8 +780,15 @@ bool layoutGraph(const Graph& original,
     // A node with many ports on a side is made wider (taller, left to right), by two cells at a
     // time to keep it symmetric, until they fit a cell (half a cell, left to right) apart, clear of
     // the corners.
+    // A node with an even number of ports on a side leaves its centre slot empty, so that no edge
+    // sits straight ahead and seems to take priority; with an odd number the centre is used. The
+    // empty slot counts as one slot more.
+    auto slots = [&](size_t v, size_t cnt) {
+        const bool skip = cnt >= 2 && cnt % 2 == 0;
+        return static_cast<int>(cnt) + (skip ? 1 : 0);
+    };
     for (size_t v = 0; v < n; ++v) {
-        const int count = static_cast<int>(std::max(outPorts[v].size(), inPorts[v].size()));
+        const int count = std::max(slots(v, outPorts[v].size()), slots(v, inPorts[v].size()));
         while (count >= 2) {
             const int room = (td ? nodeW[v] - 3 : nodeH[v] - 2) - std::abs(items[v].skew);
             if ((count - 1) * (td ? 2 : 1) <= 2 * room) break;
@@ -909,7 +925,8 @@ bool layoutGraph(const Graph& original,
 
     // Where each port sits on its side, as an offset from the centre in hu. The ports of one side
     // are ordered by where their edges' far ends lie, so that their runs do not cross, and spaced a
-    // cell apart in TD and half a cell in LR; the first port stays centred where there is room.
+    // cell apart in TD and half a cell in LR. An odd count uses the centre; an even one leaves it
+    // empty.
     std::vector<int> portOff(ports.size(), 0);
     for (size_t side = 0; side < 2; ++side) {
         for (size_t v = 0; v < n; ++v) {
@@ -931,18 +948,20 @@ bool layoutGraph(const Graph& original,
             const int step = td ? 2 : 1;
             const int lim = (td ? nodeW[v] - 3 : nodeH[v] - 2) -
                 std::abs(items[v].skew);  // clear of the corners
-            int first = 0;
-            for (size_t i = 0; i < far.size(); ++i)
-                if (far[i].second == list[0]) first = static_cast<int>(i);
-            int lo = -first * step, hi = (static_cast<int>(far.size()) - 1 - first) * step;
+            const bool skip = slots(v, far.size()) > static_cast<int>(far.size());
+            const int total = static_cast<int>(far.size()) + (skip ? 1 : 0);
+            int lo = -(total / 2) * step;
+            int hi = lo + (total - 1) * step;
             int shift = hi > lim ? lim - hi : lo < -lim ? -lim - lo : 0;
             if (lo + shift < -lim || hi + shift > lim) {
                 reason = "too many ports";
                 return false;
             }
-            for (size_t i = 0; i < far.size(); ++i)
-                portOff[static_cast<size_t>(far[i].second)] =
-                    lo + shift + static_cast<int>(i) * step;
+            for (size_t i = 0; i < far.size(); ++i) {
+                // Past the middle of an even count, step over the empty centre slot.
+                const int slot = static_cast<int>(i) + (skip && 2 * i >= far.size() ? 1 : 0);
+                portOff[static_cast<size_t>(far[i].second)] = lo + shift + slot * step;
+            }
         }
     }
     // An edge end, as the GapSeg sees it: a port of a real node (numbered after the items), or a

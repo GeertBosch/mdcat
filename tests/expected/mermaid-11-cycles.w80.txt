@@ -30,9 +30,9 @@ image @23,35 c=9 r=13 z=0 C=1 png=90x260
                                     ▗▄▄█▙▄▄
                                     ▐ Try ▐
                                     ▐▄▄▄▄▄▟
-                                       ▐▜▘
-                                       ▐▐
-                                   ▗▄▄▄██▄▄▄
+                                      ▐ ▜▘
+                                      ▐ ▐
+                                   ▗▄▄█▙▟▄▄▄
                                    ▐ Check ▐
                                    ▐▄▄▄▄▄▄▄▟
 
@@ -43,8 +43,8 @@ Expected: the same graph turned on its side. The arrow back runs left, below the
 one that goes right, and its arrowhead touches the right side of Try.
 
 image @43,23 c=33 r=3 z=0 C=1 png=330x60
-                       ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄
-                       ▐ Start ▐▄▄▄▟█ Try ▐▄▄▄▟█ Check ▐
+                       ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄   ▗▄▄▄▄▄▄▄▄▄
+                       ▐ Start ▐▄▄▄▟█ Try ▐█▀▀▀▜ Check ▐
                        ▐▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▟▀▀▀▀▜▄▄▄▄▄▄▄▟
 
 Minimum length of a link, with a loop (top down)
@@ -57,7 +57,7 @@ the label is written, so the two diagrams are drawn exactly alike.
 Expected: End is three ranks below Is it?, as ----> says, while Rethink is two
 ranks below it and loops up to the decision.
 
-image @57,31 c=17 r=38 z=0 C=1 png=170x760
+image @57,31 c=17 r=37 z=0 C=1 png=170x740
                                     ▗▄▄▄▄▄▄▄▄
                                     ▐ Start ▐
                                     ▐▄▄▄▄▄▄▄▟
@@ -68,10 +68,9 @@ image @57,31 c=17 r=38 z=0 C=1 png=170x760
                                    ▄▄▛▀   ▀▜▙▄
                                  ▐█▌ Is it?  ▐██
                                    ▀▜▙▄   ▄▄▛▀
-                                      ▝▀██▌
-                                        ▐▐
-                                    ▗▄▄▄█▟▄▄
-                                    ▐   ▗▛ ▐
+                                      ▝▜█▜▘
+                                       ▐▜▜
+                                    ▗▄▄▛▐▐▄▄
                                     ▐   ▐  ▐
                                    Yes  ▐  ▐
                                     ▐   ▐  ▐
@@ -85,9 +84,9 @@ image @57,31 c=17 r=38 z=0 C=1 png=170x760
                                   ▐     ▐   ▐
                                   ▐     ▐  No
                                   ▐     ▐   ▐
-                                  ▐▄▄▗▄▄▛   ▐
-                                    ▐▐      ▐
-                               ▗▄▄▄▄██▄▄▄▄  ▐
+                                  ▐▄ ▗▄▄▛   ▐
+                                   ▐ ▐      ▐
+                               ▗▄▄▄█▙▟▄▄▄▄  ▐
                                ▐ Rethink ▐  ▐
                                ▐▄▄▄▄▄▄▄▄▄▟  ▐
                                             ▐
@@ -97,7 +96,7 @@ image @57,31 c=17 r=38 z=0 C=1 png=170x760
                                          ▐ End ▐
                                          ▐▄▄▄▄▄▟
 
-image @96,31 c=17 r=38 z=0 C=1 png=170x760
+image @95,31 c=17 r=37 z=0 C=1 png=170x740
                                     ▗▄▄▄▄▄▄▄▄
                                     ▐ Start ▐
                                     ▐▄▄▄▄▄▄▄▟
@@ -108,10 +107,9 @@ image @96,31 c=17 r=38 z=0 C=1 png=170x760
                                    ▄▄▛▀   ▀▜▙▄
                                  ▐█▌ Is it?  ▐██
                                    ▀▜▙▄   ▄▄▛▀
-                                      ▝▀██▌
-                                        ▐▐
-                                    ▗▄▄▄█▟▄▄
-                                    ▐   ▗▛ ▐
+                                      ▝▜█▜▘
+                                       ▐▜▜
+                                    ▗▄▄▛▐▐▄▄
                                     ▐   ▐  ▐
                                    Yes  ▐  ▐
                                     ▐   ▐  ▐
@@ -125,9 +123,9 @@ image @96,31 c=17 r=38 z=0 C=1 png=170x760
                                   ▐     ▐   ▐
                                   ▐     ▐  No
                                   ▐     ▐   ▐
-                                  ▐▄▄▗▄▄▛   ▐
-                                    ▐▐      ▐
-                               ▗▄▄▄▄██▄▄▄▄  ▐
+                                  ▐▄ ▗▄▄▛   ▐
+                                   ▐ ▐      ▐
+                               ▗▄▄▄█▙▟▄▄▄▄  ▐
                                ▐ Rethink ▐  ▐
                                ▐▄▄▄▄▄▄▄▄▄▟  ▐
                                             ▐
@@ -143,19 +141,19 @@ A 2-cycle (top down and left to right)
 Expected: two boxes joined by one arrow each way, side by side, each with an
 arrowhead.
 
-image @141,35 c=9 r=8 z=0 C=1 png=90x160
+image @139,35 c=9 r=8 z=0 C=1 png=90x160
                                    ▗▄▄▄▄▄▄▄▄
                                    ▐ Ping  ▐
                                    ▐▄▄▄▄▄▄▄▟
-                                       ▐▜▘
-                                       ▐▐
-                                   ▗▄▄▄██▄▄▄
+                                      ▐ ▜▘
+                                      ▐ ▐
+                                   ▗▄▄█▙▟▄▄▄
                                    ▐ Pong  ▐
                                    ▐▄▄▄▄▄▄▄▟
 
-image @150,30 c=20 r=3 z=0 C=1 png=200x60
-                              ▗▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄
-                              ▐ Ping ▐▄▄▄▟█ Pong ▐
+image @148,30 c=20 r=3 z=0 C=1 png=200x60
+                              ▗▄▄▄▄▄▄▄   ▗▄▄▄▄▄▄▄▄
+                              ▐ Ping ▐█▀▀▀▜ Pong ▐
                               ▐▄▄▄▄▄▄▟▀▀▀▀▜▄▄▄▄▄▄▟
 
 A long loop (top down)
@@ -164,20 +162,20 @@ A long loop (top down)
 Expected: Three points back at One. The back edge runs up the side of the chain
 through the ranks in between, and arrives at the bottom of One.
 
-image @160,34 c=12 r=15 z=0 C=1 png=120x300
+image @158,34 c=12 r=15 z=0 C=1 png=120x300
                                        ▗▄▄▄▄▄▄
                                        ▐ One ▐
                                        ▐▄▄▄▄▄▟
-                                          ▐▜▘
-                                     ▗▄▄▄▄▛▐
+                                         ▐ ▜▘
+                                     ▗▄▄▄▛ ▐
                                      ▐     ▐
                                   ▗▄▄█▙▄▄  ▐
                                   ▐ Two ▐  ▐
                                   ▐▄▄▄▄▄▟  ▐
                                      ▐     ▐
-                                     ▐▄▄▄▗▄▛
-                                        ▐▐
-                                    ▗▄▄▄██▄▄▄
+                                     ▐▄▄ ▗▄▛
+                                       ▐ ▐
+                                    ▗▄▄█▙▟▄▄▄
                                     ▐ Three ▐
                                     ▐▄▄▄▄▄▄▄▟
 
@@ -186,12 +184,12 @@ A loop with a label (top down)
 
 Expected: the label of the back edge sits on it, halfway up.
 
-image @181,32 c=16 r=22 z=0 C=1 png=160x440
+image @179,32 c=16 r=22 z=0 C=1 png=160x440
                                       ▗▄▄▄▄▄▄▄▄
                                       ▐ Fetch ▐
                                       ▐▄▄▄▄▄▄▄▟
-                                          ▐▜▘
-                                         ▗▛▐▄
+                                         ▐ ▜▘
+                                         ▐ ▐▄
                                          ▐  ▐
                                          ▐  ▐
                                          ▐  ▐
@@ -204,9 +202,9 @@ image @181,32 c=16 r=22 z=0 C=1 png=160x440
                                     ▐        ▐
                                     ▐        ▐
                                     ▐        ▐
-                                    ▐▄▄▄▄▄▗▄▄▛
-                                         ▐▐
-                                     ▗▄▄▄██▄▄▄
+                                    ▐▄▄▄▄ ▗▄▄▛
+                                        ▐ ▐
+                                     ▗▄▄█▙▟▄▄▄
                                      ▐ Store ▐
                                      ▐▄▄▄▄▄▄▄▟
 
@@ -217,26 +215,26 @@ Expected: the dotted edge keeps its style, and its arrowhead is at the original
 target. In the bottom-up graph the flow, and so the back edge, runs the other
 way.
 
-image @211,31 c=17 r=15 z=0 C=1 png=170x300
+image @209,31 c=17 r=15 z=0 C=1 png=170x300
                                      ▗▄▄▄▄▄▄
                                      ▐ Top ▐
                                      ▐▄▄▄▄▄▟
-                                        ▜▜
-                                    ▗▄▄▄▛▐▄▄▄
+                                       ▜▘▐
+                                    ▗▄▄▛ ▐▄▄▄
                                     ▐       ▐
                                ▗▄▄▄▄▟▄▄▄▄▄  ▐
                                ▐ Middle  ▐  ▐
                                ▐▄▄▄▄▄▄▄▄▄▟  ▐
                                     ▜▘      ▐
-                                    ▐▄▄▄▄▄▄▄▐
-                                           ▐▐
-                                       ▗▄▄▄▟█▙▄▄
+                                    ▐▄▄▄▄▄▄ ▐
+                                          ▐ ▐
+                                       ▗▄▄▟▄█▙▄▄
                                        ▐ Base  ▐
                                        ▐▄▄▄▄▄▄▄▟
 
-image @227,24 c=31 r=3 z=0 C=1 png=310x60
-                        ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄    ▗▄▄▄▄▄▄
-                        ▐ Three ▐█▄▄▄▟ Two ▐█▄▄▄▟ One ▐
+image @225,24 c=31 r=3 z=0 C=1 png=310x60
+                        ▗▄▄▄▄▄▄▄▄▄   ▗▄▄▄▄▄▄    ▗▄▄▄▄▄▄
+                        ▐ Three ▐▀▀▀▜█ Two ▐█▄▄▄▟ One ▐
                         ▐▄▄▄▄▄▄▄▟▀▀▀▀▜▄▄▄▄▄▟    ▐▄▄▄▄▄▟
 
 Three back edges, and a node that grows to hold their ports (top down)
@@ -247,28 +245,28 @@ bottom of its target. D is wider than a one-letter box, because its four ports
 (three back edges and the arrow in from C) need a cell each, clear of its
 corners.
 
-image @239,34 c=12 r=23 z=0 C=1 png=120x460
+image @237,34 c=12 r=23 z=0 C=1 png=120x460
                                         ▗▄▄▄▄
                                         ▐ A ▐
                                         ▐▄▄▄▟
-                                          ▐▜▘
-                                       ▗▄▄▛▐▄
+                                         ▐ ▜▘
+                                       ▗▄▛ ▐▄
                                        ▐    ▐
                                      ▗▄█▙▄  ▐
                                      ▐ B ▐  ▐
                                      ▐▄▄▄▟  ▐
-                                       ▐▜▘  ▐
-                                    ▗▄▄▛▐▄  ▐
+                                      ▐ ▜▘  ▐
+                                    ▗▄▛ ▐▄  ▐
                                     ▐    ▐  ▐
                                   ▗▄█▙▄  ▐  ▐
                                   ▐ C ▐  ▐  ▐
                                   ▐▄▄▄▟  ▐  ▐
-                                    ▐▜▘  ▐  ▐
-                                    ▐▐   ▐▄▄▐
-                                    ▐▐▄▄▄▄▄▐▐
-                                    ▐▄▄▄▄▄▐▐▐
-                                         ▐▐▐▐
-                                       ▗▄██▟▟▄
+                                   ▐ ▜▘  ▐  ▐
+                                   ▐ ▐   ▐▄▄▐
+                                   ▐ ▐▄▄▄▄ ▐▐
+                                   ▐▄▄▄▄▄▐ ▐▐
+                                        ▐▐ ▐▐
+                                       ▗██▄▟▟▄
                                        ▐  D  ▐
                                        ▐▄▄▄▄▄▟
 
@@ -278,16 +276,16 @@ Four nodes, each pointing back at every earlier one (top down)
 Expected: six back edges, within the eight that fit 80 columns. The boxes widen
 to fit their ports, and every arrowhead touches the box it points at.
 
-image @269,34 c=12 r=24 z=0 C=1 png=120x480
+image @267,34 c=12 r=24 z=0 C=1 png=120x480
                                        ▗▄▄▄▄▄▄
                                        ▐  A  ▐
                                        ▐▄▄▄▄▄▟
-                                         ▐▜▜▜▘
-                                    ▗▄▄▄▄▛▐▐▐
-                                    ▐▗▄▄▄▄▛▐▐
-                                    ▐▐   ▗▄▛▐
-                                    ▐▐   ▐  ▐
-                                  ▗▄██▄  ▐  ▐
+                                        ▐▜▘▜▜▘
+                                   ▗▄▄▄▄▛▐ ▐▐
+                                   ▐ ▗▄▄▄▛ ▐▐
+                                   ▐ ▐   ▗▄▛▐
+                                   ▐ ▐   ▐  ▐
+                                  ▗█▙▟▄  ▐  ▐
                                   ▐ B ▐  ▐  ▐
                                   ▐▄▄▄▟  ▐  ▐
                                    ▜▜▜▘  ▐  ▐
@@ -297,10 +295,10 @@ image @269,34 c=12 r=24 z=0 C=1 png=120x480
                                    ▐  ▗██▟▄  ▐
                                    ▐  ▐ C ▐  ▐
                                    ▐  ▐▄▄▄▟  ▐
-                                   ▐    ▐▜▘  ▐
-                                   ▐▄▄▄▄▐▐▗▄▄▛
-                                       ▐▐▐▐
-                                     ▗▄▟██▟▄
+                                   ▐   ▐ ▜▘  ▐
+                                   ▐▄▄▄▐ ▐▗▄▄▛
+                                      ▐▐ ▐▐
+                                     ▗▟█▙▟▟▄
                                      ▐  D  ▐
                                      ▐▄▄▄▄▄▟
 
@@ -309,16 +307,16 @@ Three back edges, left to right
 
 Expected: a box with several ports grows taller instead.
 
-image @299,23 c=33 r=9 z=0 C=1 png=330x180
-                                         ▗▄▄▄▄
-                                      ▗▄▟█ C ▐▄▄▄▄
-                                      ▐  ▐▄▄▄▟▀▀▜▐ ▗▄▄▄▄
-                                ▗▄▄▄▄ ▐         ▐▐ ▐   ▐
-                             ▗▄▟█ B ▐▄▛▄▄▄▄▄▄▄▄▄▐▐▟█ D ▐
-                             ▐  ▐▄▄▄▟▀▀▘       ▐▟███   ▐
-                       ▗▄▄▄▄ ▐                 ▐▀▀▀▜▄▄▄▟
-                       ▐ A ▐▄▛▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▛
-                       ▐▄▄▄▟▀▀▘
+image @297,24 c=32 r=9 z=0 C=1 png=320x180
+                                          ▗▄▄▄▄
+                                       ▗▄▟█ C ▐█▀▜
+                                       ▐  ▐▄▄▄▟▀▜▐ ▗▄▄▄▄
+                                 ▗▄▄▄▄ ▟        ▐▐▟█   ▐
+                              ▗▄▟█ B ▐█▙▄▄▄▄▄▄▄▄▟▀▀▜ D ▐
+                              ▐  ▐▄▄▄▟▀▘        ▐███   ▐
+                        ▗▄▄▄▄ ▟                 ▐  ▐▄▄▄▟
+                        ▐ A ▐█▙▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▛
+                        ▐▄▄▄▟▀▘
 
 Too many back edges (declined)
 ────────────────────────────────────────────────────────────────────────────────
@@ -358,7 +356,7 @@ Expected: the arrow from Work to itself is a small rounded loop beside the box
 and comes back in to end in an arrowhead on the outline. The loop is outside the
 box, so it moves neighbouring boxes apart but changes no other edge.
 
-image @347,34 c=11 r=13 z=0 C=1 png=110x260
+image @345,34 c=11 r=13 z=0 C=1 png=110x260
                                   ▗▄▄▄▄▄▄▄▄
                                   ▐ Start ▐
                                   ▐▄▄▄▄▄▄▄▟
@@ -373,7 +371,7 @@ image @347,34 c=11 r=13 z=0 C=1 png=110x260
                                   ▐ Done  ▐
                                   ▐▄▄▄▄▄▄▄▟
 
-image @361,23 c=33 r=4 z=0 C=1 png=330x80
+image @359,23 c=33 r=4 z=0 C=1 png=330x80
                        ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄
                        ▐ Start ▐▄▄▄▟█ Work ▐▄▄▄▟█ Done ▐
                        ▐▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▟
@@ -386,7 +384,7 @@ Expected: the label sits beyond the loop, to the right of it top down and under
 it left to right, centred on the box. A label wider than the box makes room for
 itself in its rank.
 
-image @373,32 c=16 r=13 z=0 C=1 png=160x260
+image @371,32 c=16 r=13 z=0 C=1 png=160x260
                                 ▗▄▄▄▄▄▄▄▄
                                 ▐ Start ▐
                                 ▐▄▄▄▄▄▄▄▟
@@ -401,7 +399,7 @@ image @373,32 c=16 r=13 z=0 C=1 png=160x260
                                 ▐ Done  ▐
                                 ▐▄▄▄▄▄▄▄▟
 
-image @387,19 c=41 r=5 z=0 C=1 png=410x100
+image @385,19 c=41 r=5 z=0 C=1 png=410x100
                    ▗▄▄▄▄▄▄▄▄        ▗▄▄▄▄▄▄▄        ▗▄▄▄▄▄▄▄
                    ▐ Start ▐▄▄▄▄▄▄▄▟█ Work ▐▄▄▄▄▄▄▄▟█ Done ▐
                    ▐▄▄▄▄▄▄▄▟        ▐▄▄▄▄▄▄▟        ▐▄▄▄▄▄▄▟
@@ -416,7 +414,7 @@ with an arrowhead at both ends has one at each. In the bottom-up graph the loop
 stays on the right, and in the right-to-left one below. Every shape takes its
 loop on the outline.
 
-image @401,36 c=7 r=13 z=0 C=1 png=70x260
+image @399,36 c=7 r=13 z=0 C=1 png=70x260
                                     ▗▄▄▄▄▄
                                     ▐ C ▐██
                                     ▐▄▄▄▟▀▘
@@ -431,14 +429,14 @@ image @401,36 c=7 r=13 z=0 C=1 png=70x260
                                     ▐ A ▐
                                     ▐▄▄▄▟
 
-image @415,33 c=14 r=5 z=0 C=1 png=140x100
+image @413,33 c=14 r=5 z=0 C=1 png=140x100
                                  ▗▄▄▄▄    ▗▄▄▄▄
                                  ▐ B ▐█▄▄▄▟ A ▐
                                  ▐▄▄▄▟    ▐▄▄▄▟
                                   ▜▙▛     ▝▜█▛
                                   spin
 
-image @421,31 c=17 r=31 z=0 C=1 png=170x620
+image @419,31 c=17 r=31 z=0 C=1 png=170x620
                                     ▗▄▄▄▖
                                  ▄▄▛▀   ▀▜▙▄
                                ▐█▌ Decide  ▐██▀█
@@ -477,20 +475,20 @@ Boxes with loops side by side, and a loop beside a back edge
 Expected: each loop makes its own box wider by its cells, and the boxes keep
 their separation.
 
-image @459,24 c=31 r=15 z=0 C=1 png=310x300
+image @457,24 c=31 r=15 z=0 C=1 png=310x300
                                               ▗▄▄▄▄▄▄▄▄
                                               ▐ Fork  ▐
                                               ▐▄▄▄▄▄▄▄▟
-                                                  ▐▜▘
-                            ▗▄▄▄▄▄▄▄▄▄▄▄▄█▄▄▄▄▄▄▄▄▛▐▄▄▄
+                                                 ▐ ▜▘
+                            ▗▄▄▄▄▄▄▄▄▄▄▄▄█▄▄▄▄▄▄▄▛ ▐▄▄▄
                             ▐            ▐            ▐
                         ▗▄▄▄█▙▄▄▄    ▗▄▄▄█▙▄▄▄        ▐
                         ▐ Left  ▐██  ▐ Right ▐██loop  ▐
                         ▐▄▄▄▄▄▄▄▟▀▘  ▐▄▄▄▄▄▄▄▟▀▘      ▐
                             ▐            ▐            ▐
-                            ▐▄▄▄▄▄▄▄▄▄▄▄▄█▗▄▄▄▄▄▄▄▄▄▄▄▛
-                                         ▐▐
-                                       ▗▄██▄
+                            ▐▄▄▄▄▄▄▄▄▄▄▄█▛▗▄▄▄▄▄▄▄▄▄▄▄▛
+                                        ▐ ▐
+                                       ▗█▙▟▄
                                        ▐ D ▐
                                        ▐▄▄▄▟
 
@@ -500,19 +498,19 @@ Parallel edges (top down and left to right)
 Expected: two edges between the same pair of boxes each get a port of their own
 and run side by side, each with an arrowhead.
 
-image @481,34 c=11 r=8 z=0 C=1 png=110x160
+image @479,34 c=11 r=8 z=0 C=1 png=110x160
                                   ▗▄▄▄▄▄▄▄▄▄▄
                                   ▐ Source  ▐
                                   ▐▄▄▄▄▄▄▄▄▄▟
-                                       ▐▐
-                                       ▐▐
-                                  ▗▄▄▄▄██▙▄▄▄
+                                      ▐ ▐
+                                      ▐ ▐
+                                  ▗▄▄▄█▙█▙▄▄▄
                                   ▐ Target  ▐
                                   ▐▄▄▄▄▄▄▄▄▄▟
 
-image @490,28 c=24 r=3 z=0 C=1 png=240x60
-                            ▗▄▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄
-                            ▐ Source ▐▄▄▄▟█ Target ▐
+image @488,28 c=24 r=3 z=0 C=1 png=240x60
+                            ▗▄▄▄▄▄▄▄▄▄   ▗▄▄▄▄▄▄▄▄▄▄
+                            ▐ Source ▐▀▀▀▜█ Target ▐
                             ▐▄▄▄▄▄▄▄▄▟▀▀▀▀▜▄▄▄▄▄▄▄▄▟
 
 Parallel edges with labels
@@ -521,23 +519,23 @@ Parallel edges with labels
 Expected: each label sits on its own edge, and the edges part to make room for
 them.
 
-image @500,26 c=28 r=3 z=0 C=1 png=280x60
-                          ▗▄▄▄▄▄▄ ▗▄▖yes▗▄  ▗▄▄▄▄▄▄▄▄▄
-                          ▐ Ask ▐▄▛      ▐▄▟█ Answer ▐
+image @498,26 c=28 r=3 z=0 C=1 png=280x60
+                          ▗▄▄▄▄▄▄ ▄▄▖yes▗▄ ▗▄▄▄▄▄▄▄▄▄▄
+                          ▐ Ask ▐▀▘      ▝▀▜█ Answer ▐
                           ▐▄▄▄▄▄▟▀▜▄▖no▗▄▛▀▀▜▄▄▄▄▄▄▄▄▟
 
-image @504,34 c=11 r=13 z=0 C=1 png=110x260
+image @502,34 c=11 r=13 z=0 C=1 png=110x260
                                    ▗▄▄▄▄▄▄
                                    ▐ Ask ▐
                                    ▐▄▄▄▄▄▟
-                                      ▐▐
-                                    ▗▄▛▐▄▄
+                                     ▐ ▐
+                                    ▗▛ ▐▄▄
                                     ▐    ▐
                                    yes  no
                                     ▐    ▐
-                                    ▐▄▄▄▗▛
-                                       ▐▐
-                                  ▗▄▄▄▄██▙▄▄▄
+                                    ▐▄▄ ▗▛
+                                      ▐ ▐
+                                  ▗▄▄▄█▙█▙▄▄▄
                                   ▐ Answer  ▐
                                   ▐▄▄▄▄▄▄▄▄▄▟
 
@@ -548,19 +546,19 @@ Expected: A <--> B is a single edge with an arrowhead at each end. Two separate
 edges A --> B and B --> A are drawn as two arrows side by side, each with one
 arrowhead.
 
-image @525,30 c=20 r=8 z=0 C=1 png=200x160
+image @523,30 c=20 r=8 z=0 C=1 png=200x160
                               ▗▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄
                               ▐ Ping  ▐  ▐ Left  ▐
                               ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟
-                                  ▜▘         ▐▜▘
-                                  ▐          ▐▐
-                              ▗▄▄▄█▙▄▄▄  ▗▄▄▄██▄▄▄
+                                  ▜▘        ▐ ▜▘
+                                  ▐         ▐ ▐
+                              ▗▄▄▄█▙▄▄▄  ▗▄▄█▙▟▄▄▄
                               ▐ Pong  ▐  ▐ Right ▐
                               ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟
 
-image @534,24 c=32 r=3 z=0 C=1 png=320x60
-                        ▗▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄
-                        ▐ Ping ▐▄▄▄▟█ Pong ▐▄▄▄▟█ Done ▐
+image @532,24 c=32 r=3 z=0 C=1 png=320x60
+                        ▗▄▄▄▄▄▄▄   ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄
+                        ▐ Ping ▐█▀▀▀▜ Pong ▐▄▄▄▟█ Done ▐
                         ▐▄▄▄▄▄▄▟▀▀▀▀▜▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▟
 
 More than two edges between a pair
@@ -571,7 +569,7 @@ each with its own arrowhead. Below, A --> B twice with B --> A makes three
 between one pair, and two edges from Three to One both run up the side of the
 chain.
 
-image @546,37 c=5 r=8 z=0 C=1 png=50x160
+image @544,37 c=5 r=8 z=0 C=1 png=50x160
                                      ▗▄▄▄▄
                                      ▐ A ▐
                                      ▐▄▄▄▟
@@ -581,29 +579,28 @@ image @546,37 c=5 r=8 z=0 C=1 png=50x160
                                      ▐ B ▐
                                      ▐▄▄▄▟
 
-image @555,28 c=24 r=5 z=0 C=1 png=240x100
+image @553,28 c=24 r=5 z=0 C=1 png=240x100
                             ▗▄▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄
-                            ▐        ▐   ▗▟        ▐
+                            ▐        ▐▄▄▄▟█        ▐
                             ▐ Source ▐█████ Target ▐
                             ▐        ▐█████        ▐
-                            ▐▄▄▄▄▄▄▄▄▟▀▀▀▀▜▄▄▄▄▄▄▄▄▟
+                            ▐▄▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▟
 
-image @561,32 c=15 r=17 z=0 C=1 png=150x340
+image @559,32 c=15 r=16 z=0 C=1 png=150x320
                                       ▗▄▄▄▄▄▄
                                       ▐ One ▐
                                       ▐▄▄▄▄▄▟
-                                         ▐▜▜▘
-                                   ▗▄▄▄▄▄▛▐▐▄
-                                   ▐     ▗▛ ▐
+                                        ▐▜▜▘
+                                   ▗▄▄▄▄▛▐▐▄▄
                                    ▐     ▐  ▐
                                 ▗▄▄█▙▄▄  ▐  ▐
                                 ▐ Two ▐  ▐  ▐
                                 ▐▄▄▄▄▄▟  ▐  ▐
                                    ▐     ▐  ▐
-                                   ▐     ▐▄▄▐
-                                   ▐▄▄▄▄▄▄▄▐▐
-                                          ▐▐▐
-                                      ▗▄▄▄██▟▄▄
+                                   ▐     ▐▄▗▛
+                                   ▐▄▄▄▄▄▄▐▐
+                                         ▐▐▐
+                                      ▗▄▄██▟▄▄▄
                                       ▐ Three ▐
                                       ▐▄▄▄▄▄▄▄▟
 
@@ -615,7 +612,7 @@ the labels of the others. So the first diagram is a single plain loop on A, the
 second a single loop labelled x, and the third a single loop labelled last, as
 the plain loop and the first one before it are dropped.
 
-image @587,36 c=7 r=8 z=0 C=1 png=70x160
+image @584,36 c=7 r=8 z=0 C=1 png=70x160
                                     ▗▄▄▄▄
                                     ▐ A ▐██
                                     ▐▄▄▄▟▀▘
@@ -625,7 +622,7 @@ image @587,36 c=7 r=8 z=0 C=1 png=70x160
                                     ▐ B ▐
                                     ▐▄▄▄▟
 
-image @596,36 c=8 r=8 z=0 C=1 png=80x160
+image @593,36 c=8 r=8 z=0 C=1 png=80x160
                                     ▗▄▄▄▄
                                     ▐ A ▐██x
                                     ▐▄▄▄▟▀▘
@@ -635,7 +632,7 @@ image @596,36 c=8 r=8 z=0 C=1 png=80x160
                                     ▐ B ▐
                                     ▐▄▄▄▟
 
-image @605,34 c=11 r=8 z=0 C=1 png=110x160
+image @602,34 c=11 r=8 z=0 C=1 png=110x160
                                   ▗▄▄▄▄
                                   ▐ A ▐██last
                                   ▐▄▄▄▟▀▘

@@ -121,7 +121,7 @@ an override that mirrors `--img` / `MDCAT_GRAPHICS`:
   stable strings so tests can assert them, for example:
   - `not kitty`, `not a flowchart`, `subgraph`, `overlap`
   - `unsupported shape: doc`
-  - `too wide: 97 > 80`, `crossings: 24 > 8`
+  - `too wide: 97 > 80`, `crossings: 21 > 8`
 
 ### Mermaid semantics we follow (not invent)
 
