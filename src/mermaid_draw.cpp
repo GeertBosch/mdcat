@@ -1,7 +1,9 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
+#include <deque>
 #include <map>
 #include <set>
 
@@ -57,20 +59,42 @@ struct Metrics {
     int py(int hu) const { return hu * ch / 2; }
 };
 
-// The raster: straight-alpha RGBA, all pixels the stroke colour, with alpha 0 where nothing is
-// drawn. Coordinates are in pixels; half-open ranges.
+// The raster: straight-alpha RGBA, the stroke colour unless a node's style says otherwise, with
+// alpha 0 where nothing is drawn. Coordinates are in pixels; half-open ranges.
 struct Raster {
     int w, h;
     std::vector<uint8_t> alpha;
+    std::vector<uint32_t> rgb;  // per pixel, 0xRRGGBB
+    uint32_t cur;               // the colour that plot paints in
 
-    Raster(int w_, int h_)
-        : w(w_), h(h_), alpha(static_cast<size_t>(w_) * static_cast<size_t>(h_), 0) {}
+    Raster(int w_, int h_, uint32_t colour)
+        : w(w_),
+          h(h_),
+          alpha(static_cast<size_t>(w_) * static_cast<size_t>(h_), 0),
+          rgb(alpha.size(), colour),
+          cur(colour) {}
 
+    // Cover the pixel by a/255 in the current colour. Over ink of the same colour that is the
+    // larger coverage; over ink of another, it blends.
     void plot(int x, int y, int a) {
         if (x < 0 || y < 0 || x >= w || y >= h) return;
-        uint8_t& p =
-            alpha[static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)];
-        if (a > p) p = static_cast<uint8_t>(a);
+        const size_t i = static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x);
+        const int p = alpha[i];
+        if (p == 0 || rgb[i] == cur) {
+            if (a > p) alpha[i] = static_cast<uint8_t>(a);
+            rgb[i] = cur;
+            return;
+        }
+        const int under = p * (255 - a) / 255, out = a + under;
+        if (out == 0) return;
+        uint32_t mixed = 0;
+        for (int sh = 16; sh >= 0; sh -= 8) {
+            const int c = static_cast<int>((cur >> sh) & 255) * a +
+                static_cast<int>((rgb[i] >> sh) & 255) * under;
+            mixed |= static_cast<uint32_t>((c + out / 2) / out) << sh;
+        }
+        rgb[i] = mixed;
+        alpha[i] = static_cast<uint8_t>(out);
     }
 
     void rect(int x0, int y0, int x1, int y1) {
@@ -241,6 +265,7 @@ std::vector<Stroke> strokesOf(const Graph& g, const Layout& lay, const std::vect
         Stroke st;
         st.kind = Stroke::Outline;
         st.shape = g.nodes[i].shape;
+        st.node = static_cast<int>(i);
         st.pts = {{2 * f.col + 1, 2 * f.row + 1},
                   {2 * (f.col + f.cols) - 1, 2 * (f.row + f.rows) - 1}};
         strokes.push_back(st);
@@ -395,7 +420,8 @@ int cornerRadius(const std::vector<Stroke>& strokes, const Metrics& m, Pt v) {
 
 // Draw the strokes. Arrows run from one outline to the next; a shaft stops where its arrowhead
 // begins, and the head's tip touches the target's outline.
-bool rasterize(const std::vector<Stroke>& strokes,
+bool rasterize(const Graph& g,
+               const std::vector<Stroke>& strokes,
                const Metrics& m,
                Raster& ras,
                std::string& reason) {
@@ -406,6 +432,7 @@ bool rasterize(const std::vector<Stroke>& strokes,
     struct Shaped {
         shape::Geom geom;
         Pt tl, br;
+        int node;
     };
     std::vector<Shaped> shaped;
     for (const Stroke& st : strokes)
@@ -419,7 +446,8 @@ bool rasterize(const std::vector<Stroke>& strokes,
                                           m.ch,
                                           m.s),
                               st.pts[0],
-                              st.pts[1]});
+                              st.pts[1],
+                              st.node});
     // Where the run through hu point p, along the vertical or horizontal, meets the silhouette of
     // the shaped node whose footprint's edge p is on, in eighths along the run. Gives 0 if p is
     // not on such a node, 1 if it is, and -1 if the run misses the shape.
@@ -440,13 +468,40 @@ bool rasterize(const std::vector<Stroke>& strokes,
         }
         return 0;
     };
+    // A node's fill goes under its outline, and under everything else.
+    auto outlineColour = [&](int node) {
+        const int c = node < 0 ? -1 : g.nodes[static_cast<size_t>(node)].style.stroke;
+        return c >= 0 ? static_cast<uint32_t>(c) : m.rgb;
+    };
+    for (const Stroke& st : strokes) {
+        if (st.kind != Stroke::Outline) continue;
+        const int fill = g.nodes[static_cast<size_t>(st.node)].style.fill;
+        if (fill < 0) continue;
+        ras.cur = static_cast<uint32_t>(fill);
+        if (shape::isBox(st.shape)) {
+            ras.rect(m.px(st.pts[0].first) - hs,
+                     m.py(st.pts[0].second) - hs,
+                     m.px(st.pts[1].first) - hs + s,
+                     m.py(st.pts[1].second) - hs + s);
+            continue;
+        }
+        for (const Shaped& n : shaped) {
+            if (n.node != st.node) continue;
+            long x0, y0, x1, y1;
+            n.geom.bounds(x0, y0, x1, y1);
+            ras.cover(
+                x0, y0, x1, y1, [&](long x, long y) { return n.geom.in(x, y, n.geom.half()); });
+        }
+    }
     for (const Shaped& n : shaped) {
         long x0, y0, x1, y1;
         n.geom.bounds(x0, y0, x1, y1);
+        ras.cur = outlineColour(n.node);
         ras.cover(x0, y0, x1, y1, [&](long x, long y) { return n.geom.ink(x, y); });
     }
     for (const Stroke& st : strokes) {
         const int w = m.width(st.line), hw = w / 2;
+        ras.cur = st.kind == Stroke::Outline ? outlineColour(st.node) : m.rgb;
         if (st.kind == Stroke::Outline) {
             if (!shape::isBox(st.shape)) continue;
             int l = m.px(st.pts[0].first), t = m.py(st.pts[0].second);
@@ -827,8 +882,18 @@ bool drawDiagram(
 
     if (!validate(g, lay, strokes, grid, crossings, reason)) return false;
 
-    Raster ras(lay.cols * m.cw, lay.rows * m.ch);
-    if (!rasterize(strokes, m, ras, reason)) return false;
+    Raster ras(lay.cols * m.cw, lay.rows * m.ch, m.rgb);
+    if (!rasterize(g, strokes, m, ras, reason)) return false;
+    // The image is drawn over the text, so a node's label cells must stay transparent for the text
+    // to show. Their fill is the background colour of the text instead (see addLines).
+    for (size_t i = 0; i < g.nodes.size(); ++i) {
+        const CellBox& l = lay.nodeLabel[i];
+        if (g.nodes[i].style.fill < 0 || l.cols <= 0) continue;
+        for (int y = l.row * m.ch; y < (l.row + l.rows) * m.ch; ++y)
+            for (int x = l.col * m.cw; x < (l.col + l.cols) * m.cw; ++x)
+                ras.alpha[static_cast<size_t>(y) * static_cast<size_t>(ras.w) +
+                          static_cast<size_t>(x)] = 0;
+    }
 
     // The text layer: node labels on each node's middle row, edge labels where the layout put them,
     // spaces elsewhere.
@@ -838,6 +903,7 @@ bool drawDiagram(
     struct Text {
         int col, width;
         const std::string* text;
+        int color;  // 0xRRGGBB for the text, or -1
     };
     std::vector<std::vector<Text>> byRow(static_cast<size_t>(lay.rows));
     if (lay.titleRows > 0) {  // bold, centred
@@ -847,15 +913,58 @@ bool drawDiagram(
             std::string(static_cast<size_t>(lay.cols - w - (lay.cols - w) / 2), ' ');
     }
     // Each line of a label is centred in the label's cells.
-    auto addLines = [&](const CellBox& l, const std::vector<std::string>& lines) {
-        for (size_t j = 0; j < lines.size() && l.cols > 0; ++j) {
-            int w = env.width(lines[j]);
-            byRow[static_cast<size_t>(l.row) + j].push_back(
-                {l.col + (l.cols - w) / 2, w, &lines[j]});
+    // A node with a fill has the whole of its label cells written, in the fill as background
+    // colour, with U+00A0 for the blanks: plain spaces are skipped on output, which would leave
+    // holes in the fill.
+    std::deque<std::string> owned;
+    auto sgr = [](const char* code, int rgb) {
+        char b[32];
+        std::snprintf(b,
+                      sizeof b,
+                      "\033[%s;2;%d;%d;%dm",
+                      code,
+                      (rgb >> 16) & 255,
+                      (rgb >> 8) & 255,
+                      rgb & 255);
+        return std::string(b);
+    };
+    const std::string none;
+    auto addLines = [&](const CellBox& l, const std::vector<std::string>& lines, const Style& st) {
+        if (l.cols <= 0) return;
+        const bool filled = st.fill >= 0;
+        const int n = filled ? l.rows : static_cast<int>(lines.size());
+        for (int j = 0; j < n; ++j) {
+            const std::string& line =
+                j < static_cast<int>(lines.size()) ? lines[static_cast<size_t>(j)] : none;
+            const int w = env.width(line);
+            if (!filled) {
+                byRow[static_cast<size_t>(l.row + j)].push_back(
+                    {l.col + (l.cols - w) / 2, w, &line, st.color});
+                continue;
+            }
+            std::string text = sgr("48", st.fill);
+            if (st.color >= 0) text += sgr("38", st.color);
+            auto blanks = [&](int count) {
+                for (int k = 0; k < count; ++k) text += "\xc2\xa0";
+            };
+            blanks((l.cols - w) / 2);
+            for (char c : line) {
+                if (c == ' ')
+                    text += "\xc2\xa0";
+                else
+                    text += c;
+            }
+            blanks(l.cols - w - (l.cols - w) / 2);
+            text += "\033[49m";
+            if (st.color >= 0) text += "\033[39m";
+            owned.push_back(text);
+            byRow[static_cast<size_t>(l.row + j)].push_back({l.col, l.cols, &owned.back(), -1});
         }
     };
-    for (size_t i = 0; i < g.nodes.size(); ++i) addLines(lay.nodeLabel[i], g.nodes[i].label.lines);
-    for (size_t k = 0; k < g.edges.size(); ++k) addLines(lay.edgeLabel[k], g.edges[k].label.lines);
+    for (size_t i = 0; i < g.nodes.size(); ++i)
+        addLines(lay.nodeLabel[i], g.nodes[i].label.lines, g.nodes[i].style);
+    for (size_t k = 0; k < g.edges.size(); ++k)
+        addLines(lay.edgeLabel[k], g.edges[k].label.lines, Style());
     for (int r = 0; r < lay.rows; ++r) {
         std::vector<Text>& texts = byRow[static_cast<size_t>(r)];
         std::sort(
@@ -864,7 +973,18 @@ bool drawDiagram(
         int at = 0;
         for (const Text& t : texts) {
             line.append(static_cast<size_t>(t.col - at), ' ');
+            if (t.color >= 0) {
+                char sgr[32];
+                std::snprintf(sgr,
+                              sizeof sgr,
+                              "\033[38;2;%d;%d;%dm",
+                              (t.color >> 16) & 255,
+                              (t.color >> 8) & 255,
+                              t.color & 255);
+                line += sgr;
+            }
             line += *t.text;
+            if (t.color >= 0) line += "\033[39m";
             at = t.col + t.width;
         }
         line.append(static_cast<size_t>(lay.cols - at), ' ');
@@ -874,7 +994,7 @@ bool drawDiagram(
     }
 
     std::vector<uint32_t> pixels(ras.alpha.size());
-    for (size_t i = 0; i < pixels.size(); ++i) pixels[i] = (m.rgb << 8) | ras.alpha[i];
+    for (size_t i = 0; i < pixels.size(); ++i) pixels[i] = (ras.rgb[i] << 8) | ras.alpha[i];
     out.png = encodePngRgba(ras.w, ras.h, pixels);
     return true;
 }

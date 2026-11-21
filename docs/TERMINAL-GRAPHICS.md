@@ -518,6 +518,11 @@ VSCode passes B, H, J and L. So the builtin renderer sends `z=0` everywhere, wri
 label runs with cursor moves rather than spaces (VSCode case I), and falls back for
 bands taller than the screen on VSCode (case K).
 
+**Filled nodes.** The image is over the text, so an opaque node fill would hide its label.
+The PNG therefore leaves the label's cells transparent, and the label text carries the
+fill as its SGR background (case J), with U+00A0 for blanks because plain spaces are
+skipped on output. Not yet probed on VSCode: whether U+00A0 cells behave like case J.
+
 **Rule:** if a terminal fails case A or case C at `z=-1` and also fails them at
 `z=0` (B and H), the built-in diagram renderer is denied on that terminal (matched on
 `TERM_PROGRAM`, in Step 1 of the Mermaid plan or as a follow-up) and mdcat falls back

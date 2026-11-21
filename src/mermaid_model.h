@@ -39,10 +39,16 @@ struct Label {
     std::string markdown;
 };
 
+// The colours a `style` or `classDef` gives a node, as 0xRRGGBB, or -1 where it gives none.
+struct Style {
+    int fill = -1, stroke = -1, color = -1;  // the box's fill, its outline, and its label text
+};
+
 struct Node {
     std::string id;
     Label label;
     Shape shape = Shape::Rect;
+    Style style;
 };
 
 struct Edge {
@@ -88,6 +94,7 @@ struct Stroke {  // what the rasterizer consumes, in hu
     // the point the path comes from. Dot: the centre. Corner: the bend, then a point on its
     // vertical leg and one on its horizontal leg (only their sides of the bend matter).
     std::vector<Pt> pts;
+    int node = -1;  // Outline: the node it outlines
     // Segment: bit 0 (bit 1) is set when the end at pts[0] (pts[1]) is a rounded Corner, so the
     // straight piece stops short of the bend.
     unsigned char round = 0;

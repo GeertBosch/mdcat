@@ -184,8 +184,13 @@ and `%%{ init: … }%%` directives, over several lines or not, are read and igno
 keys, such as `config: theme:`, have no visual effect. The exception is
 `config: markdownAutoWrap: false`, see [Label text](#9-label-text).
 
-**Read but without visual effect.** `style`, `classDef`, `class`, `linkStyle`,
-`click`, `:::cls`, edge ids (`e1@-->`) and their properties (`e1@{ animate: true }`),
+**Node colours.** `style ids …`, `classDef names …`, `class ids name` and `A:::name`
+set a node's `fill` (the box), `stroke` (its outline) and `color` (its label text), as
+`#rgb` or `#rrggbb`. A class is applied in the order it was given, then the node's own
+`style`, so that wins. Other properties, such as `stroke-width` or `font-family`, are
+read and dropped, as are colours in any other form. Edges keep the theme's colour.
+
+**Read but without visual effect.** `linkStyle`, `click`, edge ids (`e1@-->`) and their properties (`e1@{ animate: true }`),
 `accTitle` and `accDescr` (also over several lines) are all understood and
 dropped.
 
@@ -199,6 +204,18 @@ graph RL
     a[Source] --> b[Build] --> c[Test] %% a chain
     c --> d[Ship] & e[Report]
     style d fill:#bbf
+```
+
+Colours from `style`, `classDef` and `class`:
+
+```mermaid
+graph TD
+    classDef warm fill:#fda,stroke:#333,color:#000
+    a[Plan]:::warm --> b[Build]
+    b --> c[Ship]
+    class b,c cool
+    classDef cool fill:#cef,stroke:#333,color:#000
+    style c fill:#cec,stroke:#363
 ```
 
 ## 7. Link styles
