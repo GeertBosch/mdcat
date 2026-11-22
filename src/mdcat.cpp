@@ -2535,8 +2535,13 @@ std::string kittyRewriteId(const std::string& apc, uint32_t id) {
 // Keying off `a=` rather than `i=` matters because older timg emits no i= at all (see
 // kittyRewriteId).
 static bool kittyIsFirstChunk(const std::string& s, size_t ctrlStart, size_t ctrlEnd) {
-    size_t a = s.find("a=", ctrlStart);
-    return a != std::string::npos && a < ctrlEnd;
+    // Search only the controls run: an unbounded find() on a continuation chunk (which has no
+    // a=) would scan the rest of the buffer's base64, making renumbering quadratic in image size.
+    static const char key[] = "a=";
+    return std::search(s.begin() + static_cast<std::ptrdiff_t>(ctrlStart),
+                       s.begin() + static_cast<std::ptrdiff_t>(ctrlEnd),
+                       key,
+                       key + 2) != s.begin() + static_cast<std::ptrdiff_t>(ctrlEnd);
 }
 
 // Renumber the i= id of every Kitty image in `bytes`, in order, with successive ids from
@@ -2631,7 +2636,16 @@ std::string kittyQ2(const std::string& bytes) {
         size_t st = bytes.find("\033\\", ctrlStart);
         size_t ctrlEnd = std::min(semi != std::string::npos ? semi : bytes.size(),
                                   st != std::string::npos ? st : bytes.size());
-        size_t q = bytes.find("q=", ctrlStart);
+        // Bounded to the controls run (see kittyIsFirstChunk): an unbounded find() on a chunk
+        // lacking q= would scan the rest of the payload, making this quadratic.
+        static const char qkey[] = "q=";
+        auto qit = std::search(bytes.begin() + static_cast<std::ptrdiff_t>(ctrlStart),
+                               bytes.begin() + static_cast<std::ptrdiff_t>(ctrlEnd),
+                               qkey,
+                               qkey + 2);
+        size_t q = qit == bytes.begin() + static_cast<std::ptrdiff_t>(ctrlEnd)
+            ? std::string::npos
+            : static_cast<size_t>(qit - bytes.begin());
         if (q != std::string::npos && q + 2 < ctrlEnd) {
             // Existing q=<n>: copy through it, force the value to 2, skip the old digit.
             out.append(bytes, found, (q + 2) - found);
