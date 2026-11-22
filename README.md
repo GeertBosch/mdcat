@@ -209,12 +209,12 @@ and a self-loop. A diagram wider than the terminal is fitted to it first.
 graph LR
     src[/Source/] ==> build["`**Build** it`"]
     build -.-> docs[(Docs)]
-    build --> test{Pass?}
+    build --o lint((Lint))
+    lint -->|autofix| lint
+    lint --> test{Pass?}
     test -->|yes| ship([Ship])
-    test -->|no| fix[Fix]
+    test --x|no| fix[Fix]
     fix -->|retry| build
-    ship -->|again| ship
-    test --x lint((Lint))
     classDef warm fill:#fda,stroke:#333,color:#000
     class fix warm
     style ship fill:#cec,stroke:#363,color:#000
