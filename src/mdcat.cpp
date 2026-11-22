@@ -79,6 +79,7 @@
 #include "mdcat_pool.h"
 #include "mdcat_protocol.h"
 #include "mdcat_remote.h"
+#include "mdcat_slot_sink.h"
 #include "mdcat_state.h"
 #include "mdcat_style.h"
 #include "mdcat_terminal.h"
@@ -283,15 +284,6 @@ std::string overlayParagraphBytes(const std::vector<std::string>& textRows,
     }
     return s;
 }
-
-// The non-tty output sink, defined near main(). If `out` is backed by one, deferred image slots can
-// be reserved on it (ADR 0003); otherwise (tty buffer, or a recursive ostringstream) images render
-// synchronously inline. Forward-declared (with thin free-function wrappers, defined after the
-// class) so the deferred call sites here can detect the sink and reserve a slot without the
-// complete type.
-class SlotSink;
-SlotSink* asSlotSink(std::ostream& out);
-void slotDeferImage(SlotSink* sink, std::future<std::string> fut);
 
 // A Markdown string of a diagram label as styled lines that stand alone (defined below).
 std::vector<std::string> mermaidMarkdownLines(const std::string& md, int width);
@@ -1684,178 +1676,6 @@ std::vector<std::string> splitLines(std::istream& in) {
         lines.push_back(line);
     }
     return lines;
-}
-
-// An ordered slot list with a dedicated writer thread (ADR 0003), used as the non-tty output sink.
-// render() writes text into it exactly like an ostream; at each block boundary (sync()) the
-// accumulated text is committed as one ordered slot. A deferred image instead reserves a *future*
-// slot (deferImage) and returns immediately, so the render thread keeps converting later images
-// while this one is still in flight.
-//
-// A single block's bytes still reach the wire contiguously — a text slot is written in one
-// writeAll, and an image's framed bytes arrive as one slot — so a Kitty APC chunk is never split by
-// a buffer-boundary write (a consumer that sees a chunk arrive in pieces with a gap can give up and
-// dump the partial base64 as text).
-//
-// The writer thread walks slots strictly front-to-back: for a ready slot it writes the bytes; for a
-// future slot it blocks on the future, then writes. Because the writer is its own thread, a stalled
-// write() blocks only the writer — image workers keep filling later future slots. Output emerges in
-// document order (the writer never reorders), so the bytes are identical to the serial renderer's
-// output; only timing changes.
-//
-// All Kitty image ids are assigned HERE, on the writer thread, in slot (= document) order: workers
-// and tables render with kKittyIdDefer (leaving timg's default id), and writerLoop runs
-// kittyRenumberAll on every slot's bytes. That is the one place ids are minted, so parallel,
-// out-of-order conversion still yields the exact id sequence the single-threaded serial renderer
-// produced. (Text slots contain no APC, so renumbering them is a cheap no-op.)
-class SlotSink : public std::streambuf {
-public:
-    // maxPending bounds the lookahead window: the producer (render thread) blocks before adding a
-    // slot once this many slots are queued-but-unwritten, so a near-bottom giant image can't make
-    // workers buffer the whole rest of the document in RAM ahead of a stalled writer (ADR 0003
-    // backpressure). 2*N (pool size) keeps every worker busy without unbounded buffering.
-    explicit SlotSink(int fd)
-        : fd_(fd),
-          maxPending_(2 * std::max(1u, std::thread::hardware_concurrency())),
-          writer_([this] { writerLoop(); }) {}
-    // Buffer mode (fd_ == -1): the writer appends each drained slot to buffer_ instead of
-    // write()ing to a descriptor. The pager path (ADR 0003 step 6) uses this to get parallel image
-    // conversion via the deferred-slot machinery while still assembling the whole document into one
-    // buffer for gmore. No backpressure cap is needed — there is no stalling consumer, the buffer
-    // is the consumer — so the window is left unbounded so the producer never blocks.
-    SlotSink()
-        : fd_(-1),
-          maxPending_(std::numeric_limits<size_t>::max()),
-          writer_([this] { writerLoop(); }) {}
-    ~SlotSink() override { finish(); }
-
-    // Buffer-mode result: the fully assembled, Kitty-renumbered document bytes. Call after
-    // finish().
-    std::string takeBuffer() { return std::move(buffer_); }
-
-    // Commit any buffered text, then append `fut` as the next ordered slot. Returns without waiting
-    // on the conversion, but may block briefly for backpressure if the lookahead window is full.
-    void deferImage(std::future<std::string> fut) {
-        commitText();
-        appendSlot(Slot(std::move(fut)));
-    }
-
-    // Flush any trailing text and join the writer thread. Idempotent.
-    void finish() {
-        if (done_) return;
-        commitText();
-        {
-            std::lock_guard<std::mutex> lk(mu_);
-            closed_ = true;
-        }
-        cv_.notify_one();
-        if (writer_.joinable()) writer_.join();
-        done_ = true;
-    }
-
-protected:
-    int_type overflow(int_type ch) override {
-        if (ch != traits_type::eof()) text_.push_back(static_cast<char>(ch));
-        return ch;
-    }
-    std::streamsize xsputn(const char* s, std::streamsize n) override {
-        text_.append(s, static_cast<size_t>(n));
-        return n;
-    }
-    // render() flushes at every top-level block boundary; commit the accumulated text as one slot
-    // so it is ordered ahead of whatever the next block produces (text or a deferred image).
-    int sync() override {
-        commitText();
-        return 0;
-    }
-
-private:
-    struct Slot {
-        bool ready;
-        std::string bytes;             // valid when ready
-        std::future<std::string> fut;  // valid when !ready
-        explicit Slot(std::string b) : ready(true), bytes(std::move(b)) {}
-        explicit Slot(std::future<std::string> f) : ready(false), fut(std::move(f)) {}
-    };
-
-    void commitText() {
-        if (text_.empty()) return;
-        appendSlot(Slot(std::move(text_)));
-        text_.clear();
-    }
-
-    // Append a slot, blocking first if the unwritten-slot window is full so the producer can't race
-    // far ahead of the writer (ADR 0003 backpressure). The writer signals drained_ each time it
-    // pops a slot.
-    void appendSlot(Slot&& s) {
-        std::unique_lock<std::mutex> lk(mu_);
-        drained_.wait(lk, [this] { return slots_.size() < maxPending_; });
-        slots_.emplace_back(std::move(s));
-        lk.unlock();
-        cv_.notify_one();
-    }
-
-    void writeAll(const std::string& b) {
-        size_t off = 0;
-        while (off < b.size()) {
-            ssize_t n = write(fd_, b.data() + off, b.size() - off);
-            if (n <= 0) {
-                if (errno == EINTR) continue;
-                return;
-            }
-            off += static_cast<size_t>(n);
-        }
-    }
-
-    void writerLoop() {
-        for (;;) {
-            std::unique_lock<std::mutex> lk(mu_);
-            cv_.wait(lk, [this] { return closed_ || !slots_.empty(); });
-            if (slots_.empty()) {
-                if (closed_) return;
-                continue;
-            }
-            // Move the front slot out; release the lock before any blocking write/get so the
-            // producer can keep appending and image workers can keep filling later future slots.
-            Slot front = std::move(slots_.front());
-            slots_.pop_front();
-            lk.unlock();
-            drained_.notify_one();  // a slot freed: a producer blocked on backpressure may proceed
-            // Assign Kitty ids in slot order (document order): every image in this slot's bytes
-            // gets the next id. Text slots have no APC, so this is a no-op for them.
-            std::string bytes = front.ready ? std::move(front.bytes) : front.fut.get();
-            std::string renumbered = kittyRenumberAll(bytes);
-            // Force every Kitty APC to q=2 (suppress all terminal replies). mdcat never reads
-            // those replies, so if we let them through they pile up in the pty input buffer and
-            // spill onto the shell prompt as garbage after mdcat exits — most visibly over SSH,
-            // where the reply travels back to the remote shell. Applies to pipe, file, and
-            // buffer (pager) output alike. iTerm2 only honours q=2, not q=1.
-            renumbered = kittyQ2(renumbered);
-            if (fd_ < 0)
-                buffer_ += renumbered;  // buffer mode: assemble in RAM for the pager
-            else
-                writeAll(renumbered);
-        }
-    }
-
-    int fd_;              // output descriptor, or -1 in buffer mode
-    std::string buffer_;  // buffer mode (fd_ < 0): assembled document, read via takeBuffer()
-    size_t maxPending_;   // backpressure cap on unwritten slots
-    std::string text_;    // current (render-thread) text buffer, pre-commit
-    std::deque<Slot> slots_;
-    std::mutex mu_;
-    std::condition_variable cv_;       // writer waits for work
-    std::condition_variable drained_;  // producer waits for room (backpressure)
-    bool closed_ = false;
-    bool done_ = false;
-    std::thread writer_;
-};
-
-SlotSink* asSlotSink(std::ostream& out) {
-    return dynamic_cast<SlotSink*>(out.rdbuf());
-}
-void slotDeferImage(SlotSink* sink, std::future<std::string> fut) {
-    sink->deferImage(std::move(fut));
 }
 
 void usage() {
