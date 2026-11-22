@@ -4,7 +4,7 @@
 #
 # The integrated gmore pager restores the reading position after a window resize by
 # tagging each rendered block with the markdown source line it came from, via a private
-# OSC sequence:  ESC ] 9999 ; <n> ST  (see gEmitProvenance in mdcat.cpp, srcAtRow in
+# OSC sequence:  ESC ] 9999 ; <n> ST  (see gEmitProvenance in mdcat_state.h, srcAtRow in
 # gmore_emulator.cpp). That marker is emitted ONLY on the paging path (rendering into the
 # pipe that feeds gmore, where gmore silently consumes it), gated by gEmitProvenance which
 # is set solely on the pager render thread. When stdout is not a tty mdcat never pages, so

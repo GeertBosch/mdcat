@@ -73,7 +73,7 @@ The four call sites differ in whether downstream layout needs the image's
   time.
 - **Join-required (table images):** the column-width algorithm needs every image's
   footprint *before* it can lay out the row, and tight columns trigger a second
-  width-bound render (mdcat.cpp:2282). So a table **submits all its cell images as a
+  width-bound render (the forced width-bound renderImageBlock in `mdcat_table.cpp`). So a table **submits all its cell images as a
   batch, then waits on that batch** before running layout. The table still overlaps
   with *other* blocks' images (they were already queued) — we just can't emit the
   table until its own cells are measured. The forced second render is submitted as a

@@ -146,7 +146,7 @@ static void onWinch(int) {
     winchLog("WINCH");
 }
 static inline bool enterRaw() {
-    // A multi-file paging session (see the segment loop in mdcat.cpp) calls run(), and
+    // A multi-file paging session (see the segment loop in renderPaged, mdcat.cpp) calls run(), and
     // therefore enterRaw(), once per file, deliberately staying in raw mode between files
     // rather than flipping back to cooked and re-raw'ing (which would flash echo on).
     // On the second and later files the tty is already raw, so re-running tcgetattr() here
@@ -667,9 +667,9 @@ int run(std::string data,
     // pipe/file) — skip raw mode entirely in that case.
     const bool scripted = std::getenv("GMORE_KEYS") != nullptr;
     if (!scripted) {
-        // A multi-file session (see mdcat.cpp) calls run() once per file; gTtyFd/gRaw persist
-        // across those calls (see enterRaw()), so on the second and later files the tty is
-        // already open and raw — reopening here would leak the previous file's fd.
+        // A multi-file session (see renderPaged in mdcat.cpp) calls run() once per file;
+        // gTtyFd/gRaw persist across those calls (see enterRaw()), so on the second and later files
+        // the tty is already open and raw — reopening here would leak the previous file's fd.
         if (gTtyFd < 0) {
             gTtyFd = open("/dev/tty", O_RDWR);
             if (gTtyFd < 0) gTtyFd = STDIN_FILENO;

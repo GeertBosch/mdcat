@@ -52,7 +52,7 @@ is also why a mid-paint scroll breaks it — see the first-paint note below.)
 
 This is the subtle one. mdcat places **table-cell and standalone images** bracketed
 in DECSC/DECRC (see `replaySixel` / `emitImageParagraph` / the table overlay pass in
-`mdcat.cpp`): up to the band top, across to the column, `ESC 7` + sixel + `ESC 8`,
+`mdcat_image.cpp`, `mdcat_blocks.cpp`, `mdcat_table.cpp`): up to the band top, across to the column, `ESC 7` + sixel + `ESC 8`,
 then down to the band bottom.
 
 When gmore parses such a bracketed sixel, `finishSixel()` advances the cursor and may

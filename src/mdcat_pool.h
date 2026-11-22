@@ -74,7 +74,7 @@ private:
     bool stop_ = false;
 };
 
-// The process-wide image pool, created on first use (defined in mdcat.cpp for now).
+// The process-wide image pool, created on first use (defined in mdcat_image.cpp).
 ThreadPool& imagePool();
 
 }  // namespace mdcat
