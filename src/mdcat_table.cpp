@@ -2,7 +2,9 @@
 #include "mdcat_table.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <future>
+#include <map>
 #include <ostream>
 #include <sstream>
 #include <string>

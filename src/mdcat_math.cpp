@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cctype>
 #include <map>
+#include <string>
+#include <vector>
 
 #include "mdcat_state.h"
 #include "mdcat_style.h"

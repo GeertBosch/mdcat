@@ -1,6 +1,7 @@
 #include "mdcat_text.h"
 
 #include <cctype>
+#include <cstdint>
 
 #include "mdcat_style.h"
 #include "unicode_width.h"

@@ -5,6 +5,7 @@
 
 #include <cerrno>
 #include <ostream>
+#include <utility>
 
 #include "mdcat_protocol.h"
 

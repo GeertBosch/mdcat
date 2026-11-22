@@ -2,10 +2,13 @@
 #include "mdcat_blocks.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <future>
+#include <map>
 #include <ostream>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "mdcat_image.h"

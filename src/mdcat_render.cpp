@@ -3,11 +3,15 @@
 #include "mdcat_render.h"
 
 #include <algorithm>
+#include <cctype>
+#include <cstdint>
+#include <cstdlib>
 #include <future>
 #include <iostream>
 #include <ostream>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "highlight.h"

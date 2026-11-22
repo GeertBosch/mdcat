@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <string>

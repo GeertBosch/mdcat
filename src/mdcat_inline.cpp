@@ -1,6 +1,8 @@
 #include "mdcat_inline.h"
 
+#include <cctype>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "mdcat_math.h"

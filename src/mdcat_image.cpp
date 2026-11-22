@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -11,6 +12,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "mdcat_inline.h"
 #include "mdcat_pool.h"

@@ -12,6 +12,7 @@
 #include <streambuf>
 #include <string>
 #include <thread>
+#include <utility>
 
 namespace mdcat {
 

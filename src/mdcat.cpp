@@ -34,66 +34,56 @@
 // the width by tighter spacing and wrapped labels, or drawn wider than the terminal if need be.
 // --mermaid / $MDCAT_MERMAID picks the chain; $MDCAT_MERMAID_DEBUG=1 reports builtin rejections.
 //
-// Build:  c++ -std=c++17 -O2 -o mdcat mdcat.cpp
+// Build:  make   (compiles src/*.cpp with C++17 into ./mdcat; see the Makefile)
 // Usage:  mdcat [--width N] [--img[=kitty|sixel|none]] [--mermaid MODE] [--] [file ...]
 //         (reads standard input when given no file arguments)
 //         --mermaid auto|builtin|mmdc|source picks how ```mermaid blocks render.
 //         --width N forces the render width, overriding $COLUMNS and the terminal size.
 //         --img forces image output even when piped; an optional protocol pins the graphics
 //         backend.
-
+//
+// Source map (all under src/; this file holds only option parsing, the pager driver and main):
+//   mdcat_style.h      ANSI colour/style constants and code-block theme colours
+//   mdcat_state.h/cpp  process-wide render state: option globals, current file, provenance flag
+//   mdcat_text.h/cpp   display-width measurement, ANSI-aware wrapping and padding helpers
+//   mdcat_math.h/cpp   LaTeX $...$ / $$...$$ to Unicode transliteration (renderMath, scanMath)
+//   mdcat_inline.h/cpp inline parser: emphasis, code spans, links, hard breaks, math
+//   mdcat_terminal.h/cpp  terminal queries: width, cell metrics, background, graphics backend
+//   mdcat_remote.h/cpp trusted-host check and curl fetch for remote images
+//   mdcat_protocol.h/cpp  Kitty/sixel stream encode, decode and placement helpers
+//   mdcat_pool.h       shared worker pool for parallel image conversion
+//   mdcat_image.h/cpp  image conversion via timg and standalone <img> block rendering
+//   mdcat_slot_sink.h/cpp ordered output slots drained by a writer thread
+//   mdcat_mermaid.h/cpp   mermaid blocks: built-in diagram drawing and the mmdc fallback
+//   mdcat_blocks.h/cpp leaf blocks: paragraphs, headings, thematic breaks
+//   mdcat_table.h/cpp  GFM table detection, column layout, alignment and emission
+//   mdcat_render.h/cpp block parser (quotes, lists, code, tables) and the render() driver
+//
 #include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
-#include <sys/ioctl.h>
-#include <sys/wait.h>
-#include <termios.h>
 #include <unistd.h>
 
-#include <algorithm>
-#include <atomic>
-#include <cctype>
 #include <cerrno>
-#include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
-#include <deque>
 #include <fstream>
-#include <functional>
-#include <future>
 #include <iostream>
-#include <limits>
-#include <map>
-#include <mutex>
-#include <queue>
-#include <sstream>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "gmore_run.h"
-#include "highlight.h"
-#include "mdcat_blocks.h"
-#include "mdcat_image.h"
-#include "mdcat_inline.h"
-#include "mdcat_math.h"
-#include "mdcat_mermaid.h"
-#include "mdcat_pool.h"
-#include "mdcat_protocol.h"
-#include "mdcat_remote.h"
 #include "mdcat_render.h"
 #include "mdcat_slot_sink.h"
 #include "mdcat_state.h"
-#include "mdcat_style.h"
-#include "mdcat_table.h"
 #include "mdcat_terminal.h"
-#include "mdcat_text.h"
-#include "mermaid.h"
-#include "tty_guard.h"
-#include "unicode_width.h"
 #include "width_probe.h"
 
 namespace mdcat {
+
+namespace {
 
 void usage() {
     std::cerr << "usage: mdcat [-o OUTFILE] [--width N] [--img[=kitty|sixel|none]]\n"
@@ -114,7 +104,6 @@ MermaidMode parseMermaidMode(const std::string& s) {
     if (s == "source") return MermaidMode::Source;
     error(2, std::string("invalid mermaid mode: ") + s);
 }
-
 
 int parseOptions(int argc, char** argv) {
     // Supported: --width N / -w N / --width=N to force the render width (overriding $COLUMNS
@@ -194,6 +183,8 @@ int parseOptions(int argc, char** argv) {
     }
     return a;
 }
+
+}  // namespace
 
 int renderPaged(std::vector<std::string> files) {
     // On a TTY, page through gmore by default. A render THREAD (not a forked child, so the
