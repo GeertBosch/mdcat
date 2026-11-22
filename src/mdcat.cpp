@@ -75,6 +75,7 @@
 #include "highlight.h"
 #include "mdcat_state.h"
 #include "mdcat_style.h"
+#include "mdcat_text.h"
 #include "mermaid.h"
 #include "tty_guard.h"
 #include "unicode_width.h"
@@ -104,12 +105,6 @@ namespace mdcat {
 // INITIAL url's host only; curl follows redirects to other hosts (GitHub's badge redirects to a
 // pipelines host), an accepted trade-off so badges work.
 
-// Lowercase a string in place-returning copy form.
-std::string toLowerCopy(const std::string& s) {
-    std::string r = s;
-    for (char& c : r) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    return r;
-}
 
 // Extract the host from a git remote URL in either SSH or URL form. Returns "" if none can be
 // found. Handles: scp-like SSH (git@host:path, host:path), ssh:// URLs, and https?:// URLs. Strips
@@ -801,135 +796,6 @@ CellMetrics cellMetrics() {
     return m;
 }
 
-// ---------------------------------------------------------------------------
-// UTF-8 / display-width utilities
-// ---------------------------------------------------------------------------
-
-// Number of bytes in the UTF-8 sequence whose lead byte is c (1 for invalid lead bytes).
-int utf8SequenceLength(unsigned char c) {
-    if (c < 0x80) return 1;
-    if ((c >> 5) == 0x06) return 2;
-    if ((c >> 4) == 0x0E) return 3;
-    if ((c >> 3) == 0x1E) return 4;
-    return 1;
-}
-
-// Decode the UTF-8 code point beginning at s[i] into cp, returning the byte length consumed (>=1).
-// An invalid/truncated sequence yields the single lead byte as cp with length 1 (best-effort).
-int decodeUtf8(const std::string& s, size_t i, uint32_t& cp) {
-    unsigned char c = static_cast<unsigned char>(s[i]);
-    int len = utf8SequenceLength(c);
-    if (len == 1 || i + static_cast<size_t>(len) > s.size()) {
-        cp = c;
-        return 1;
-    }
-    static const unsigned char kLeadMask[5] = {0, 0x7F, 0x1F, 0x0F, 0x07};
-    cp = c & kLeadMask[len];
-    for (int k = 1; k < len; ++k) {
-        unsigned char cc = static_cast<unsigned char>(s[i + k]);
-        if ((cc & 0xC0) != 0x80) {
-            cp = c;
-            return 1;
-        }  // not a continuation byte: invalid
-        cp = (cp << 6) | (cc & 0x3F);
-    }
-    return len;
-}
-
-using uw::codePointWidth;
-
-// Display width of a string in terminal columns, skipping ANSI escape (CSI) sequences and OSC 8
-// hyperlink sequences so that styled text measures by what is actually shown. Each code point is
-// measured by codePointWidth, so fullwidth emoji / CJK count as two columns and combining marks,
-// joiners and variation selectors as zero — keeping tables and reflow aligned with what the
-// terminal actually draws.
-int displayWidth(const std::string& s) {
-    int width = 0;
-    for (size_t i = 0; i < s.size();) {
-        unsigned char c = static_cast<unsigned char>(s[i]);
-        if (c == kEsc && i + 1 < s.size() && s[i + 1] == '[') {
-            // CSI sequence: ESC [ ... final-byte in @..~
-            i += 2;
-            while (i < s.size() && !(s[i] >= '@' && s[i] <= '~')) ++i;
-            if (i < s.size()) ++i;  // consume the final byte
-            continue;
-        }
-        if (c == kEsc && i + 1 < s.size() && s[i + 1] == ']') {
-            // OSC sequence: ESC ] ... terminated by BEL or ST (ESC backslash)
-            i += 2;
-            while (i < s.size()) {
-                if (static_cast<unsigned char>(s[i]) == 0x07) {
-                    ++i;
-                    break;
-                }
-                if (s[i] == kEsc && i + 1 < s.size() && s[i + 1] == '\\') {
-                    i += 2;
-                    break;
-                }
-                ++i;
-            }
-            continue;
-        }
-        uint32_t cp;
-        i += static_cast<size_t>(decodeUtf8(s, i, cp));
-        int w = codePointWidth(cp);
-        // Absorb the rest of the grapheme cluster: it is drawn in one glyph, not per code point.
-        while (i < s.size()) {
-            uint32_t next;
-            size_t adv = static_cast<size_t>(decodeUtf8(s, i, next));
-            if (!uw::continuesCluster(cp, next)) break;
-            w = uw::widthWithFollower(w, next);
-            cp = next;
-            i += adv;
-        }
-        width += w;
-    }
-    return width;
-}
-
-// Append n copies of the box-drawing horizontal line character to out.
-std::string horizontalLine(int n, const std::string& bar = "─") {
-    std::string out;
-    for (int i = 0; i < n; ++i) out += bar;
-    return out;
-}
-
-std::string padTo(const std::string& s, int width) {
-    int w = displayWidth(s);
-    std::string out = s;
-    for (int i = w; i < width; ++i) out += ' ';
-    return out;
-}
-
-// Per-column text alignment derived from a GFM delimiter row (:--, --:, :-:).
-enum class Align { Left, Right, Center };
-
-// Pad `s` to `width` display columns, placing the content per `a`. Spaces are added before and/or
-// after; padding never appears inside the styled content, so ANSI escapes are unaffected. A cell
-// wider than `width` is returned unchanged (layout sizes columns to fit, so this is the rare
-// re-render-rounding case, where overflowing is preferable to truncating).
-std::string padAligned(const std::string& s, int width, Align a) {
-    int w = displayWidth(s);
-    if (w >= width) return s;
-    int pad = width - w;
-    switch (a) {
-    case Align::Right: return std::string(pad, ' ') + s;
-    case Align::Center: {
-        int left = pad / 2;
-        return std::string(left, ' ') + s + std::string(pad - left, ' ');
-    }
-    case Align::Left:
-    default: return s + std::string(pad, ' ');
-    }
-}
-
-// Trim ASCII spaces and tabs from both ends.
-std::string trim(const std::string& s) {
-    size_t b = 0, e = s.size();
-    while (b < e && (s[b] == ' ' || s[b] == '\t')) ++b;
-    while (e > b && (s[e - 1] == ' ' || s[e - 1] == '\t')) --e;
-    return s.substr(b, e - b);
-}
 
 // ---------------------------------------------------------------------------
 // LaTeX math -> Unicode
@@ -1153,24 +1019,6 @@ std::string mathbbLetter(char c) {
 // \text / \mathsf / \operatorname keep letters upright; \mathbf is bold; \mathit is italic.
 enum class MathStyle { Italic, Upright, Bold };
 
-// Encode a Unicode code point as UTF-8 and append it to `out`.
-void appendUtf8(std::string& out, unsigned cp) {
-    if (cp < 0x80) {
-        out += static_cast<char>(cp);
-    } else if (cp < 0x800) {
-        out += static_cast<char>(0xC0 | (cp >> 6));
-        out += static_cast<char>(0x80 | (cp & 0x3F));
-    } else if (cp < 0x10000) {
-        out += static_cast<char>(0xE0 | (cp >> 12));
-        out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-        out += static_cast<char>(0x80 | (cp & 0x3F));
-    } else {
-        out += static_cast<char>(0xF0 | (cp >> 18));
-        out += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
-        out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-        out += static_cast<char>(0x80 | (cp & 0x3F));
-    }
-}
 
 // Map an ASCII letter to its styled Mathematical-Alphanumeric code point, or return the letter
 // unchanged for Upright (which is plain ASCII). The Mathematical Italic and Bold blocks are
@@ -2080,10 +1928,6 @@ int pngWidth(const std::string& path) {
     return (h[16] << 24) | (h[17] << 16) | (h[18] << 8) | h[19];
 }
 
-// Whitespace test usable on signed char without the locale surprises of std::isspace.
-inline bool isSpaceCh(char c) {
-    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
-}
 
 // Scan a markdown image ![alt](src) starting at s[i]. On success, sets alt/src and advances i
 // past the closing ')'; returns true. i must point at '!'.
@@ -3258,193 +3102,6 @@ bool emitBuiltinMermaid(const std::vector<std::string>& body,
 // Block model
 // ---------------------------------------------------------------------------
 
-// Length in bytes of the next display "unit" at offset i: a whole ANSI CSI escape, a whole OSC 8
-// hyperlink escape, or a single grapheme — a base UTF-8 code point plus any trailing zero-width
-// followers (combining marks, variation selectors) and ZWJ-joined code points (e.g. a flag or a
-// family emoji). Keeping the grapheme intact means reflow never splits a base from its marks or
-// breaks a ZWJ emoji sequence across a line, and the unit's display width stays correct.
-size_t unitLength(const std::string& s, size_t i) {
-    char c = s[i];
-    if (c == kEsc && i + 1 < s.size() && s[i + 1] == '[') {  // CSI: ESC [ ... final @..~
-        size_t j = i + 2;
-        while (j < s.size() && !(s[j] >= '@' && s[j] <= '~')) ++j;
-        if (j < s.size()) ++j;
-        return j - i;
-    }
-    if (c == kEsc && i + 1 < s.size() && s[i + 1] == ']') {  // OSC: ESC ] ... BEL or ST
-        size_t j = i + 2;
-        while (j < s.size()) {
-            if (static_cast<unsigned char>(s[j]) == 0x07) {
-                ++j;
-                break;
-            }
-            if (s[j] == kEsc && j + 1 < s.size() && s[j + 1] == '\\') {
-                j += 2;
-                break;
-            }
-            ++j;
-        }
-        return j - i;
-    }
-    // A math atom (kMathAtomStart .. kMathAtomEnd) is one indivisible unit: reflow must never break
-    // inside it or collapse its interior spaces. Swallow everything through the end marker
-    // (inclusive) so the whole expression travels as a single "word".
-    if (s.compare(i, kMathAtomStart.size(), kMathAtomStart) == 0) {
-        size_t e = s.find(kMathAtomEnd, i + kMathAtomStart.size());
-        if (e != std::string::npos) return e + kMathAtomEnd.size() - i;
-        return s.size() - i;  // unterminated (shouldn't happen): take the rest
-    }
-    // Base code point, then absorb following zero-width code points and ZWJ-joined sequences so the
-    // whole grapheme cluster travels together.
-    uint32_t cp;
-    size_t j = i + static_cast<size_t>(decodeUtf8(s, i, cp));
-    while (j < s.size()) {
-        uint32_t next;
-        size_t adv = static_cast<size_t>(decodeUtf8(s, j, next));
-        if (!uw::continuesCluster(cp, next)) break;
-        j += adv;
-        cp = next;
-    }
-    return j - i;
-}
-
-// Keep ANSI styling from bleeding across the line breaks that reflow (or table layout) introduces.
-// A code span carries a background colour (kCodeOn .. kCodeOff); if a span wraps, the line would
-// end with the background still on and paint gray to the right edge of the terminal. Walk the text
-// line by line, tracking whether a code span is open at each '\n': close it before the break and
-// reopen it after, so each line is self-contained and no background extends past its text.
-std::string closeStylesAtLineBreaks(const std::string& s) {
-    std::string out;
-    out.reserve(s.size());
-    bool inCode = false;
-    for (size_t i = 0; i < s.size();) {
-        if (s[i] == '\n') {
-            if (inCode) out += kCodeOff;  // close the span at end of line
-            out += '\n';
-            if (inCode) out += kCodeOn;  // reopen it at the start of the next line
-            ++i;
-            continue;
-        }
-        size_t len = unitLength(s, i);
-        if (s.compare(i, kCodeOn.size(), kCodeOn) == 0)
-            inCode = true;
-        else if (s.compare(i, kCodeOff.size(), kCodeOff) == 0)
-            inCode = false;
-        out.append(s, i, len);
-        i += len;
-    }
-    return out;
-}
-
-std::string stripMathAtoms(const std::string& s);  // defined just below reflow
-
-// Reflow a rendered (ANSI-styled) string so that no output line exceeds `width` display columns,
-// breaking on spaces between words. A word longer than `width` on its own is hard-cut at exactly
-// `width` columns and continued on the next line. ANSI escapes don't count toward the width and
-// are never split. Line breaks in the result are '\n'; the result has no trailing newline.
-std::string reflow(const std::string& s, int width) {
-    if (width < 1) width = 1;
-
-    // Split into whitespace-separated words; escapes travel with the word they are attached to. A
-    // '\n' (from a <br> hard break) is kept as a standalone "\n" word that forces a line break
-    // below.
-    std::vector<std::string> words;
-    std::string cur;
-    for (size_t i = 0; i < s.size();) {
-        if (s[i] == ' ' || s[i] == '\n') {
-            if (!cur.empty()) {
-                words.push_back(cur);
-                cur.clear();
-            }
-            if (s[i] == '\n') words.push_back("\n");
-            ++i;
-        } else {
-            size_t len = unitLength(s, i);
-            cur.append(s, i, len);
-            i += len;
-        }
-    }
-    if (!cur.empty()) words.push_back(cur);
-
-    std::string out;
-    int lineWidth = 0;      // display columns already on the current line
-    bool lineEmpty = true;  // nothing placed on the current line yet
-    for (std::string w : words) {
-        if (w == "\n") {  // forced hard break from a <br>
-            out += '\n';
-            lineWidth = 0;
-            lineEmpty = true;
-            continue;
-        }
-        // A word that cannot fit on a line by itself is hard-cut into width-sized pieces.
-        while (displayWidth(w) > width) {
-            if (!lineEmpty) {
-                out += '\n';
-                lineWidth = 0;
-                lineEmpty = true;
-            }
-            std::string piece;
-            int pieceWidth = 0;
-            size_t i = 0;
-            for (; i < w.size();) {
-                size_t len = unitLength(w, i);
-                int cw = displayWidth(w.substr(i, len));  // 0 for escape, 1 normal, 2 wide
-                if (pieceWidth + cw > width) break;
-                piece.append(w, i, len);
-                pieceWidth += cw;
-                i += len;
-            }
-            // A single unit wider than the whole line (a width-2 grapheme when width==1) fits in no
-            // piece. Place it anyway — overflowing one column beats looping forever (w never
-            // shrinks).
-            if (i == 0) {
-                size_t len = unitLength(w, 0);
-                piece.append(w, 0, len);
-                i = len;
-            }
-            out += piece;
-            out += '\n';
-            w = w.substr(i);
-        }
-        int ww = displayWidth(w);
-        if (!lineEmpty && lineWidth + 1 + ww > width) {  // start a new line for this word
-            out += '\n';
-            lineWidth = 0;
-            lineEmpty = true;
-        }
-        if (!lineEmpty) {
-            out += ' ';
-            ++lineWidth;
-        }
-        out += w;
-        lineWidth += ww;
-        lineEmpty = false;
-    }
-    return stripMathAtoms(closeStylesAtLineBreaks(out));
-}
-
-// Remove the math-atom sentinels (kMathAtomStart / kMathAtomEnd) from a fully laid-out string, just
-// before it is written to the terminal. They exist only to keep reflow from breaking a math
-// expression apart; once line breaking is done they have no purpose and must not reach the terminal
-// (some fonts render Private-Use code points as a visible box). Zero-width, so removing them never
-// changes any measured width.
-std::string stripMathAtoms(const std::string& s) {
-    if (s.find(kMathAtomStart[0]) == std::string::npos) return s;  // fast path: no U+E00x lead byte
-    std::string out;
-    out.reserve(s.size());
-    for (size_t i = 0; i < s.size();) {
-        if (s.compare(i, kMathAtomStart.size(), kMathAtomStart) == 0) {
-            i += kMathAtomStart.size();
-        } else if (s.compare(i, kMathAtomEnd.size(), kMathAtomEnd) == 0) {
-            i += kMathAtomEnd.size();
-        } else {
-            out += s[i++];
-        }
-    }
-    return out;
-}
-
-std::vector<std::string> splitOnNewlines(const std::string& s);  // defined below
 
 // defined below, near emitHeading (which uses it too)
 std::string renderLeadingImageBlock(const std::string& text,
@@ -3832,19 +3489,6 @@ std::vector<Align> parseTableAlignment(const std::string& delimiter) {
     return aligns;
 }
 
-// Split a string on '\n' into its constituent lines (no trailing empty element added for a final
-// newline; an empty string yields a single empty line).
-std::vector<std::string> splitOnNewlines(const std::string& s) {
-    std::vector<std::string> out;
-    size_t start = 0;
-    for (size_t i = 0; i <= s.size(); ++i) {
-        if (i == s.size() || s[i] == '\n') {
-            out.push_back(s.substr(start, i - start));
-            start = i + 1;
-        }
-    }
-    return out;
-}
 
 // The labels of a diagram share their rows with each other and with the strokes' text layer, so
 // each line of a Markdown label must stand alone: a bold or italic style that is on at the end of
