@@ -1,13 +1,6 @@
 #include "mdcat_state.h"
 
-#include "mdcat_style.h"
-
 namespace mdcat {
-
-// Mutable theme colours (declared in mdcat_style.h); initTheme overrides them for a dark theme.
-std::string kCodeOn =
-    "\033[48;5;254;38;5;236m";  // light-gray bg, dark-gray fg (light-theme default)
-std::string kLightGray = "\033[38;5;250m";
 
 int gWidthOverride = 0;
 bool gForceGraphics = false;
