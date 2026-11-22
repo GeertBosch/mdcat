@@ -73,6 +73,8 @@
 
 #include "gmore_run.h"
 #include "highlight.h"
+#include "mdcat_state.h"
+#include "mdcat_style.h"
 #include "mermaid.h"
 #include "tty_guard.h"
 #include "unicode_width.h"
@@ -83,78 +85,6 @@ namespace mdcat {
 // ---------------------------------------------------------------------------
 // ANSI / OSC helpers
 // ---------------------------------------------------------------------------
-
-constexpr char kEsc = '\033';
-
-// Math-atom sentinels. A rendered math expression is a self-contained unit that must NOT be broken
-// or respaced by reflow(): it is laid out like an inline image formed of characters (and will grow
-// a height dimension once stacked fractions/matrices arrive), so its internal spacing is exact and
-// meaningful, not prose whitespace to be collapsed. renderInline brackets each math span with these
-// two Private-Use markers; reflow's unitLength treats everything between them as ONE indivisible
-// unit (so interior spaces survive), displayWidth counts the interior but skips the markers, and a
-// final stripMathAtoms() pass removes the markers just before output. Zero-width by codePointWidth
-// so they never affect measurement. U+E000/U+E001 (UTF-8: EE 80 80 / EE 80 81).
-const std::string kMathAtomStart = "\xEE\x80\x80";  // U+E000
-const std::string kMathAtomEnd = "\xEE\x80\x81";    // U+E001
-
-const std::string kBoldOn = "\033[1m";
-const std::string kBoldOff = "\033[22m";
-const std::string kItalicOn = "\033[3m";
-const std::string kItalicOff = "\033[23m";
-// Code-block colours depend on the terminal theme (see initTheme, called from main once the OSC 11
-// background is known). Light theme: dark-gray text on light-gray. Dark theme: light-gray text on
-// dark-gray. Both are set before any rendering, so reads during rendering see the chosen palette.
-std::string kCodeOn =
-    "\033[48;5;254;38;5;236m";  // light-gray bg, dark-gray fg (light-theme default)
-const std::string kCodeOff = "\033[39;49m";
-const std::string kReset = "\033[0m";
-std::string kLightGray = "\033[38;5;250m";  // table row separators; lightened on a dark theme
-const std::string kQuoteBar = "\033[38;5;244m▎\033[0m ";  // the left rule drawn before quoted lines
-// Grouping parentheses that renderMath adds around \sqrt / \frac arguments (our Unicode transliter-
-// ation can't draw an extended radical or a stacked fraction, so braces become parens instead).
-// Faint so the grouping reads as structure, not content, but they MUST NOT vanish: they carry the
-// grouping. Earlier theme-specific grays (254 near-white on light, 235/242 near-black on dark) were
-// each invisible on the OPPOSITE background — and theme detection (OSC 11) fails silently over SSH,
-// under pipes, and on some terminals, falling back to the light value on a dark screen (which is
-// where the parens disappeared, iTerm). So we use one theme-independent mid-gray (245) with real
-// contrast against both a light and a dark background, and no SGR dim (which only pushed the glyph
-// further toward the background). No initTheme override.
-const std::string kMathGroupOn = "\033[38;5;245m";  // faint but theme-independent grouping parens
-const std::string kMathGroupOff = "\033[39m";       // restore default fg (keeps other SGR)
-
-// An explicit width from the --width/-w command-line flag, or <= 0 if none was given. Set by main()
-// before any rendering, and so before terminalWidth() is first called and caches its result.
-int gWidthOverride = 0;
-
-// Force inline image output even when stdout is not a terminal (--img). Lets mdcat be used as an
-// image source when piped, e.g. `mdcat --img doc.md | gmore` for visual pager testing. Set by
-// main() before rendering, so before terminalSupportsGraphics() caches its result. Cell-size
-// detection still works over /dev/tty, and the terminal width is read from $COLUMNS / stderr's
-// TIOCGWINSZ.
-bool gForceGraphics = false;
-
-// Backend explicitly chosen on the command line via `--img <kitty|sixel|none>`. When set, this is
-// authoritative (same force as MDCAT_GRAPHICS), so `mdcat --img sixel doc.md | gmore` pins the
-// protocol regardless of terminal or env. Unset (-1) means a bare `--img` with no protocol
-// argument: the historical "force output, default to Kitty when piped" behaviour. Set by main().
-int gForcedBackend = -1;  // -1 = unset; else a GraphicsBackend value
-
-// How a ```mermaid block is rendered (--mermaid, MDCAT_MERMAID): Auto tries the built-in renderer,
-// then mmdc, then the source; Builtin skips mmdc; Mmdc skips the built-in renderer; Source always
-// shows the source. Set by main() before rendering.
-enum class MermaidMode { Auto, Builtin, Mmdc, Source };
-MermaidMode gMermaidMode = MermaidMode::Auto;
-
-// Directory of the file currently being rendered, used to resolve relative image paths.
-// Empty string means the current working directory. Set by main() before each render() call.
-std::string gFileDir;
-
-// Name of the file being rendered ("<stdin>" when empty) and the 1-based source line of the
-// top-level block being emitted, so a diagnostic can say where its diagram starts.
-std::string gSourceName;
-size_t gBlockLine = 0;
-
-std::string gOutputFile;
 
 // --- Remote image trust ----------------------------------------------------------------------
 //
@@ -370,49 +300,6 @@ std::string fetchRemoteImage(const std::string& url) {
     }
     return out;
 }
-
-// Columns currently consumed by container-block decorations (the block-quote left rule, a list
-// item's marker indent). Every nested container raises it by the width of its prefix while its
-// content is being rendered, so the width that paragraphs reflow to and that tables and rules fill
-// shrinks to match the space the prefix leaves. Restored on the way out. See emitBlockQuote /
-// emitList / terminalWidth.
-int gIndent = 0;
-
-// Current bullet-list nesting depth, used to pick the bullet glyph (● ○ ▪︎ by depth, like GitHub's
-// disc/circle/square). Raised while a bullet list's items render and restored after. Ordered lists
-// don't change it — their marker is the number, not a depth-varying glyph. See emitList.
-int gListDepth = 0;
-
-// Nesting depth across *all* lists (bullet and ordered). Used so only the outermost list block gets
-// the two-space left lead that sets a list off from surrounding text; nested lists already step in
-// via their parent item's marker. Raised around any list's items and restored after. See emitList.
-int gListNesting = 0;
-
-// Set just before rendering the content of a *tight* list item. A tight list draws no blank line
-// between its items, and likewise its item bodies should not put a blank line between the item's
-// lead paragraph and an immediately-following nested list (GFM renders a tight item's paragraph
-// without <p> spacing). render() reads this once at entry to suppress its own top-level block
-// separators, then clears it so blocks nested deeper (and recursive renders) separate normally. See
-// emitList.
-bool gTightItem = false;
-
-// The full terminal width, before any container indentation is taken out. Determined once and
-// cached (see the comment in terminalWidth). Callers want terminalWidth(), which subtracts the
-// indent.
-// Re-layout width override for the integrated pager. When gmore re-renders the held source
-// on a window resize it sets this to the new terminal width; 0 (the default) means "detect
-// normally". Consulted before the memoized detection so a resize can drive a fresh width
-// without the once-per-process cache getting in the way. Not thread-safe by itself, but the
-// render thread that reads it is (re)started by the resize path after the value is set, so
-// the write happens-before the read.
-int gRenderWidth = 0;
-
-// When set, render() emits a private provenance OSC (see emitProvenance) before each
-// top-level block, tagging the following grid rows with their markdown source line so the
-// integrated pager can restore the reading position after a resize re-layout. Enabled ONLY
-// on the pager path; left off for --dump, --imginfo, and non-tty output so those stay
-// byte-identical (the golden --dump tests and property-concat.sh depend on it).
-bool gEmitProvenance = false;
 
 int fullTerminalWidth() {
     // A resize-driven override wins and is NOT cached (it changes across re-renders).
