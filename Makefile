@@ -38,8 +38,16 @@ MERMAID_OBJS = $(B)/mermaid.o $(B)/mermaid_parse.o $(B)/mermaid_layout.o $(B)/me
 $(MERMAID_OBJS): $(B)/%.o: $(S)/%.cpp $(S)/mermaid.h $(S)/mermaid_model.h $(S)/mermaid_shape.h $(S)/png_write.h | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
 
-$(B)/mdcat: $(S)/mdcat.cpp $(S)/width_probe.h $(S)/unicode_width.h $(S)/unicode_width_table.h $(S)/highlight.h $(S)/mermaid.h $(S)/gmore_run.h $(S)/tty_guard.h $(GMORE_OBJS) $(B)/highlight.o $(MERMAID_OBJS) $(B)/png_write.o | $(B)
-	$(CXX) $(CXXFLAGS) $(PTHREAD) -I$(S) -o $@ $(S)/mdcat.cpp $(B)/highlight.o $(MERMAID_OBJS) $(B)/png_write.o $(GMORE_OBJS)
+# mdcat is being split into modules (docs/plan-mdcat-refactor.md). Each module adds its object
+# here; every object depends on all mdcat headers (simple and conservative).
+MDCAT_HDRS = $(wildcard $(S)/mdcat_*.h)
+MDCAT_OBJS =
+
+$(MDCAT_OBJS): $(B)/%.o: $(S)/%.cpp $(MDCAT_HDRS) $(S)/unicode_width.h $(S)/unicode_width_table.h $(S)/width_probe.h $(S)/highlight.h $(S)/mermaid.h $(S)/tty_guard.h | $(B)
+	$(CXX) $(CXXFLAGS) $(PTHREAD) -I$(S) -c -o $@ $<
+
+$(B)/mdcat: $(S)/mdcat.cpp $(MDCAT_HDRS) $(S)/width_probe.h $(S)/unicode_width.h $(S)/unicode_width_table.h $(S)/highlight.h $(S)/mermaid.h $(S)/gmore_run.h $(S)/tty_guard.h $(MDCAT_OBJS) $(GMORE_OBJS) $(B)/highlight.o $(MERMAID_OBJS) $(B)/png_write.o | $(B)
+	$(CXX) $(CXXFLAGS) $(PTHREAD) -I$(S) -o $@ $(S)/mdcat.cpp $(MDCAT_OBJS) $(B)/highlight.o $(MERMAID_OBJS) $(B)/png_write.o $(GMORE_OBJS)
 
 $(B)/gmore: $(S)/gmore.cpp $(S)/width_probe.h $(S)/unicode_width.h $(S)/unicode_width_table.h $(S)/tty_guard.h $(S)/gmore_run.h $(GMORE_OBJS) | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -o $@ $(S)/gmore.cpp $(GMORE_OBJS)

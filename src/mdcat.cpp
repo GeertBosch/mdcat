@@ -78,7 +78,7 @@
 #include "unicode_width.h"
 #include "width_probe.h"
 
-namespace {
+namespace mdcat {
 
 // ---------------------------------------------------------------------------
 // ANSI / OSC helpers
@@ -5291,7 +5291,9 @@ int renderAll(std::vector<std::string> files, std::ostream& out) {
     return 0;
 }
 
-}  // namespace
+}  // namespace mdcat
+
+using namespace mdcat;
 
 int main(int argc, char** argv) {
     if (auto e = std::getenv("MDCAT_MERMAID")) gMermaidMode = parseMermaidMode(e);
