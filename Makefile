@@ -41,7 +41,7 @@ $(MERMAID_OBJS): $(B)/%.o: $(S)/%.cpp $(S)/mermaid.h $(S)/mermaid_model.h $(S)/m
 # mdcat is being split into modules (docs/plan-mdcat-refactor.md). Each module adds its object
 # here; every object depends on all mdcat headers (simple and conservative).
 MDCAT_HDRS = $(wildcard $(S)/mdcat_*.h)
-MDCAT_OBJS = $(B)/mdcat_state.o $(B)/mdcat_text.o $(B)/mdcat_math.o $(B)/mdcat_inline.o $(B)/mdcat_terminal.o $(B)/mdcat_remote.o $(B)/mdcat_protocol.o
+MDCAT_OBJS = $(B)/mdcat_state.o $(B)/mdcat_text.o $(B)/mdcat_math.o $(B)/mdcat_inline.o $(B)/mdcat_terminal.o $(B)/mdcat_remote.o $(B)/mdcat_protocol.o $(B)/mdcat_image.o
 
 $(MDCAT_OBJS): $(B)/%.o: $(S)/%.cpp $(MDCAT_HDRS) $(S)/unicode_width.h $(S)/unicode_width_table.h $(S)/width_probe.h $(S)/highlight.h $(S)/mermaid.h $(S)/tty_guard.h | $(B)
 	$(CXX) $(CXXFLAGS) $(PTHREAD) -I$(S) -c -o $@ $<
@@ -131,6 +131,8 @@ FMT_SRCS := \
 	$(S)/mdcat_protocol.cpp \
 	$(S)/mdcat_protocol.h \
 	$(S)/mdcat_pool.h \
+	$(S)/mdcat_image.cpp \
+	$(S)/mdcat_image.h \
 	$(S)/mdcat_text.h \
 	$(S)/gmore.cpp
 
@@ -196,6 +198,7 @@ SRCS := \
 	$(S)/mdcat_terminal.cpp \
 	$(S)/mdcat_remote.cpp \
 	$(S)/mdcat_protocol.cpp \
+	$(S)/mdcat_image.cpp \
 	$(S)/mdcat_text.cpp \
 	$(S)/gmore.cpp
 
