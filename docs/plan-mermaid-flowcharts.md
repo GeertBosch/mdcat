@@ -1100,7 +1100,9 @@ goldens are empty). The `too wide` goldens of `mermaid-basic` (w30) and
   cells (TERMINAL-GRAPHICS §4), so it cannot keep labels as text.
 - **Every other diagram type**: sequence, class, state, ER, gantt, pie, mindmap,
   and the rest.
-- **`subgraph` and `direction`**, until a follow-up plan.
+- **`subgraph` and `direction`**: subgraphs are planned in
+  [plan-mermaid-subgraphs.md](plan-mermaid-subgraphs.md); `direction` inside a
+  subgraph stays out.
 - **v11.3 shapes without a classic equivalent**: document, bow-tie, hourglass,
   icons, images, and the like.
 - **Raw HTML in labels**, other than `<br>`.
