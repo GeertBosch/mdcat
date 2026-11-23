@@ -21,7 +21,8 @@ file with `mdcat` to see every example drawn; the design is in
 - [9. Label text](#9-label-text)
 - [10. Node shapes](#10-node-shapes)
 - [11. Cycles, self-loops and parallel edges](#11-cycles-self-loops-and-parallel-edges)
-- [12. Fitting the width](#12-fitting-the-width)
+- [12. Subgraphs](#12-subgraphs)
+- [13. Fitting the width](#13-fitting-the-width)
 - [Limits](#limits)
 
 ## How a diagram is rendered
@@ -77,7 +78,7 @@ graph LR
 
 The picture's width and height follow from the labels. Each box is its label plus
 two columns of padding on each side and a row above and below; ranks are a few
-cells apart. A diagram too wide for the terminal is [fitted](#12-fitting-the-width).
+cells apart. A diagram too wide for the terminal is [fitted](#13-fitting-the-width).
 
 ## 2. Diagrams that are not drawn here
 
@@ -89,7 +90,10 @@ The reasons, as `MDCAT_MERMAID_DEBUG=1` words them:
 | ------ | ------- |
 | `not a flowchart` | `sequenceDiagram`, `pie`, `gantt`, `classDiagram`, … |
 | `unsupported syntax: …` | `direction` inside a graph, `end` as an id, a link with mismatched ends such as `A o--> B`, an unclosed shape or quote |
-| `subgraph layout` | any `subgraph … end` that is read without error: subgraphs are parsed, but not drawn yet |
+| `subgraph layout` | a `subgraph … end` that is read without error but not drawn yet: one with a title, a subgraph inside another, or one in a graph that is not top-down |
+| `subgraph layout: sides` | two subgraphs whose members interleave on the ranks, so their boxes cannot both have straight sides |
+| `subgraph layout: edge` | an edge would run through a box it has no end in, along a border, or out of a box that holds both its ends |
+| `subgraph layout: node`, `…: label`, `…: boxes`, `…: border` | a box with a footprint or edge label that is not its member's inside it, or with a member or label outside it, two boxes that touch, or a border over a box or a label (checks that catch a layout bug) |
 | `unsupported syntax: direction in subgraph` | a `direction` statement inside a `subgraph` |
 | `unsupported syntax: link to subgraph S` | an edge that starts or ends at a subgraph's id (`A --> S`) |
 | `unsupported syntax: subgraph S named as a node` | a subgraph's id used as a node with no link (`S`, `S:::cls`) |
@@ -423,7 +427,40 @@ graph TD
 Here `retry` is the back edge, drawn from `Report` up to `Valid?`; `Ship` points at
 itself; and `Valid?` and `Report` are joined in both directions.
 
-## 12. Fitting the width
+## 12. Subgraphs
+
+A `subgraph … end` is drawn as a box around the boxes named inside it, so far only in a
+top-down graph (`TD` or `TB`), one level deep, and when its title is blank
+(`subgraph s[" "]`). The box is a plain outline in the theme's colour, under the boxes and
+edges and with no fill. Mermaid's membership rules apply: a box belongs to the subgraph
+that names it, even if it was first named outside, and to the one that closes first if
+two name it.
+
+The layout keeps each subgraph's boxes together. On every rank from its first member's to
+its last it holds a left and a right border, so the sides are straight, and an edge or box
+that is not a member never lands inside it, even on a rank that holds none of its members.
+An edge into or out of the subgraph crosses the border at a right angle; an edge between
+two boxes outside it goes round; an edge between two members stays inside. A subgraph's box
+is one blank column from its members, and its top and bottom borders get rows of their own in
+the gaps between ranks.
+
+```mermaid
+graph TD
+    build[Build] --> test[Test]
+    subgraph s[" "]
+        test --> lint[Lint]
+        lint --> pack[Pack]
+    end
+    pack --> ship[Ship]
+    build --> ship
+```
+
+A diagram whose subgraphs cannot be drawn without an edge running through a box, or whose
+boxes would cross, is declined (`subgraph layout: …`, see [the table](#2-diagrams-that-are-not-drawn-here)):
+a subgraph with members on far apart ranks and other boxes between them is the usual cause.
+Titles, nested subgraphs and the other directions are still declined as plain `subgraph layout`.
+
+## 13. Fitting the width
 
 A diagram wider than the terminal is fitted before anything else, never by changing
 its direction. The renderer tries, in turn, and draws the first that fits:
@@ -459,7 +496,7 @@ For the last two, a terminal narrower than 72 columns counts as 72 wide, so an
 80-column terminal allows 8 of each. Beyond that, a diagram is too tangled to
 read: it is shown as source, and `mmdc` is not asked to redraw it.
 
-Not drawn at all: `subgraph` (read, but declined as `subgraph layout` for now), `direction` inside a graph, and the other diagram types
+Not drawn at all: `subgraph` with a title, nested, or in a graph that is not top-down (read, but declined as `subgraph layout` for now), `direction` inside a graph, and the other diagram types
 (sequence, pie, class, state, Gantt, …). Colours, curves and other styling are read
 but have no effect. A flowchart that is declined goes to `mmdc` when it is
 available.

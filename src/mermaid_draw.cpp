@@ -260,6 +260,18 @@ void mergeDotted(std::vector<Stroke>& strokes) {
 
 std::vector<Stroke> strokesOf(const Graph& g, const Layout& lay, const std::vector<Pt>& crossings) {
     std::vector<Stroke> strokes;
+    // A subgraph's box is an outline under everything else. It has no fill: the text layer over
+    // the image would lose the theme's background.
+    for (size_t c = 0; c < lay.clusterBox.size(); ++c) {
+        const CellBox& b = lay.clusterBox[c];
+        Stroke st;
+        st.kind = Stroke::Outline;
+        st.shape = Shape::Rect;
+        st.cluster = static_cast<int>(c);
+        st.pts = {{2 * b.col + 1, 2 * b.row + 1},
+                  {2 * (b.col + b.cols) - 1, 2 * (b.row + b.rows) - 1}};
+        strokes.push_back(st);
+    }
     for (size_t i = 0; i < lay.nodeFoot.size(); ++i) {
         const CellBox& f = lay.nodeFoot[i];
         Stroke st;
@@ -474,7 +486,7 @@ bool rasterize(const Graph& g,
         return c >= 0 ? static_cast<uint32_t>(c) : m.rgb;
     };
     for (const Stroke& st : strokes) {
-        if (st.kind != Stroke::Outline) continue;
+        if (st.kind != Stroke::Outline || st.node < 0) continue;
         const int fill = g.nodes[static_cast<size_t>(st.node)].style.fill;
         if (fill < 0) continue;
         ras.cur = static_cast<uint32_t>(fill);
@@ -715,6 +727,18 @@ bool inBox(const CellBox& b, int c, int r) {
     return c >= b.col && c < b.col + b.cols && r >= b.row && r < b.row + b.rows;
 }
 
+// Whether two boxes of cells share a cell.
+bool touches(const CellBox& a, const CellBox& b) {
+    return a.col < b.col + b.cols && b.col < a.col + a.cols && a.row < b.row + b.rows &&
+        b.row < a.row + a.rows;
+}
+
+// Whether the box `inner` lies inside `outer`, clear of its border.
+bool inside(const CellBox& inner, const CellBox& outer) {
+    return inner.col > outer.col && inner.col + inner.cols < outer.col + outer.cols &&
+        inner.row > outer.row && inner.row + inner.rows < outer.row + outer.rows;
+}
+
 bool onOutline(const CellBox& f, Pt p) {
     int l = 2 * f.col + 1, t = 2 * f.row + 1, r = 2 * (f.col + f.cols) - 1,
         b = 2 * (f.row + f.rows) - 1;
@@ -754,6 +778,75 @@ bool meet(Pt a0, Pt a1, Pt b0, Pt b1, Pt& at) {
         std::min(b0.first, b1.first) <= x && x <= std::max(b0.first, b1.first);
 }
 
+// The checks that go with subgraphs. Each box is clear of the others, holds exactly its members
+// (their footprints, and the labels and paths of the edges between them), and an edge with only
+// one end inside it crosses its border, never runs along it; an edge with no end inside never
+// touches it.
+bool validateClusters(const Graph& g, const Layout& lay, std::string& reason) {
+    const size_t count = lay.clusterBox.size();
+    for (size_t c = 0; c < count; ++c) {
+        const CellBox& box = lay.clusterBox[c];
+        for (size_t d = c + 1; d < count; ++d) {
+            if (touches(box, lay.clusterBox[d])) {
+                reason = "subgraph layout: boxes";
+                return false;
+            }
+        }
+        for (size_t i = 0; i < g.nodes.size(); ++i) {
+            const CellBox& f = lay.nodeFoot[i];
+            const bool member = g.nodes[i].cluster == static_cast<int>(c);
+            if (member ? !inside(f, box) : touches(f, box)) {
+                reason = "subgraph layout: node";
+                return false;
+            }
+        }
+        const int l = 2 * box.col + 1, t = 2 * box.row + 1, r = 2 * (box.col + box.cols) - 1,
+                  b = 2 * (box.row + box.rows) - 1;
+        const Pt corner[4] = {{l, t}, {r, t}, {r, b}, {l, b}};
+        for (size_t k = 0; k < g.edges.size(); ++k) {
+            const bool from =
+                g.nodes[static_cast<size_t>(g.edges[k].from)].cluster == static_cast<int>(c);
+            const bool to =
+                g.nodes[static_cast<size_t>(g.edges[k].to)].cluster == static_cast<int>(c);
+            const CellBox& label = lay.edgeLabel[k];
+            if (label.cols > 0 && (from && to ? !inside(label, box) : touches(label, box))) {
+                reason = "subgraph layout: label";
+                return false;
+            }
+            const std::vector<Pt>& path = lay.edgePath[k];
+            for (size_t i = 0; i + 1 < path.size(); ++i) {
+                const Pt &p = path[i], &q = path[i + 1];
+                for (int side = 0; side < 4; ++side) {
+                    if (overlap(p, q, corner[side], corner[(side + 1) % 4])) {
+                        reason = "subgraph layout: edge";
+                        return false;
+                    }
+                }
+                // Both ends inside: every point is inside. No end inside: no point is.
+                for (const Pt& pt : {p, q}) {
+                    const bool in = pt.first > l && pt.first < r && pt.second > t && pt.second < b;
+                    const bool on =
+                        pt.first >= l && pt.first <= r && pt.second >= t && pt.second <= b;
+                    if ((from && to && !in) || (!from && !to && on)) {
+                        reason = "subgraph layout: edge";
+                        return false;
+                    }
+                }
+                // An edge between two outsiders may also cross a box without a point in it.
+                if (!from && !to) {
+                    const int x0 = std::min(p.first, q.first), x1 = std::max(p.first, q.first);
+                    const int y0 = std::min(p.second, q.second), y1 = std::max(p.second, q.second);
+                    if (x0 <= r && x1 >= l && y0 <= b && y1 >= t) {
+                        reason = "subgraph layout: edge";
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+    return true;
+}
+
 // Turn layout bugs into fallbacks instead of misleading pictures. Reads the occupancy grid and the
 // stroke list, not the pixels.
 bool validate(const Graph& g,
@@ -762,6 +855,7 @@ bool validate(const Graph& g,
               const Grid& grid,
               const std::vector<Pt>& crossings,
               std::string& reason) {
+    if (!validateClusters(g, lay, reason)) return false;
     // No edge passes through a node or label, except at its own endpoints, and through its own
     // label.
     for (size_t k = 0; k < g.edges.size(); ++k) {
@@ -876,6 +970,20 @@ bool drawDiagram(
                 grid.at(c, r) = Occ::Label;
             }
         }
+    }
+    // A box's border may not lie over a node or a label.
+    bool borderClear = true;
+    for (const Stroke& st : strokes) {
+        if (st.kind != Stroke::Outline || st.cluster < 0) continue;
+        outlineCells(st.pts[0], st.pts[1], [&](int c, int r) {
+            const Occ was = grid.get(c, r);
+            if (was != Occ::Empty && was != Occ::Cluster) borderClear = false;
+            grid.at(c, r) = Occ::Cluster;
+        });
+    }
+    if (!borderClear) {
+        reason = "subgraph layout: border";
+        return false;
     }
     for (const Stroke& st : strokes) {
         if (st.kind != Stroke::Segment) continue;

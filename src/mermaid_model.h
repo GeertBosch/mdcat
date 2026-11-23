@@ -98,7 +98,10 @@ struct Layout {  // cells for boxes, half-cell units for paths
     int titleRows = 0;  // rows at the top that hold the title, and a blank one after it
     std::vector<CellBox> nodeFoot, nodeLabel;  // per node
     std::vector<CellBox> edgeLabel;            // per edge: its text's cells (cols == 0 if none)
-    std::vector<std::vector<Pt>> edgePath;     // per edge, orthogonal hu polyline, source to target
+    // Per cluster: the cells of its outline, the border included. The border is the outermost
+    // cells, so its strokes run through the centres of those cells, as a node's do.
+    std::vector<CellBox> clusterBox;
+    std::vector<std::vector<Pt>> edgePath;  // per edge, orthogonal hu polyline, source to target
     // Per edge: its group, a split (edges from one source) or a merge (edges into one target) whose
     // edges share a port on each of their nodes, and have one style. Only edges of one group may
     // share or touch strokes. An invisible edge has no group (-1) and an empty path.
@@ -113,7 +116,8 @@ struct Stroke {  // what the rasterizer consumes, in hu
     // the point the path comes from. Dot: the center. Corner: the bend, then a point on its
     // vertical leg and one on its horizontal leg (only their sides of the bend matter).
     std::vector<Pt> pts;
-    int node = -1;  // Outline: the node it outlines
+    int node = -1;     // Outline: the node it outlines, or -1 for a cluster
+    int cluster = -1;  // Outline: the cluster it outlines, or -1 for a node
     // Segment: bit 0 (bit 1) is set when the end at pts[0] (pts[1]) is a rounded Corner, so the
     // straight piece stops short of the bend.
     unsigned char round = 0;
@@ -127,7 +131,7 @@ struct Stroke {  // what the rasterizer consumes, in hu
 };
 
 // What a character cell of the diagram holds, for the drawer and the validator.
-enum class Occ : unsigned char { Empty, Node, Label, Edge };
+enum class Occ : unsigned char { Empty, Node, Label, Edge, Cluster };
 
 // Tunables: spacing and the gates that make a diagram fall back.
 namespace tune {
@@ -145,8 +149,10 @@ constexpr int kColsPerCrossing = 10;  // a diagram may have one edge crossing (b
 constexpr int kColsPerBackEdge = 10;  // likewise for the edges that close a cycle
 constexpr int kMinGateCols = 72;  // a narrower terminal counts as this wide for those two limits
 constexpr int kMaxLabelWidth =
-    24;                        // columns an edge label may take, and a Markdown string wraps at
-constexpr int kNoWrap = 4096;  // a wrap width that no label reaches, for markdownAutoWrap: false
+    24;                         // columns an edge label may take, and a Markdown string wraps at
+constexpr int kNoWrap = 4096;   // a wrap width that no label reaches, for markdownAutoWrap: false
+constexpr int kClusterPad = 2;  // columns a subgraph's box adds between its members and what lies
+                                // outside: its border's column and a blank one inside it
 constexpr int kMinCylinderLabel =
     8;  // columns a cylinder is at least as wide as its label ("database")
 }  // namespace tune

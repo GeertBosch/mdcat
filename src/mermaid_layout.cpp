@@ -29,7 +29,22 @@ struct Item {
     int thick = 1;   // extent along the flow, in cells (of a label; nodes have their own)
     int left = 0;    // start across the flow, in cells
     int weight = 1;  // how strongly placement honours its desired position
+    // The subgraph that holds the item, or -1: a member, the dummies and label of an edge between
+    // two members, and the cluster's own border items. A border item (1: left, 2: right) stands
+    // for one cell of the box's side on a rank the box spans, so that ordering and placement keep
+    // the box's sides straight and everything else out of it.
+    int cluster = -1;
+    int border = 0;
 };
+
+// The separation between neighbouring items: `base` between footprints, and a cluster's border is
+// kClusterPad - 1 blank columns from what lies inside the box.
+int separation(const std::vector<Item>& items, int base, int a, int b) {
+    const Item &x = items[static_cast<size_t>(a)], &y = items[static_cast<size_t>(b)];
+    if (x.cluster >= 0 && x.cluster == y.cluster && (x.border || y.border))
+        return tune::kClusterPad - 1;
+    return base;
+}
 
 // Place the items of one rank, in order, as close as possible to their desired starts (in cells)
 // without overlapping or reordering: each item is put at its desired position, and neighbours that
@@ -38,7 +53,7 @@ struct Item {
 void placeRank(std::vector<Item>& items,
                const std::vector<int>& order,
                const std::vector<int>& desire,
-               int sep) {
+               int base) {
     struct Block {
         long sum;
         long weight;
@@ -48,7 +63,8 @@ void placeRank(std::vector<Item>& items,
     int off = 0;
     for (size_t i = 0; i < order.size(); ++i) {
         offset[i] = off;
-        off += items[static_cast<size_t>(order[i])].ext + sep;
+        off += items[static_cast<size_t>(order[i])].ext +
+            (i + 1 < order.size() ? separation(items, base, order[i], order[i + 1]) : base);
     }
     std::vector<Block> blocks;
     for (size_t i = 0; i < order.size(); ++i) {
@@ -94,42 +110,138 @@ void setPositions(const std::vector<int>& row, std::vector<int>& pos) {
     for (size_t i = 0; i < row.size(); ++i) pos[static_cast<size_t>(row[i])] = static_cast<int>(i);
 }
 
+// A run of a rank that moves as one when the rank is sorted: an item outside every cluster, or a
+// cluster's block, from its left border to its right one.
+struct Entry {
+    size_t begin, end;
+    int cluster;
+};
+
+std::vector<Entry> entriesOf(const std::vector<int>& row, const std::vector<Item>& items) {
+    std::vector<Entry> list;
+    for (size_t i = 0; i < row.size();) {
+        const int cl = items[static_cast<size_t>(row[i])].cluster;
+        size_t j = i + 1;
+        if (cl >= 0)
+            while (j < row.size() && items[static_cast<size_t>(row[j - 1])].border != 2) ++j;
+        list.push_back({i, j, cl});
+        i = j;
+    }
+    return list;
+}
+
+// Make each cluster's items contiguous in a rank: its left border, its members in their current
+// order, its right border. A block takes the place of its first member; one with no member (a rank
+// of the box's span that holds none) goes last, in the order of the clusters.
+void groupBlocks(std::vector<int>& row, const std::vector<Item>& items) {
+    std::map<int, std::vector<int>> members;
+    std::map<int, int> left, right;
+    std::vector<int> out;
+    for (int id : row) {
+        const Item& it = items[static_cast<size_t>(id)];
+        if (it.cluster < 0) {
+            out.push_back(id);
+        } else if (it.border) {
+            (it.border == 1 ? left : right)[it.cluster] = id;
+        } else {
+            if (members[it.cluster].empty()) out.push_back(-1 - it.cluster);
+            members[it.cluster].push_back(id);
+        }
+    }
+    for (const auto& [cl, id] : left)
+        if (members[cl].empty()) out.push_back(-1 - cl);
+    row.clear();
+    for (int id : out) {
+        if (id >= 0) {
+            row.push_back(id);
+            continue;
+        }
+        const int cl = -1 - id;
+        row.push_back(left.at(cl));
+        row.insert(row.end(), members[cl].begin(), members[cl].end());
+        row.push_back(right.at(cl));
+    }
+}
+
+// The order that sorting units by key puts them in, as the unit that goes in each slot: a unit
+// with no key keeps its slot, the others are sorted into the remaining slots, ties staying in
+// their old order.
+std::vector<size_t> sortedSlots(const std::vector<std::pair<bool, long>>& key) {
+    std::vector<size_t> slots, movable;
+    for (size_t i = 0; i < key.size(); ++i) {
+        if (!key[i].first) continue;
+        slots.push_back(i);
+        movable.push_back(i);
+    }
+    std::stable_sort(movable.begin(), movable.end(), [&](size_t a, size_t b) {
+        return key[a].second < key[b].second;
+    });
+    std::vector<size_t> out(key.size());
+    for (size_t i = 0; i < out.size(); ++i) out[i] = i;
+    for (size_t i = 0; i < slots.size(); ++i) out[slots[i]] = movable[i];
+    return out;
+}
+
 // Reorder one rank by the barycenter of each item's neighbours in the adjacent rank, in positions
 // times 1000. An item with no such neighbours keeps its slot; the others are sorted into the
-// remaining slots, ties staying in their old order.
+// remaining slots, ties staying in their old order. Clusters stay contiguous: the members of each
+// block are sorted among themselves, and then the entries of the rank, a block keyed by the mean
+// barycenter of its items, among theirs.
 void sortByBarycenter(std::vector<std::vector<int>>& order,
                       std::vector<int>& pos,
                       const std::vector<std::vector<int>>& nbr,
+                      const std::vector<Item>& items,
                       size_t r) {
     std::vector<int>& row = order[r];
-    std::vector<size_t> slots;
-    std::vector<std::pair<long, int>> keyed;  // barycenter, then old position
-    std::vector<int> movable;
-    for (size_t i = 0; i < row.size(); ++i) {
-        const std::vector<int>& from = nbr[static_cast<size_t>(row[i])];
-        if (from.empty()) continue;
+    auto keyOf = [&](int id) -> std::pair<bool, long> {
+        const std::vector<int>& from = nbr[static_cast<size_t>(id)];
+        if (from.empty()) return {false, 0};
         long sum = 0;
         for (int p : from) sum += pos[static_cast<size_t>(p)];
-        slots.push_back(i);
-        keyed.push_back({sum * 1000 / static_cast<long>(from.size()), static_cast<int>(i)});
-        movable.push_back(row[i]);
+        return {true, sum * 1000 / static_cast<long>(from.size())};
+    };
+    std::vector<Entry> entries = entriesOf(row, items);
+    for (const Entry& e : entries) {
+        if (e.cluster < 0 || e.end - e.begin < 3) continue;
+        std::vector<std::pair<bool, long>> key;
+        std::vector<int> inner(row.begin() + static_cast<long>(e.begin) + 1,
+                               row.begin() + static_cast<long>(e.end) - 1);
+        for (int id : inner) key.push_back(keyOf(id));
+        const std::vector<size_t> by = sortedSlots(key);
+        for (size_t i = 0; i < by.size(); ++i) row[e.begin + 1 + i] = inner[by[i]];
     }
-    std::vector<size_t> by(keyed.size());
-    for (size_t i = 0; i < by.size(); ++i) by[i] = i;
-    std::stable_sort(by.begin(), by.end(), [&](size_t a, size_t b) { return keyed[a] < keyed[b]; });
-    for (size_t i = 0; i < by.size(); ++i) row[slots[i]] = movable[by[i]];
+    std::vector<std::pair<bool, long>> key;
+    for (const Entry& e : entries) {
+        long sum = 0, count = 0;
+        for (size_t i = e.begin; i < e.end; ++i) {
+            const std::pair<bool, long> k = keyOf(row[i]);
+            if (!k.first) continue;
+            sum += k.second;
+            ++count;
+        }
+        key.push_back(count ? std::pair<bool, long>{true, sum / count}
+                            : std::pair<bool, long>{false, 0});
+    }
+    const std::vector<size_t> by = sortedSlots(key);
+    std::vector<int> sorted;
+    for (size_t e : by)
+        sorted.insert(sorted.end(),
+                      row.begin() + static_cast<long>(entries[e].begin),
+                      row.begin() + static_cast<long>(entries[e].end));
+    row = sorted;
     setPositions(row, pos);
 }
 
 // Choose the order of the items in each rank so that few edges cross: sweeps of the barycenter
 // heuristic, each followed by swaps of adjacent items that strictly reduce the crossings. The best
-// order seen wins; the initial one on ties.
+// order seen wins; the initial one on ties. A swap exchanges two items of one cluster (or of none),
+// or two entries of a rank when one is a cluster's block, so the blocks stay contiguous.
 void reduceCrossings(std::vector<std::vector<int>>& order,
-                     size_t itemCount,
+                     const std::vector<Item>& items,
                      const std::vector<std::vector<int>>& up,
                      const std::vector<std::vector<int>>& down) {
     const size_t ranks = order.size();
-    std::vector<int> pos(itemCount, 0);
+    std::vector<int> pos(items.size(), 0);
     for (const std::vector<int>& row : order) setPositions(row, pos);
     auto total = [&] {
         int sum = 0;
@@ -140,19 +252,24 @@ void reduceCrossings(std::vector<std::vector<int>>& order,
         return (r > 0 ? gapCrossings(order, pos, down, r - 1) : 0) +
             gapCrossings(order, pos, down, r);
     };
+    auto sameLevel = [&](int a, int b) {
+        const Item &x = items[static_cast<size_t>(a)], &y = items[static_cast<size_t>(b)];
+        return x.cluster == y.cluster && !x.border && !y.border;
+    };
     std::vector<std::vector<int>> best = order;
     int bestCount = total();
     for (int sweep = 0; sweep < 8 && bestCount > 0; ++sweep) {
         if (sweep % 2 == 0) {
-            for (size_t r = 1; r < ranks; ++r) sortByBarycenter(order, pos, up, r);
+            for (size_t r = 1; r < ranks; ++r) sortByBarycenter(order, pos, up, items, r);
         } else {
-            for (size_t r = ranks - 1; r-- > 0;) sortByBarycenter(order, pos, down, r);
+            for (size_t r = ranks - 1; r-- > 0;) sortByBarycenter(order, pos, down, items, r);
         }
         for (bool improved = true; improved;) {
             improved = false;
             for (size_t r = 0; r < ranks; ++r) {
                 std::vector<int>& row = order[r];
                 for (size_t i = 0; i + 1 < row.size(); ++i) {
+                    if (!sameLevel(row[i], row[i + 1])) continue;
                     int before = local(r);
                     std::swap(row[i], row[i + 1]);
                     setPositions(row, pos);
@@ -160,6 +277,23 @@ void reduceCrossings(std::vector<std::vector<int>>& order,
                         improved = true;
                     } else {
                         std::swap(row[i], row[i + 1]);
+                        setPositions(row, pos);
+                    }
+                }
+                std::vector<Entry> entries = entriesOf(row, items);
+                for (size_t e = 0; e + 1 < entries.size(); ++e) {
+                    if (entries[e].cluster < 0 && entries[e + 1].cluster < 0) continue;
+                    auto first = row.begin() + static_cast<long>(entries[e].begin);
+                    auto mid = row.begin() + static_cast<long>(entries[e + 1].begin);
+                    auto last = row.begin() + static_cast<long>(entries[e + 1].end);
+                    int before = local(r);
+                    std::rotate(first, mid, last);
+                    setPositions(row, pos);
+                    if (local(r) < before) {
+                        improved = true;
+                        entries = entriesOf(row, items);
+                    } else {
+                        std::rotate(first, first + (last - mid), last);
                         setPositions(row, pos);
                     }
                 }
@@ -306,6 +440,7 @@ void mirror(Layout& lay, bool rows) {
     for (CellBox& b : lay.nodeFoot) flip(b);
     for (CellBox& b : lay.nodeLabel) flip(b);
     for (CellBox& b : lay.edgeLabel) flip(b);
+    for (CellBox& b : lay.clusterBox) flip(b);
     for (std::vector<Pt>& path : lay.edgePath)
         for (Pt& p : path) (rows ? p.second : p.first) = 2 * extent - (rows ? p.second : p.first);
 }
@@ -314,7 +449,8 @@ void mirror(Layout& lay, bool rows) {
 // columns on either side if it is wider than the diagram, which is then centred under it.
 void addTitle(Layout& lay, int width) {
     const int dx = std::max(0, (width - lay.cols) / 2), dy = 2;
-    for (std::vector<CellBox>* boxes : {&lay.nodeFoot, &lay.nodeLabel, &lay.edgeLabel}) {
+    for (std::vector<CellBox>* boxes :
+         {&lay.nodeFoot, &lay.nodeLabel, &lay.edgeLabel, &lay.clusterBox}) {
         for (CellBox& b : *boxes) {
             if (b.cols == 0) continue;
             b.col += dx;
@@ -341,11 +477,16 @@ bool layoutGraph(const Graph& original,
                  std::string& reason,
                  Decline& why) {
     const size_t n = original.nodes.size();
-    // Steps 5-8 of docs/plan-mermaid-subgraphs.md lift this gate: the parser reads subgraphs, but
-    // nothing yet lays out or draws a cluster.
-    if (!original.clusters.empty()) {
-        reason = "subgraph layout";
-        return false;
+    // Subgraphs are laid out top-down, one level deep and without titles; steps 6-8 of
+    // docs/plan-mermaid-subgraphs.md lift the rest of this gate.
+    {
+        bool drawn = original.clusters.empty() || original.dir == Dir::TB;
+        for (const Cluster& c : original.clusters)
+            drawn = drawn && c.parent < 0 && c.title.lines.empty() && c.title.markdown.empty();
+        if (!drawn) {
+            reason = "subgraph layout";
+            return false;
+        }
     }
     if (original.edges.empty()) {
         reason = "no edges";
@@ -538,6 +679,7 @@ bool layoutGraph(const Graph& original,
         nodeH[i] = f.rows;
         labelRow[i] = f.labelRow;
         items[i].rank = rank[i];
+        items[i].cluster = g.nodes[i].cluster;
         items[i].ext = td ? nodeW[i] : nodeH[i];
         // Across the flow of a left-to-right graph a node is centred on its label, which a
         // cylinder's lid pushes off the middle of its footprint, so that edges meet its sides
@@ -605,10 +747,14 @@ bool layoutGraph(const Graph& original,
             c.push_back(static_cast<int>(u));
             const Edge& edge = g.edges[static_cast<size_t>(k)];
             const int mid = rank[u] + (rank[v] - rank[u]) / 2;
+            // An edge inside a cluster stays inside it; any other, including one between two
+            // clusters, passes outside every box.
+            const int cu = g.nodes[u].cluster, cv = g.nodes[v].cluster;
             for (int r = rank[u] + 1; r < rank[v]; ++r) {
                 Item d;
                 d.rank = r;
                 d.weight = kDummyWeight;
+                d.cluster = cu == cv ? cu : -1;
                 if (!edge.label.lines.empty() && r == mid) {
                     const int lines = static_cast<int>(edge.label.lines.size());
                     int w = labelWidth(edge);
@@ -632,6 +778,43 @@ bool layoutGraph(const Graph& original,
         done[root] = 1;
         for (size_t j = 0; j < n; ++j)
             if (find(j) == root && inE[j].empty()) visit(j);
+    }
+
+    // Border items. A cluster spans the ranks from its first member's to its last member's, and on
+    // each of them has a left and a right border item, which ordering and placement tie to those of
+    // the ranks before and after as if by an edge. A rank of the span that holds no member gets
+    // them too, so that nothing from outside lands inside the box there.
+    const size_t clusterCount = g.clusters.size();
+    std::vector<int> spanLo(clusterCount, INT_MAX), spanHi(clusterCount, -1);
+    for (size_t i = 0; i < n; ++i) {
+        const int c = g.nodes[i].cluster;
+        if (c < 0) continue;
+        spanLo[static_cast<size_t>(c)] = std::min(spanLo[static_cast<size_t>(c)], rank[i]);
+        spanHi[static_cast<size_t>(c)] = std::max(spanHi[static_cast<size_t>(c)], rank[i]);
+    }
+    std::vector<std::vector<int>>
+        borderPairs;  // consecutive border items: ties for order/placement
+    std::vector<int> boxLeft(clusterCount, -1), boxRight(clusterCount, -1);  // first rank's items
+    for (size_t c = 0; c < clusterCount; ++c) {
+        int before[2] = {-1, -1};
+        for (int r = spanLo[c]; r <= spanHi[c]; ++r) {
+            for (int side = 1; side <= 2; ++side) {
+                Item b;
+                b.rank = r;
+                b.weight = kDummyWeight;
+                b.cluster = static_cast<int>(c);
+                b.border = side;
+                items.push_back(b);
+                const int id = static_cast<int>(items.size()) - 1;
+                order[static_cast<size_t>(r)].push_back(id);
+                if (before[side - 1] >= 0) borderPairs.push_back({before[side - 1], id});
+                if (r == spanLo[c]) (side == 1 ? boxLeft : boxRight)[c] = id;
+                before[side - 1] = id;
+            }
+        }
+    }
+    if (clusterCount) {
+        for (std::vector<int>& row : order) groupBlocks(row, items);
     }
 
     // Ports. The edges leaving a node through one port share their first run, and those arriving
@@ -825,16 +1008,22 @@ bool layoutGraph(const Graph& original,
             succs[static_cast<size_t>(c[i])].push_back(c[i + 1]);
         }
     }
-    reduceCrossings(order, items.size(), preds, succs);
+    for (const std::vector<int>& pair : borderPairs) {
+        preds[static_cast<size_t>(pair[1])].push_back(pair[0]);
+        succs[static_cast<size_t>(pair[0])].push_back(pair[1]);
+    }
+    reduceCrossings(order, items, preds, succs);
 
     // Placement across the flow. Pack each rank, then in one pass from the first rank on, move each
     // item toward the mean center of the items its edges come from.
     const int sep = td ? fit.sepTd : tune::kSepLr;
+    auto sepOf = [&](int a, int b) { return separation(items, sep, a, b); };
     for (const std::vector<int>& row : order) {
         int at = 0;
-        for (int id : row) {
-            items[static_cast<size_t>(id)].left = at;
-            at += items[static_cast<size_t>(id)].ext + sep;
+        for (size_t i = 0; i < row.size(); ++i) {
+            items[static_cast<size_t>(row[i])].left = at;
+            at += items[static_cast<size_t>(row[i])].ext +
+                (i + 1 < row.size() ? sepOf(row[i], row[i + 1]) : sep);
         }
     }
     auto center = [&](int id) {  // in hu
@@ -864,10 +1053,12 @@ bool layoutGraph(const Graph& original,
         } else {
             size_t fk = static_cast<size_t>(firstKnown - known.begin());
             for (size_t i = fk; i-- > 0;)
-                desire[i] = desire[i + 1] - items[static_cast<size_t>(row[i])].ext - sep;
+                desire[i] = desire[i + 1] - items[static_cast<size_t>(row[i])].ext -
+                    sepOf(row[i], row[i + 1]);
             for (size_t i = fk + 1; i < row.size(); ++i)
                 if (!known[i])
-                    desire[i] = desire[i - 1] + items[static_cast<size_t>(row[i - 1])].ext + sep;
+                    desire[i] = desire[i - 1] + items[static_cast<size_t>(row[i - 1])].ext +
+                        sepOf(row[i - 1], row[i]);
         }
         placeRank(items, row, desire, sep);
     }
@@ -922,6 +1113,54 @@ bool layoutGraph(const Graph& original,
         if (after == before) break;
     }
     for (size_t i = 0; i < items.size(); ++i) items[i].left = best[i];
+    // Straight sides. Each box spans from the leftmost of its left border items to the rightmost of
+    // its right ones; every border item goes to those sides, and the rest of the rank is made to
+    // keep clear of them. A box moves as a whole (its members and borders on every rank), so it
+    // stays straight; an item outside any box moves alone. Only ever rightward, so this ends
+    // unless two boxes are in the wrong order on some pair of ranks, which there is no room for.
+    if (clusterCount) {
+        std::vector<std::vector<int>> held(clusterCount);
+        for (size_t i = 0; i < items.size(); ++i)
+            if (items[i].cluster >= 0)
+                held[static_cast<size_t>(items[i].cluster)].push_back(static_cast<int>(i));
+        for (size_t c = 0; c < clusterCount; ++c) {
+            int lo = INT_MAX, hi = INT_MIN;
+            for (int id : held[c]) {
+                const Item& it = items[static_cast<size_t>(id)];
+                if (it.border == 1) lo = std::min(lo, it.left);
+                if (it.border == 2) hi = std::max(hi, it.left);
+            }
+            for (int id : held[c]) {
+                Item& it = items[static_cast<size_t>(id)];
+                if (it.border) it.left = it.border == 1 ? lo : hi;
+            }
+        }
+        bool settled = false;
+        for (int sweep = 0; sweep < 100 && !settled; ++sweep) {
+            settled = true;
+            for (const std::vector<int>& row : order) {
+                const std::vector<Entry> entries = entriesOf(row, items);
+                for (size_t e = 1; e < entries.size(); ++e) {
+                    const int prev = row[entries[e - 1].end - 1], next = row[entries[e].begin];
+                    const Item &a = items[static_cast<size_t>(prev)],
+                               &b = items[static_cast<size_t>(next)];
+                    const int delta = a.left + a.ext + sepOf(prev, next) - b.left;
+                    if (delta <= 0) continue;
+                    settled = false;
+                    if (b.cluster < 0) {
+                        items[static_cast<size_t>(next)].left += delta;
+                    } else {
+                        for (int id : held[static_cast<size_t>(b.cluster)])
+                            items[static_cast<size_t>(id)].left += delta;
+                    }
+                }
+            }
+        }
+        if (!settled) {
+            reason = "subgraph layout: sides";
+            return false;
+        }
+    }
     int minLeft = INT_MAX, across = 0;
     for (const Item& it : items) minLeft = std::min(minLeft, it.left);
     for (Item& it : items) {
@@ -1014,7 +1253,18 @@ bool layoutGraph(const Graph& original,
             gapSegs[static_cast<size_t>(items[static_cast<size_t>(c[i])].rank)].push_back(
                 {endId(k, i), endId(k, i + 1), endX(k, i), endX(k, i + 1)});
     }
+    // A box's top border lies in the gap above its first rank, one row above the row where edges
+    // arrive, which is the blank row inside the box; its bottom border lies in the gap below its
+    // last rank, one row below the row where edges leave. Top-level boxes never share a column, so
+    // those of one gap share a row, and a gap that holds borders is one row taller for each kind.
+    // Above the first rank and below the last, the border and its blank row get rows of their own.
+    std::vector<int> endsAt(ranks, 0), startsAt(ranks, 0);
+    for (size_t c = 0; c < clusterCount; ++c) {
+        startsAt[static_cast<size_t>(spanLo[c])] = 1;
+        endsAt[static_cast<size_t>(spanHi[c])] = 1;
+    }
     std::vector<int> start(ranks, 0);
+    start[0] = 2 * startsAt[0];
     std::map<std::pair<int, int>, int> trackOf;  // by the ends of a segment
     for (size_t r = 0; r + 1 < ranks; ++r) {
         std::vector<int> tracks;
@@ -1025,13 +1275,15 @@ bool layoutGraph(const Graph& original,
         // on is an artefact of the doubled ranks: the edges need no room to leave and arrive either
         // side of it, so one cell does for each.
         const bool lean = labelled && used == 0 && (plain[r] || plain[r + 1]) && !labelRank[r] &&
-            !labelRank[r + 1];
-        int gap = td ? (lean ? tune::kGapTd - 1 : tune::kGapTd + used)
+            !labelRank[r + 1] && !endsAt[r] && !startsAt[r + 1];
+        int gap = td ? (lean ? tune::kGapTd - 1 : tune::kGapTd + used + endsAt[r] + startsAt[r + 1])
                      : (lean ? fit.gapLr / 2 : std::max(fit.gapLr, used + 2));
         start[r + 1] = start[r] + thick[r] + gap;
     }
-    const int along = start[ranks - 1] + thick[ranks - 1];
-    auto track = [&](size_t r, int t) { return 2 * (start[r] + thick[r] + 1 + t) + 1; };  // hu
+    const int along = start[ranks - 1] + thick[ranks - 1] + 2 * endsAt[ranks - 1];
+    auto track = [&](size_t r, int t) {  // hu
+        return 2 * (start[r] + thick[r] + 1 + endsAt[r] + t) + 1;
+    };
     auto point = [&](int cross, int flow) { return td ? Pt{cross, flow} : Pt{flow, cross}; };
 
     lay.cols = td ? across : along;
@@ -1051,6 +1303,18 @@ bool layoutGraph(const Graph& original,
         l.rows = static_cast<int>(g.nodes[i].label.lines.size());
         l.col = f.col + (f.cols - l.cols) / 2;
         l.row = f.row + labelRow[i];
+    }
+
+    lay.clusterBox.assign(clusterCount, CellBox());
+    for (size_t c = 0; c < clusterCount; ++c) {
+        const size_t first = static_cast<size_t>(spanLo[c]), last = static_cast<size_t>(spanHi[c]);
+        const int l = items[static_cast<size_t>(boxLeft[c])].left;
+        const int r = items[static_cast<size_t>(boxRight[c])].left;
+        CellBox& b = lay.clusterBox[c];
+        b.col = l;
+        b.cols = r - l + 1;
+        b.row = start[first] - 2;
+        b.rows = start[last] + thick[last] + 2 - b.row;
     }
 
     // Each edge leaves its source's outline at the middle of the side facing the flow, jogs along
