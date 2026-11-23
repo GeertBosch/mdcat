@@ -441,6 +441,8 @@ void mirror(Layout& lay, bool rows) {
     for (CellBox& b : lay.nodeLabel) flip(b);
     for (CellBox& b : lay.edgeLabel) flip(b);
     for (CellBox& b : lay.clusterBox) flip(b);
+    // clusterLabel is not flipped: a title stays below its box's top border (Step 7 of
+    // docs/plan-mermaid-subgraphs.md decides where that lies).
     for (std::vector<Pt>& path : lay.edgePath)
         for (Pt& p : path) (rows ? p.second : p.first) = 2 * extent - (rows ? p.second : p.first);
 }
@@ -450,7 +452,7 @@ void mirror(Layout& lay, bool rows) {
 void addTitle(Layout& lay, int width) {
     const int dx = std::max(0, (width - lay.cols) / 2), dy = 2;
     for (std::vector<CellBox>* boxes :
-         {&lay.nodeFoot, &lay.nodeLabel, &lay.edgeLabel, &lay.clusterBox}) {
+         {&lay.nodeFoot, &lay.nodeLabel, &lay.edgeLabel, &lay.clusterBox, &lay.clusterLabel}) {
         for (CellBox& b : *boxes) {
             if (b.cols == 0) continue;
             b.col += dx;
@@ -468,21 +470,26 @@ void addTitle(Layout& lay, int width) {
     lay.titleRows = dy;
 }
 
-}  // namespace
-
-bool layoutGraph(const Graph& original,
-                 const Env& env,
-                 const Fit& fit,
-                 Layout& lay,
-                 std::string& reason,
-                 Decline& why) {
+// One pass of the layout. `grow` holds, per cluster, how many columns its box is asked to grow on
+// its left and on its right beyond its natural width (both 0: as its title needs, on both sides).
+// A title that finds no place clear of the edges that cross its rows makes the pass fail with
+// `retry` set and `grow` changed to what makes room: the caller runs the pass once more, with
+// `again` set, and a title that still has no place then declines the diagram.
+bool layoutOnce(const Graph& original,
+                const Env& env,
+                const Fit& fit,
+                std::vector<std::pair<int, int>>& grow,
+                bool again,
+                bool& retry,
+                Layout& lay,
+                std::string& reason,
+                Decline& why) {
     const size_t n = original.nodes.size();
-    // Subgraphs are laid out top-down, one level deep and without titles; steps 6-8 of
+    // Subgraphs are laid out top-down and one level deep; steps 7-8 of
     // docs/plan-mermaid-subgraphs.md lift the rest of this gate.
     {
         bool drawn = original.clusters.empty() || original.dir == Dir::TB;
-        for (const Cluster& c : original.clusters)
-            drawn = drawn && c.parent < 0 && c.title.lines.empty() && c.title.markdown.empty();
+        for (const Cluster& c : original.clusters) drawn = drawn && c.parent < 0;
         if (!drawn) {
             reason = "subgraph layout";
             return false;
@@ -785,6 +792,12 @@ bool layoutGraph(const Graph& original,
     // the ranks before and after as if by an edge. A rank of the span that holds no member gets
     // them too, so that nothing from outside lands inside the box there.
     const size_t clusterCount = g.clusters.size();
+    std::vector<int> titleW(clusterCount, 0), titleL(clusterCount, 0);  // columns, lines
+    for (size_t c = 0; c < clusterCount; ++c) {
+        for (const std::string& line : g.clusters[c].title.lines)
+            titleW[c] = std::max(titleW[c], env.width(line));
+        titleL[c] = static_cast<int>(g.clusters[c].title.lines.size());
+    }
     std::vector<int> spanLo(clusterCount, INT_MAX), spanHi(clusterCount, -1);
     for (size_t i = 0; i < n; ++i) {
         const int c = g.nodes[i].cluster;
@@ -1118,6 +1131,8 @@ bool layoutGraph(const Graph& original,
     // keep clear of them. A box moves as a whole (its members and borders on every rank), so it
     // stays straight; an item outside any box moves alone. Only ever rightward, so this ends
     // unless two boxes are in the wrong order on some pair of ranks, which there is no room for.
+    std::vector<int> natural(clusterCount, 0);   // each box's width before a title widens it
+    std::vector<int> grewLeft(clusterCount, 0);  // columns it was widened by on the left
     if (clusterCount) {
         std::vector<std::vector<int>> held(clusterCount);
         for (size_t i = 0; i < items.size(); ++i)
@@ -1130,6 +1145,21 @@ bool layoutGraph(const Graph& original,
                 if (it.border == 1) lo = std::min(lo, it.left);
                 if (it.border == 2) hi = std::max(hi, it.left);
             }
+            // The box is at least as wide as its title and a blank column and the border on each
+            // side, or as `grow` asks. Unless it asks, both sides move out, so the members stay in
+            // the middle. The pass below makes room for it: where a neighbour is in the way it
+            // moves the whole box (members, borders and all) or the neighbour right, never one
+            // side alone.
+            natural[c] = hi - lo + 1;
+            int left = grow[c].first, right = grow[c].second;
+            if (!left && !right && titleL[c]) {
+                const int extra = std::max(0, titleW[c] + 2 * tune::kClusterPad - natural[c]);
+                left = extra / 2;
+                right = extra - left;
+            }
+            grewLeft[c] = left;
+            lo -= left;
+            hi += right;
             for (int id : held[c]) {
                 Item& it = items[static_cast<size_t>(id)];
                 if (it.border) it.left = it.border == 1 ? lo : hi;
@@ -1260,11 +1290,14 @@ bool layoutGraph(const Graph& original,
     // Above the first rank and below the last, the border and its blank row get rows of their own.
     std::vector<int> endsAt(ranks, 0), startsAt(ranks, 0);
     for (size_t c = 0; c < clusterCount; ++c) {
-        startsAt[static_cast<size_t>(spanLo[c])] = 1;
+        // The rows a box adds above its first rank's: the border and the title's lines. They come
+        // between the tracks and the row where edges arrive, which is the blank row of the box.
+        startsAt[static_cast<size_t>(spanLo[c])] =
+            std::max(startsAt[static_cast<size_t>(spanLo[c])], 1 + titleL[c]);
         endsAt[static_cast<size_t>(spanHi[c])] = 1;
     }
     std::vector<int> start(ranks, 0);
-    start[0] = 2 * startsAt[0];
+    start[0] = startsAt[0] ? startsAt[0] + 1 : 0;
     std::map<std::pair<int, int>, int> trackOf;  // by the ends of a segment
     for (size_t r = 0; r + 1 < ranks; ++r) {
         std::vector<int> tracks;
@@ -1313,7 +1346,7 @@ bool layoutGraph(const Graph& original,
         CellBox& b = lay.clusterBox[c];
         b.col = l;
         b.cols = r - l + 1;
-        b.row = start[first] - 2;
+        b.row = start[first] - 1 - startsAt[first];  // the border of every box of the gap shares it
         b.rows = start[last] + thick[last] + 2 - b.row;
     }
 
@@ -1410,6 +1443,80 @@ bool layoutGraph(const Graph& original,
         why = Decline::TooComplex;
         return false;
     }
+    // Titles. Each is centred in the rows below its box's top border, unless an edge crosses
+    // them, as every edge into the box's first rank does: it then moves along the row to the
+    // nearest place that is clear of the edges, with a blank column on either side. If there is
+    // none, the box is asked to be wider for another pass, by as much as makes a place, or the
+    // diagram is declined.
+    lay.clusterLabel.assign(clusterCount, CellBox());
+    {
+        bool retryNow = false;
+        for (size_t c = 0; c < clusterCount; ++c) {
+            if (!titleL[c]) continue;
+            const CellBox& box = lay.clusterBox[c];
+            const int row0 = box.row + 1, row1 = row0 + titleL[c] - 1;
+            std::set<int> blocked;  // columns of the box that an edge crosses in the title's rows
+            for (const std::vector<Pt>& path : lay.edgePath) {
+                for (size_t i = 0; i + 1 < path.size(); ++i) {
+                    const Pt &a = path[i], &b = path[i + 1];
+                    if (std::min(a.second, b.second) / 2 > row1 ||
+                        std::max(a.second, b.second) / 2 < row0)
+                        continue;
+                    for (int x = std::min(a.first, b.first) / 2;
+                         x <= std::max(a.first, b.first) / 2;
+                         ++x)
+                        blocked.insert(x - box.col);
+                }
+            }
+            // The title's left column, in the box, nearest the middle of `cols` columns among
+            // those, when the box's left side lies `shift` columns further left than it does (a
+            // wider box), or -1.
+            auto place = [&](int cols, int shift) {
+                const int middle = (cols - titleW[c]) / 2;
+                int best = -1;
+                for (int x = 2; x + titleW[c] <= cols - 2; ++x) {
+                    bool clear = true;
+                    for (int k = x - 1; k <= x + titleW[c] && clear; ++k)
+                        clear = !blocked.count(k - shift);
+                    if (clear && (best < 0 || std::abs(x - middle) < std::abs(best - middle)))
+                        best = x;
+                }
+                return best;
+            };
+            const int x = place(box.cols, 0);
+            if (x < 0) {
+                // The least growth beyond the natural width that makes a place, as columns added on
+                // the left and on the right; of those, the most even.
+                std::pair<int, int> found{-1, -1};
+                const int most = 2 * (titleW[c] + 4);
+                for (int extra = 0; extra <= most && found.first < 0; ++extra) {
+                    for (int d = 0; d <= 2 * extra && found.first < 0; ++d) {
+                        const int left = extra / 2 + (d % 2 ? (d + 1) / 2 : -d / 2);
+                        if (left < 0 || left > extra) continue;
+                        if (place(natural[c] + extra, left - grewLeft[c]) >= 0)
+                            found = {left, extra - left};
+                    }
+                }
+                if (found.first < 0 || again) {
+                    reason = "subgraph layout: title";
+                    return false;
+                }
+                grow[c] = found;
+                retryNow = true;
+                continue;
+            }
+            CellBox& t = lay.clusterLabel[c];
+            t.cols = titleW[c];
+            t.rows = titleL[c];
+            t.col = box.col + x;
+            t.row = row0;
+        }
+        if (retryNow) {
+            retry = true;
+            reason = "subgraph layout: title";
+            return false;
+        }
+    }
     if (g.dir == Dir::BT || g.dir == Dir::RL) {
         mirror(lay, /*rows=*/td);
         // A shape keeps its own way up: mirroring moved a label that sits off the middle of its
@@ -1419,6 +1526,21 @@ bool layoutGraph(const Graph& original,
     }
     if (!g.title.empty()) addTitle(lay, env.width(g.title));
     return true;
+}
+
+}  // namespace
+
+bool layoutGraph(const Graph& original,
+                 const Env& env,
+                 const Fit& fit,
+                 Layout& lay,
+                 std::string& reason,
+                 Decline& why) {
+    std::vector<std::pair<int, int>> grow(original.clusters.size(), {0, 0});
+    bool retry = false;
+    if (layoutOnce(original, env, fit, grow, false, retry, lay, reason, why)) return true;
+    if (!retry) return false;
+    return layoutOnce(original, env, fit, grow, true, retry, lay, reason, why);
 }
 
 std::vector<Pt> crossingPoints(const Layout& lay) {

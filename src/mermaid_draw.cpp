@@ -800,6 +800,28 @@ bool validateClusters(const Graph& g, const Layout& lay, std::string& reason) {
                 return false;
             }
         }
+        const CellBox& title = lay.clusterLabel[c];
+        if (title.cols > 0) {
+            // Clear of the border and a blank cell from it on both sides, so that it is read as
+            // the box's title.
+            const CellBox room{box.col + 1, box.row, box.cols - 2, box.rows};
+            if (!inside(title, room)) {
+                reason = "subgraph layout: title";
+                return false;
+            }
+            for (const std::vector<Pt>& path : lay.edgePath) {
+                for (size_t i = 0; i + 1 < path.size(); ++i) {
+                    bool hit = false;
+                    segmentCells(path[i], path[i + 1], [&](int x, int y) {
+                        if (inBox(title, x, y)) hit = true;
+                    });
+                    if (hit) {
+                        reason = "subgraph layout: title";
+                        return false;
+                    }
+                }
+            }
+        }
         const int l = 2 * box.col + 1, t = 2 * box.row + 1, r = 2 * (box.col + box.cols) - 1,
                   b = 2 * (box.row + box.rows) - 1;
         const Pt corner[4] = {{l, t}, {r, t}, {r, b}, {l, b}};
@@ -971,6 +993,17 @@ bool drawDiagram(
             }
         }
     }
+    for (const CellBox& l : lay.clusterLabel) {
+        for (int r = l.row; r < l.row + l.rows; ++r) {
+            for (int c = l.col; c < l.col + l.cols; ++c) {
+                if (grid.get(c, r) != Occ::Empty) {
+                    reason = "overlap";
+                    return false;
+                }
+                grid.at(c, r) = Occ::Label;
+            }
+        }
+    }
     // A box's border may not lie over a node or a label.
     bool borderClear = true;
     for (const Stroke& st : strokes) {
@@ -1073,6 +1106,36 @@ bool drawDiagram(
             byRow[static_cast<size_t>(l.row + j)].push_back({l.col, l.cols, &owned.back(), -1});
         }
     };
+    // A subgraph's title is bold, closed at the end of each line. A Markdown title that switches
+    // bold off in the middle of a line (`**x** y`) has it switched on again.
+    std::vector<std::string> titleLines;
+    for (size_t c = 0; c < g.clusters.size(); ++c) {
+        for (const std::string& line : g.clusters[c].title.lines) {
+            std::string bold = "\033[1m";
+            for (size_t i = 0; i < line.size();) {
+                if (line.compare(i, 5, "\033[22m") == 0) {
+                    bold += "\033[22m\033[1m";
+                    i += 5;
+                } else {
+                    bold += line[i++];
+                }
+            }
+            titleLines.push_back(bold + "\033[22m");
+        }
+    }
+    {
+        size_t at = 0;
+        for (size_t c = 0; c < g.clusters.size(); ++c) {
+            const CellBox& l = lay.clusterLabel[c];
+            const size_t count = g.clusters[c].title.lines.size();
+            for (size_t j = 0; j < count && l.cols > 0; ++j) {
+                const int w = env.width(g.clusters[c].title.lines[j]);
+                byRow[static_cast<size_t>(l.row) + j].push_back(
+                    {l.col + (l.cols - w) / 2, w, &titleLines[at + j], -1});
+            }
+            at += count;
+        }
+    }
     for (size_t i = 0; i < g.nodes.size(); ++i)
         addLines(lay.nodeLabel[i], g.nodes[i].label.lines, g.nodes[i].style);
     for (size_t k = 0; k < g.edges.size(); ++k)

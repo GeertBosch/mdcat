@@ -1,15 +1,16 @@
 # Mermaid subgraphs
 
 `subgraph ... end` is read into the model (`Graph::clusters`, `Node::cluster`) and, so far, drawn only
-top-down, one level deep and without a title (docs/plan-mermaid-subgraphs.md, Steps 5-8): the box is
-one outline under the nodes and edges, around the nodes named inside it. The cases whose
-heading starts with *Drawn* are drawn. The rest are declined: a title, a nested subgraph or a direction other than
-`TD` is `subgraph layout` for now, and the other cases are declined by the parser for the reason
-named in their heading. `MDCAT_MERMAID_DEBUG=1` prints each reason on stderr, and
-`mermaid-kitty.sh` compares it with `expected/mermaid-14-subgraphs.w80.err`. Which node belongs
-to which subgraph is checked outside the repository, with a scratch parser.
+top-down and one level deep (docs/plan-mermaid-subgraphs.md, Steps 5-8): the box is one outline under
+the nodes and edges, around the nodes named inside it, with the subgraph's title, if it has one, in
+bold under the top border. The cases whose heading starts with *Drawn* are drawn. The rest are
+declined: a nested subgraph or a direction other than `TD` is `subgraph layout` for now, and the
+other cases are declined for the reason named in their heading or, for the membership cases, because
+of what they hold. `MDCAT_MERMAID_DEBUG=1` prints each reason on stderr, and `mermaid-kitty.sh`
+compares it with `expected/mermaid-14-subgraphs.w80.err`. Which node belongs to which subgraph is
+checked outside the repository, with a scratch parser.
 
-A blank title (`subgraph s[" "]`) draws no title, so these cases use it.
+A blank title (`subgraph s[" "]`) draws no title, so the first cases use it.
 
 ## Drawn: one box around a chain
 
@@ -218,6 +219,177 @@ D --> H(Stable Probe)
 E --> H
 ```
 
+## Drawn: a title, centred where no edge crosses it
+
+Expected: a box around A and B with `Plan` in bold on the row under the top border, in the middle of
+the box, which is as wide as its members make it: nothing enters the box from above.
+
+```mermaid
+graph TD
+    subgraph s[Plan]
+        A --> B
+    end
+```
+
+## Drawn: a title beside the edge that enters the box
+
+Expected: X's edge enters the box through the top border and runs down through the box's title row,
+so `one` is not centred: it sits beside the edge, a blank column from it, and the box is as wide as
+that takes, growing to the right of the members.
+
+```mermaid
+graph TD
+    X --> A
+    subgraph one
+        A --> B
+    end
+    B --> Y
+```
+
+## Drawn: every way to write a title
+
+Expected: four boxes in a chain, each titled, in bold, and each entered by an edge from the box above:
+a bare id (`S`), `id [Title one]`, `id[Title two]` and `id["Title three"]`. The title of `S` is the
+widest thing in its box; the others are beside their edge.
+
+```mermaid
+graph TD
+    subgraph S
+        A1
+    end
+    subgraph id1 [Title one]
+        A2
+    end
+    subgraph id2[Title two]
+        A3
+    end
+    subgraph id3["Title three"]
+        A4
+    end
+    A1 --> A2 --> A3 --> A4
+```
+
+## Drawn: a quoted id and a title with spaces
+
+Expected: the boxes `Q::plan()` and `Index Tagging` (a generated id), one above the other, with the
+edge from Q to R between them. The second title sits left of the edge into R, and its box grows to
+the right, not to the left.
+
+```mermaid
+graph TD
+    subgraph "Q::plan()"
+        P --> Q
+    end
+    subgraph Index Tagging
+        R --> S
+    end
+    Q --> R
+```
+
+## Drawn: Markdown, `<br>` and `;` in titles
+
+Expected: `Markdown title` with `Markdown` bold on top of the bold of the title (so it reads the same),
+`two` over `lines` in a box with a two-line title, and `A & B; C` as written.
+
+```mermaid
+graph TD
+    subgraph id5["`**Markdown** title`"]
+        A8
+    end
+    subgraph id6["two<br>lines"]
+        A9
+    end
+    subgraph id7[A & B; C]
+        A10
+    end
+    A8 --> A9 --> A10
+```
+
+## Drawn: a title wider than its members
+
+Expected: each box is as wide as its title needs plus a blank column and the border on each side.
+Both are entered from above, by `X --> A` and `A --> C`, so neither title is centred: each sits to
+the right of the entering edge, a blank column from it, and the box grows to the right, leaving its
+one member near its left side. The second box has a Markdown title that is wrapped at 24 columns.
+
+```mermaid
+graph TD
+    subgraph w["A title much wider than its one member"]
+        A
+    end
+    subgraph m["`A *Markdown* title that is a good deal wider than anything inside`"]
+        C
+    end
+    A --> C
+    X --> A
+```
+
+## Drawn: titles wrapped to fit the width
+
+Expected: three boxes side by side whose plain titles are 30 columns wide or more. At 80 columns they
+do not fit with their titles on one line, so the fit attempts wrap the titles at spaces, in three
+lines each, and the box widths follow.
+
+```mermaid
+graph TD
+    X --> A
+    X --> B
+    X --> C
+    subgraph a["Alpha subgraph with a long title"]
+        A
+    end
+    subgraph b["Bravo subgraph with a long title"]
+        B
+    end
+    subgraph c["Charlie subgraph with a long title"]
+        C
+    end
+```
+
+## Drawn: boxes side by side, titles of different heights
+
+Expected: the top borders of the two boxes are on one row. The title of the left one is two lines and
+the right one's is one; the right box has a blank row more between its title and its first member.
+
+```mermaid
+graph TD
+    X --> A
+    X --> B
+    subgraph l["two<br>lines"]
+        A --> C
+    end
+    subgraph r[one]
+        B --> D
+    end
+```
+
+## Drawn: MongoDB admission control, real titles, shorter edge labels
+
+The diagram with its own subgraph titles (`decrease` and `increase`, the ids) and the edge labels cut
+to at most 24 columns. Expected: the two boxes side by side under Stable Probe, each with its title
+in bold at the top, and the edges into the probes crossing the top borders.
+
+```mermaid
+flowchart TB
+A(Stable Probe) --> |at minimum|A
+
+A --> |above minimum or at max|C(Probe Down)
+subgraph decrease
+C --> |throughput increased|F{{Decrease stable concurrency}}
+C --> |no throughput gain|G{{Go back to stable concurrency}}
+end
+F --> H
+G --> H
+
+A --> |below max and exhausted| B(Probe Up)
+subgraph increase
+B --> |throughput increased|D{{Increase stable concurrency}}
+B --> |no throughput gain|E{{Go back to stable concurrency}}
+end
+D --> H(Stable Probe)
+E --> H
+```
+
 ## Declined: a box that an edge would have to cross
 
 Expected: declined. A box with several members that lie on far apart ranks, with other nodes between
@@ -247,18 +419,10 @@ graph TD
     N5 --> N5
 ```
 
-## One subgraph (titled, so not drawn yet)
+## Declined: MongoDB admission control, real titles
 
-```mermaid
-graph TD
-    subgraph one
-        A --> B
-    end
-```
-
-## MongoDB: admission control
-
-The Mermaid source is the MongoDB diagram as written; its subgraphs have no titles of their own, so the id is the title.
+The Mermaid source is the MongoDB diagram as written; its subgraphs have no titles of their own, so
+the id is the title. Declined only for the 36-column edge label, as it would be without subgraphs.
 
 ```mermaid
 flowchart TB
@@ -281,45 +445,7 @@ D --> H(Stable Probe)
 E --> H
 ```
 
-## Title forms
-
-Every way Mermaid names a subgraph: a bare id, `id [Title]`, `id[Title]`, `id["Title"]`, a blank title, a quoted id, a title with spaces, and Markdown, `<br>` and `;` in titles.
-
-```mermaid
-graph TD
-    subgraph S
-        A1
-    end
-    subgraph id1 [Title one]
-        A2
-    end
-    subgraph id2[Title two]
-        A3
-    end
-    subgraph id3["Title three"]
-        A4
-    end
-    subgraph id4[" "]
-        A5
-    end
-    subgraph "Q::plan()"
-        A6
-    end
-    subgraph Index Tagging
-        A7
-    end
-    subgraph id5["`**Markdown** title`"]
-        A8
-    end
-    subgraph id6["two<br>lines"]
-        A9
-    end
-    subgraph id7[A & B; C]
-        A10
-    end
-```
-
-## Membership: a node named outside first
+## Drawn: membership, a node named outside first
 
 `C` and `F` belong to `S`, `A` does not.
 
@@ -331,7 +457,7 @@ graph TD
     end
 ```
 
-## Membership: a node named in two siblings
+## Drawn: membership, a node named in two siblings
 
 `Y` belongs to `S1`, which closes first.
 
@@ -411,7 +537,7 @@ graph TD
     D --> G
 ```
 
-## Membership: style and class do not name a node
+## Drawn: membership, style and class do not name a node
 
 `C` and `D` are outside `S`: only a node declaration or a link puts a node in a subgraph.
 
@@ -425,7 +551,7 @@ graph TD
     end
 ```
 
-## Membership: `&`, `;` and one line
+## Drawn: membership, `&`, `;` and one line
 
 ```mermaid
 graph TD
@@ -436,7 +562,7 @@ graph TD
     X --> Y
 ```
 
-## Ids that start with `end` or `subgraph`
+## Drawn: ids that start with `end` or `subgraph`
 
 ```mermaid
 graph TD

@@ -2,17 +2,18 @@ Mermaid subgraphs
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 subgraph ... end is read into the model (Graph::clusters, Node::cluster) and, so
-far, drawn only top-down, one level deep and without a title
-(docs/plan-mermaid-subgraphs.md, Steps 5-8): the box is one outline under the
-nodes and edges, around the nodes named inside it. The cases whose heading
-starts with Drawn are drawn. The rest are declined: a title, a nested subgraph
-or a direction other than TD is subgraph layout for now, and the other cases are
-declined by the parser for the reason named in their heading.
-MDCAT_MERMAID_DEBUG=1 prints each reason on stderr, and mermaid-kitty.sh
-compares it with expected/mermaid-14-subgraphs.w80.err. Which node belongs to
-which subgraph is checked outside the repository, with a scratch parser.
+far, drawn only top-down and one level deep (docs/plan-mermaid-subgraphs.md,
+Steps 5-8): the box is one outline under the nodes and edges, around the nodes
+named inside it, with the subgraph's title, if it has one, in bold under the top
+border. The cases whose heading starts with Drawn are drawn. The rest are
+declined: a nested subgraph or a direction other than TD is subgraph layout for
+now, and the other cases are declined for the reason named in their heading or,
+for the membership cases, because of what they hold. MDCAT_MERMAID_DEBUG=1
+prints each reason on stderr, and mermaid-kitty.sh compares it with
+expected/mermaid-14-subgraphs.w80.err. Which node belongs to which subgraph is
+checked outside the repository, with a scratch parser.
 
-A blank title (subgraph s[" "]) draws no title, so these cases use it.
+A blank title (subgraph s[" "]) draws no title, so the first cases use it.
 
 Drawn: one box around a chain
 ────────────────────────────────────────────────────────────────────────────────
@@ -21,7 +22,7 @@ Expected: a box around A, B and C, one blank column inside it on each side. X's
 edge enters it through the top border and C's leaves through the bottom border.
 Y is reached by X's second edge, which goes round the right of the box.
 
-image @23,34 c=12 r=27 z=0 C=1 png=120x540
+image @24,34 c=12 r=27 z=0 C=1 png=120x540
                                         ▗▄▄▄▄
                                         ▐ X ▐
                                         ▐▄▄▄▟
@@ -57,7 +58,7 @@ Expected: two boxes one above the other. The edge from the first to the second
 crosses both borders; the back edge from the second to the first goes round the
 right of both boxes and enters the first box through its right border.
 
-image @58,31 c=17 r=35 z=0 C=1 png=170x700
+image @59,31 c=17 r=35 z=0 C=1 png=170x700
                                      ▗▄▄▄▄
                                      ▐ S ▐
                                      ▐▄▄▄▟
@@ -101,7 +102,7 @@ Expected: X's edge to Y runs down the left of the box, round it, and Z's edge
 down the right; the edge into A crosses the top border and D's leaves through
 the bottom one.
 
-image @101,30 c=19 r=33 z=0 C=1 png=190x660
+image @102,30 c=19 r=33 z=0 C=1 png=190x660
                                ▗▄▄▄▄
                                ▐ X ▐
                                ▐▄▄▄▟
@@ -142,7 +143,7 @@ Drawn: an edge between two outsiders, passing a box
 Expected: R's edge to D enters the box through its left border, below C, and
 nothing outside it runs through the box.
 
-image @141,32 c=16 r=28 z=0 C=1 png=160x560
+image @142,32 c=16 r=28 z=0 C=1 png=160x560
                                     ▗▄▄▄▄
                                     ▐ P ▐
                                     ▐▄▄▄▟
@@ -179,7 +180,7 @@ Expected: A and D are in the box and X, between them, is not. The box is wide
 enough to be clear of X on the rank that holds only X, and the edges between A,
 X and D cross its left border.
 
-image @177,31 c=17 r=19 z=0 C=1 png=170x380
+image @178,31 c=17 r=19 z=0 C=1 png=170x380
                                        ▗▄▄▄▄▄▄▄▄
                                        ▐       ▐
                                        ▐ ▗▄▄▄▄ ▐
@@ -206,7 +207,7 @@ Drawn: a long edge, a label and a self-loop inside a box
 Expected: everything is inside the box: the edge from A to C runs down its
 right, "yes" sits between B and D, and the loop on C is beside C.
 
-image @203,31 c=18 r=38 z=0 C=1 png=180x760
+image @204,31 c=18 r=38 z=0 C=1 png=180x760
                                      ▗▄▄▄▄
                                      ▐ S ▐
                                      ▐▄▄▄▟
@@ -252,7 +253,7 @@ Drawn: edges into and out of the middle of a box
 Expected: X's edge joins the one into B, crossing the left border; B's edge to Z
 leaves through the right border.
 
-image @248,28 c=23 r=23 z=0 C=1 png=230x460
+image @249,28 c=23 r=23 z=0 C=1 png=230x460
                                    ▗▄▄▄▄▄▄▄▄
                                    ▐       ▐
                             ▗▄▄▄▄  ▐ ▗▄▄▄▄ ▐
@@ -283,7 +284,7 @@ Drawn: styled members, a lone box and boxes on one rank
 Expected: three boxes side by side. P1 is filled red and Q2 green with a green
 label; the outlines of the boxes keep the theme's colour.
 
-image @278,21 c=37 r=13 z=0 C=1 png=370x260
+image @279,21 c=37 r=13 z=0 C=1 png=370x260
                      ▗▄▄▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄▄▄
                      ▐         ▐  ▐         ▐  ▐         ▐
                      ▐ ▗▄▄▄▄▄▄ ▐  ▐ ▗▄▄▄▄▄▄ ▐  ▐ ▗▄▄▄▄▄▄ ▐
@@ -304,7 +305,7 @@ Drawn: a box inside a longer chain
 Expected: the chain A, B passes into the box at C and leaves it after E; the
 edge from A to G goes round the right of the box.
 
-image @298,34 c=12 r=38 z=0 C=1 png=120x760
+image @299,34 c=12 r=38 z=0 C=1 png=120x760
                                          ▗▄▄▄▄
                                          ▐ A ▐
                                          ▐▄▄▄▟
@@ -377,7 +378,7 @@ The same diagram with its edge labels cut to at most 24 columns. Expected: the
 two boxes side by side under Stable Probe, each with a probe and two hexagons,
 and all four edges merging into the last Stable Probe below them.
 
-image @370,0 c=79 r=38 z=0 C=1 png=790x760
+image @371,0 c=79 r=38 z=0 C=1 png=790x760
                                  ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                                  ▐Stable Probe ▐██at minimum
                                  ▝▙▄▄▄▄▄▄▄▄▄▄▄▟▀▀▘
@@ -388,6 +389,305 @@ image @370,0 c=79 r=38 z=0 C=1 png=790x760
                  at max                                 exhausted
                     ▐                                       ▐
 ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+▐                   ▐                 ▐ ▐                   ▐                 ▐
+▐             ▗▄▄▄▄▄█▙▄▄▄▄▄           ▐ ▐              ▗▄▄▄▄█▙▄▄▄▄            ▐
+▐             ▐Probe Down ▐           ▐ ▐              ▐Probe Up ▐            ▐
+▐             ▝▙▄▄▄▄▄▄▄▄▄▟▀           ▐ ▐              ▝▙▄▄▄▄▄▄▄▟▀            ▐
+▐                   ▐                 ▐ ▐                   ▐                 ▐
+▐          ▗▄▄▄▄▄▄▄▄█▄▄▄▄▄▄▄▄▄        ▐ ▐          ▗▄▄▄▄▄▄▄▄█▄▄▄▄▄▄▄▄▄        ▐
+▐          ▐                 ▐        ▐ ▐          ▐                 ▐        ▐
+▐     throughput       no throughput  ▐ ▐     throughput       no throughput  ▐
+▐     increased            gain       ▐ ▐     increased            gain       ▐
+▐          ▐                 ▐        ▐ ▐          ▐                 ▐        ▐
+▐          ▐                 ▐        ▐ ▐          ▐                 ▐        ▐
+▐  ▗▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▖    ▄▄▄▄▄█▙▄▄▄▄▖  ▐ ▐  ▗▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▖    ▄▄▄▄▄█▙▄▄▄▄▖  ▐
+▐ ▗▛Decrease stable▜▄  ▟Go back to▝█▖ ▐ ▐ ▗▛Increase stable▜▄  ▟Go back to▝█▖ ▐
+▐ ▝▙  concurrency  ▟▀ ▐▌  stable   ▝█ ▐ ▐ ▝▙  concurrency  ▟▀ ▐▌  stable   ▝█ ▐
+▐  ▝█▄▄▄▄▄▄▄▄▄▄▄▄▄▟▘  ▝█concurrency▟▘ ▐ ▐  ▝█▄▄▄▄▄▄▄▄▄▄▄▄▄▟▘  ▝█concurrency▟▘ ▐
+▐          ▐           ▝█▄▄▄▄▄▄▄▄▄▟▘  ▐ ▐          ▐           ▝█▄▄▄▄▄▄▄▄▄▟▘  ▐
+▐          ▐                 ▐        ▐ ▐          ▐                 ▐        ▐
+▐▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▟ ▐▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▟
+           ▐                 ▐▄▄▄▄▄▄▄▄▄▄ ▗▄▄▄▄▄▄▄▄▄▛                 ▐
+           ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ ▐ ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▛
+                                     ▐ ▐ ▐ ▐
+                                     ▐ ▐ ▐ ▐
+                                     ▐ ▐ ▐ ▐
+                                     ▐▄███▄▛
+                                        ▐
+                                 ▗▄▄▄▄▄▄█▙▄▄▄▄▄▄
+                                 ▐Stable Probe ▐
+                                 ▝▙▄▄▄▄▄▄▄▄▄▄▄▟▀
+
+Drawn: a title, centred where no edge crosses it
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: a box around A and B with Plan in bold on the row under the top
+border, in the middle of the box, which is as wide as its members make it:
+nothing enters the box from above.
+
+image @417,35 c=9 r=13 z=0 C=1 png=90x260
+                                   ▗▄▄▄▄▄▄▄▄
+                                   ▐ Plan  ▐
+                                   ▐       ▐
+                                   ▐ ▗▄▄▄▄ ▐
+                                   ▐ ▐ A ▐ ▐
+                                   ▐ ▐▄▄▄▟ ▐
+                                   ▐   ▐   ▐
+                                   ▐   ▐   ▐
+                                   ▐ ▗▄█▙▄ ▐
+                                   ▐ ▐ B ▐ ▐
+                                   ▐ ▐▄▄▄▟ ▐
+                                   ▐       ▐
+                                   ▐▄▄▄▄▄▄▄▟
+
+Drawn: a title beside the edge that enters the box
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: X's edge enters the box through the top border and runs down through
+the box's title row, so one is not centred: it sits beside the edge, a blank
+column from it, and the box is as wide as that takes, growing to the right of
+the members.
+
+image @439,34 c=11 r=21 z=0 C=1 png=110x420
+                                      ▗▄▄▄▄
+                                      ▐ X ▐
+                                      ▐▄▄▄▟
+                                        ▐
+                                  ▗▄▄▄▄▄▟▄▄▄▄
+                                  ▐ one ▐   ▐
+                                  ▐     ▐   ▐
+                                  ▐   ▗▄█▙▄ ▐
+                                  ▐   ▐ A ▐ ▐
+                                  ▐   ▐▄▄▄▟ ▐
+                                  ▐     ▐   ▐
+                                  ▐     ▐   ▐
+                                  ▐   ▗▄█▙▄ ▐
+                                  ▐   ▐ B ▐ ▐
+                                  ▐   ▐▄▄▄▟ ▐
+                                  ▐     ▐   ▐
+                                  ▐▄▄▄▄▄▟▄▄▄▟
+                                        ▐
+                                      ▗▄█▙▄
+                                      ▐ Y ▐
+                                      ▐▄▄▄▟
+
+Drawn: every way to write a title
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: four boxes in a chain, each titled, in bold, and each entered by an
+edge from the box above: a bare id (S), id [Title one], id[Title two] and
+id["Title three"]. The title of S is the widest thing in its box; the others are
+beside their edge.
+
+image @469,30 c=20 r=32 z=0 C=1 png=200x640
+                              ▗▄▄▄▄▄▄▄▄▄▄
+                              ▐    S    ▐
+                              ▐         ▐
+                              ▐ ▗▄▄▄▄▄▄ ▐
+                              ▐ ▐ A1  ▐ ▐
+                              ▐ ▐▄▄▄▄▄▟ ▐
+                              ▐    ▐    ▐
+                              ▐▄▄▄▄▟▄▄▄▄▟
+                              ▗▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄
+                              ▐    ▐ Title one ▐
+                              ▐    ▐           ▐
+                              ▐ ▗▄▄█▙▄▄        ▐
+                              ▐ ▐ A2  ▐        ▐
+                              ▐ ▐▄▄▄▄▄▟        ▐
+                              ▐    ▐           ▐
+                              ▐▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▟
+                              ▗▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄
+                              ▐    ▐ Title two ▐
+                              ▐    ▐           ▐
+                              ▐ ▗▄▄█▙▄▄        ▐
+                              ▐ ▐ A3  ▐        ▐
+                              ▐ ▐▄▄▄▄▄▟        ▐
+                              ▐    ▐           ▐
+                              ▐▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▟
+                              ▗▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                              ▐    ▐ Title three ▐
+                              ▐    ▐             ▐
+                              ▐ ▗▄▄█▙▄▄          ▐
+                              ▐ ▐ A4  ▐          ▐
+                              ▐ ▐▄▄▄▄▄▟          ▐
+                              ▐                  ▐
+                              ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+Drawn: a quoted id and a title with spaces
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the boxes Q::plan() and Index Tagging (a generated id), one above the
+other, with the edge from Q to R between them. The second title sits left of the
+edge into R, and its box grows to the right, not to the left.
+
+image @509,28 c=23 r=26 z=0 C=1 png=230x520
+                                      ▗▄▄▄▄▄▄▄▄▄▄▄▄
+                                      ▐ Q::plan() ▐
+                                      ▐           ▐
+                                      ▐   ▗▄▄▄▄   ▐
+                                      ▐   ▐ P ▐   ▐
+                                      ▐   ▐▄▄▄▟   ▐
+                                      ▐     ▐     ▐
+                                      ▐     ▐     ▐
+                                      ▐   ▗▄█▙▄   ▐
+                                      ▐   ▐ Q ▐   ▐
+                                      ▐   ▐▄▄▄▟   ▐
+                                      ▐     ▐     ▐
+                                      ▐▄▄▄▄▄▟▄▄▄▄▄▟
+                            ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄
+                            ▐ Index Tagging ▐   ▐
+                            ▐               ▐   ▐
+                            ▐             ▗▄█▙▄ ▐
+                            ▐             ▐ R ▐ ▐
+                            ▐             ▐▄▄▄▟ ▐
+                            ▐               ▐   ▐
+                            ▐               ▐   ▐
+                            ▐             ▗▄█▙▄ ▐
+                            ▐             ▐ S ▐ ▐
+                            ▐             ▐▄▄▄▟ ▐
+                            ▐                   ▐
+                            ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+Drawn: Markdown, <br> and ; in titles
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: Markdown title with Markdown bold on top of the bold of the title (so
+it reads the same), two over lines in a box with a two-line title, and A & B; C
+as written.
+
+image @543,29 c=21 r=25 z=0 C=1 png=210x500
+                                ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                                ▐ Markdown title ▐
+                                ▐                ▐
+                                ▐    ▗▄▄▄▄▄▄     ▐
+                                ▐    ▐ A8  ▐     ▐
+                                ▐    ▐▄▄▄▄▄▟     ▐
+                                ▐       ▐        ▐
+                                ▐▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▟
+                                   ▗▄▄▄▄▟▄▄▄▄▄▄▄▄
+                                   ▐    ▐  two  ▐
+                                   ▐    ▐ lines ▐
+                                   ▐    ▐       ▐
+                                   ▐ ▗▄▄█▙▄▄    ▐
+                                   ▐ ▐ A9  ▐    ▐
+                                   ▐ ▐▄▄▄▄▄▟    ▐
+                                   ▐    ▐       ▐
+                                   ▐▄▄▄▄▟▄▄▄▄▄▄▄▟
+                             ▗▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄
+                             ▐ A & B; C ▐    ▐
+                             ▐          ▐    ▐
+                             ▐       ▗▄▄█▙▄▄ ▐
+                             ▐       ▐ A10 ▐ ▐
+                             ▐       ▐▄▄▄▄▄▟ ▐
+                             ▐               ▐
+                             ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+Drawn: a title wider than its members
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: each box is as wide as its title needs plus a blank column and the
+border on each side. Both are entered from above, by X --> A and A --> C, so
+neither title is centred: each sits to the right of the entering edge, a blank
+column from it, and the box grows to the right, leaving its one member near its
+left side. The second box has a Markdown title that is wrapped at 24 columns.
+
+image @578,17 c=46 r=22 z=0 C=1 png=460x440
+                   ▗▄▄▄▄
+                   ▐ X ▐
+                   ▐▄▄▄▟
+                     ▐
+                 ▗▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                 ▐   ▐ A title much wider than its one member ▐
+                 ▐   ▐                                        ▐
+                 ▐ ▗▄█▙▄                                      ▐
+                 ▐ ▐ A ▐                                      ▐
+                 ▐ ▐▄▄▄▟                                      ▐
+                 ▐   ▐                                        ▐
+                 ▐▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                 ▗▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                 ▐   ▐ A Markdown title that is ▐
+                 ▐   ▐  a good deal wider than  ▐
+                 ▐   ▐     anything inside      ▐
+                 ▐   ▐                          ▐
+                 ▐ ▗▄█▙▄                        ▐
+                 ▐ ▐ C ▐                        ▐
+                 ▐ ▐▄▄▄▟                        ▐
+                 ▐                              ▐
+                 ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+Drawn: titles wrapped to fit the width
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: three boxes side by side whose plain titles are 30 columns wide or
+more. At 80 columns they do not fit with their titles on one line, so the fit
+attempts wrap the titles at spaces, in three lines each, and the box widths
+follow.
+
+image @609,6 c=67 r=15 z=0 C=1 png=670x300
+                              ▗▄▄
+                              ▐X▐
+                              ▐▄▟
+                               ▐
+                       ▗▄▄▄▄▄▄▄█▄▄▄▄▄▄▄▄▄▄▄▄▄█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+      ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄
+      ▐ Alpha subgraph ▐  ▐ ▐ Bravo subgraph ▐  ▐ ▐ Charlie subgraph ▐  ▐
+      ▐  with a long   ▐  ▐ ▐  with a long   ▐  ▐ ▐   with a long    ▐  ▐
+      ▐     title      ▐  ▐ ▐     title      ▐  ▐ ▐      title       ▐  ▐
+      ▐                ▐  ▐ ▐                ▐  ▐ ▐                  ▐  ▐
+      ▐               ▗█▙ ▐ ▐               ▗█▙ ▐ ▐                 ▗█▙ ▐
+      ▐               ▐A▐ ▐ ▐               ▐B▐ ▐ ▐                 ▐C▐ ▐
+      ▐               ▐▄▟ ▐ ▐               ▐▄▟ ▐ ▐                 ▐▄▟ ▐
+      ▐                   ▐ ▐                   ▐ ▐                     ▐
+      ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟ ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟ ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+Drawn: boxes side by side, titles of different heights
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the top borders of the two boxes are on one row. The title of the left
+one is two lines and the right one's is one; the right box has a blank row more
+between its title and its first member.
+
+image @632,27 c=26 r=19 z=0 C=1 png=260x380
+                                    ▗▄▄▄▄
+                                    ▐ X ▐
+                                    ▐▄▄▄▟
+                                      ▐
+                                   ▗▄▄█▄▄▄▄▄▄▄▄▄▄
+                           ▗▄▄▄▄▄▄▄▟▄▄▄▄  ▗▄▄▄▄▄▟▄▄▄▄
+                           ▐  two  ▐   ▐  ▐ one ▐   ▐
+                           ▐ lines ▐   ▐  ▐     ▐   ▐
+                           ▐       ▐   ▐  ▐     ▐   ▐
+                           ▐     ▗▄█▙▄ ▐  ▐   ▗▄█▙▄ ▐
+                           ▐     ▐ A ▐ ▐  ▐   ▐ B ▐ ▐
+                           ▐     ▐▄▄▄▟ ▐  ▐   ▐▄▄▄▟ ▐
+                           ▐       ▐   ▐  ▐     ▐   ▐
+                           ▐       ▐   ▐  ▐     ▐   ▐
+                           ▐     ▗▄█▙▄ ▐  ▐   ▗▄█▙▄ ▐
+                           ▐     ▐ C ▐ ▐  ▐   ▐ D ▐ ▐
+                           ▐     ▐▄▄▄▟ ▐  ▐   ▐▄▄▄▟ ▐
+                           ▐           ▐  ▐         ▐
+                           ▐▄▄▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▟
+
+Drawn: MongoDB admission control, real titles, shorter edge labels
+────────────────────────────────────────────────────────────────────────────────
+
+The diagram with its own subgraph titles (decrease and increase, the ids) and
+the edge labels cut to at most 24 columns. Expected: the two boxes side by side
+under Stable Probe, each with its title in bold at the top, and the edges into
+the probes crossing the top borders.
+
+image @660,0 c=79 r=39 z=0 C=1 png=790x780
+                                 ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                                 ▐Stable Probe ▐██at minimum
+                                 ▝▙▄▄▄▄▄▄▄▄▄▄▄▟▀▀▘
+                                        ▐
+                    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                    ▐                                       ▐
+            above minimum or                          below max and
+                 at max                                 exhausted
+                    ▐                                       ▐
+▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+▐          decrease ▐                 ▐ ▐          increase ▐                 ▐
 ▐                   ▐                 ▐ ▐                   ▐                 ▐
 ▐             ▗▄▄▄▄▄█▙▄▄▄▄▄           ▐ ▐              ▗▄▄▄▄█▙▄▄▄▄            ▐
 ▐             ▐Probe Down ▐           ▐ ▐              ▐Probe Up ▐            ▐
@@ -445,19 +745,12 @@ it: here N1's edge to N6 would cross the box of N3, N4 and N5.
       N4 --> N6
       N5 --> N5
 
-One subgraph (titled, so not drawn yet)
-────────────────────────────────────────────────────────────────────────────────
-
-  graph TD
-      subgraph one
-          A --> B
-      end
-
-MongoDB: admission control
+Declined: MongoDB admission control, real titles
 ────────────────────────────────────────────────────────────────────────────────
 
 The Mermaid source is the MongoDB diagram as written; its subgraphs have no
-titles of their own, so the id is the title.
+titles of their own, so the id is the title. Declined only for the 36-column
+edge label, as it would be without subgraphs.
 
   flowchart TB
   A(Stable Probe) --> |at minimum and tickets not exhausted|A
@@ -478,68 +771,57 @@ titles of their own, so the id is the title.
   D --> H(Stable Probe)
   E --> H
 
-Title forms
-────────────────────────────────────────────────────────────────────────────────
-
-Every way Mermaid names a subgraph: a bare id, id [Title], id[Title],
-id["Title"], a blank title, a quoted id, a title with spaces, and Markdown, <br>
-and ; in titles.
-
-  graph TD
-      subgraph S
-          A1
-      end
-      subgraph id1 [Title one]
-          A2
-      end
-      subgraph id2[Title two]
-          A3
-      end
-      subgraph id3["Title three"]
-          A4
-      end
-      subgraph id4[" "]
-          A5
-      end
-      subgraph "Q::plan()"
-          A6
-      end
-      subgraph Index Tagging
-          A7
-      end
-      subgraph id5["`**Markdown** title`"]
-          A8
-      end
-      subgraph id6["two<br>lines"]
-          A9
-      end
-      subgraph id7[A & B; C]
-          A10
-      end
-
-Membership: a node named outside first
+Drawn: membership, a node named outside first
 ────────────────────────────────────────────────────────────────────────────────
 
 C and F belong to S, A does not.
 
-  graph TD
-      A --> C
-      subgraph S
-          C --> F
-      end
+image @759,35 c=9 r=17 z=0 C=1 png=90x340
+                                     ▗▄▄▄▄
+                                     ▐ A ▐
+                                     ▐▄▄▄▟
+                                       ▐
+                                   ▗▄▄▄▟▄▄▄▄
+                                   ▐ S ▐   ▐
+                                   ▐   ▐   ▐
+                                   ▐ ▗▄█▙▄ ▐
+                                   ▐ ▐ C ▐ ▐
+                                   ▐ ▐▄▄▄▟ ▐
+                                   ▐   ▐   ▐
+                                   ▐   ▐   ▐
+                                   ▐ ▗▄█▙▄ ▐
+                                   ▐ ▐ F ▐ ▐
+                                   ▐ ▐▄▄▄▟ ▐
+                                   ▐       ▐
+                                   ▐▄▄▄▄▄▄▄▟
 
-Membership: a node named in two siblings
+Drawn: membership, a node named in two siblings
 ────────────────────────────────────────────────────────────────────────────────
 
 Y belongs to S1, which closes first.
 
-  graph TD
-      subgraph S1
-          X --> Y
-      end
-      subgraph S2
-          Y --> Z
-      end
+image @782,35 c=10 r=21 z=0 C=1 png=100x420
+                                   ▗▄▄▄▄▄▄▄▄
+                                   ▐  S1   ▐
+                                   ▐       ▐
+                                   ▐ ▗▄▄▄▄ ▐
+                                   ▐ ▐ X ▐ ▐
+                                   ▐ ▐▄▄▄▟ ▐
+                                   ▐   ▐   ▐
+                                   ▐   ▐   ▐
+                                   ▐ ▗▄█▙▄ ▐
+                                   ▐ ▐ Y ▐ ▐
+                                   ▐ ▐▄▄▄▟ ▐
+                                   ▐   ▐   ▐
+                                   ▐▄▄▄▟▄▄▄▟
+                                   ▗▄▄▄▟▄▄▄▄▄
+                                   ▐   ▐ S2 ▐
+                                   ▐   ▐    ▐
+                                   ▐ ▗▄█▙▄  ▐
+                                   ▐ ▐ Z ▐  ▐
+                                   ▐ ▐▄▄▄▟  ▐
+                                   ▐        ▐
+                                   ▐▄▄▄▄▄▄▄▄▟
 
 Membership: nesting
 ────────────────────────────────────────────────────────────────────────────────
@@ -604,38 +886,64 @@ diagram.
       A --> C
       D --> G
 
-Membership: style and class do not name a node
+Drawn: membership, style and class do not name a node
 ────────────────────────────────────────────────────────────────────────────────
 
 C and D are outside S: only a node declaration or a link puts a node in a
 subgraph.
 
-  graph TD
-      C --> D
-      subgraph S
-          A --> B
-          class C foo
-          style D fill:#f00
-      end
+image @873,32 c=16 r=13 z=0 C=1 png=160x260
+                                       ▗▄▄▄▄▄▄▄▄
+                                       ▐   S   ▐
+                                       ▐       ▐
+                                ▗▄▄▄▄  ▐ ▗▄▄▄▄ ▐
+                                ▐ C ▐  ▐ ▐ A ▐ ▐
+                                ▐▄▄▄▟  ▐ ▐▄▄▄▟ ▐
+                                  ▐    ▐   ▐   ▐
+                                  ▐    ▐   ▐   ▐
+                                ▗▄█▙▄  ▐ ▗▄█▙▄ ▐
+                                ▐█D██  ▐ ▐ B ▐ ▐
+                                ▐████  ▐ ▐▄▄▄▟ ▐
+                                       ▐       ▐
+                                       ▐▄▄▄▄▄▄▄▟
 
-Membership: &, ; and one line
+Drawn: membership, &, ; and one line
 ────────────────────────────────────────────────────────────────────────────────
 
-  graph TD
-      subgraph S; A & B --> C; end
-      subgraph T;
-          D
-      end;
-      X --> Y
+image @890,23 c=34 r=15 z=0 C=1 png=340x300
+                       ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄
+                       ▐      S       ▐  ▐   T   ▐
+                       ▐              ▐  ▐       ▐
+                       ▐ ▗▄▄▄▄  ▗▄▄▄▄ ▐  ▐ ▗▄▄▄▄ ▐  ▗▄▄▄▄
+                       ▐ ▐ A ▐  ▐ B ▐ ▐  ▐ ▐ D ▐ ▐  ▐ X ▐
+                       ▐ ▐▄▄▄▟  ▐▄▄▄▟ ▐  ▐ ▐▄▄▄▟ ▐  ▐▄▄▄▟
+                       ▐   ▐      ▐   ▐  ▐       ▐    ▐
+                       ▐   ▐      ▐   ▐  ▐▄▄▄▄▄▄▄▟    ▐
+                       ▐   ▐▄▄▄█▄▄▛   ▐               ▐
+                       ▐       ▐      ▐               ▐
+                       ▐     ▗▄█▙▄    ▐             ▗▄█▙▄
+                       ▐     ▐ C ▐    ▐             ▐ Y ▐
+                       ▐     ▐▄▄▄▟    ▐             ▐▄▄▄▟
+                       ▐              ▐
+                       ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
 
-Ids that start with end or subgraph
+Drawn: ids that start with end or subgraph
 ────────────────────────────────────────────────────────────────────────────────
 
-  graph TD
-      subgraph S
-          endpoint --> subgraphx
-          A["end"] --> D[the end]
-      end
+image @909,25 c=30 r=13 z=0 C=1 png=300x260
+                         ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                         ▐             S              ▐
+                         ▐                            ▐
+                         ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄   ▐
+                         ▐ ▐ endpoint  ▐    ▐ end ▐   ▐
+                         ▐ ▐▄▄▄▄▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▟   ▐
+                         ▐       ▐             ▐      ▐
+                         ▐       ▐             ▐      ▐
+                         ▐ ▗▄▄▄▄▄█▙▄▄▄▄▄  ▗▄▄▄▄█▙▄▄▄▄ ▐
+                         ▐ ▐ subgraphx ▐  ▐ the end ▐ ▐
+                         ▐ ▐▄▄▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▟ ▐
+                         ▐                            ▐
+                         ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
 
 Declined: a direction inside a subgraph
 ────────────────────────────────────────────────────────────────────────────────

@@ -55,7 +55,7 @@ flag wins over the variable.
 declines a diagram, giving the file, the line of the code block, and the reason:
 
 ```
-mdcat: README.md:212: mermaid: fallback: subgraph layout
+mdcat: README.md:212: mermaid: fallback: subgraph layout: edge
 ```
 
 A diagram taller than the terminal is not shrunk: `gmore` scrolls through it like
@@ -90,7 +90,8 @@ The reasons, as `MDCAT_MERMAID_DEBUG=1` words them:
 | ------ | ------- |
 | `not a flowchart` | `sequenceDiagram`, `pie`, `gantt`, `classDiagram`, … |
 | `unsupported syntax: …` | `direction` inside a graph, `end` as an id, a link with mismatched ends such as `A o--> B`, an unclosed shape or quote |
-| `subgraph layout` | a `subgraph … end` that is read without error but not drawn yet: one with a title, a subgraph inside another, or one in a graph that is not top-down |
+| `subgraph layout` | a `subgraph … end` that is read without error but not drawn yet: a subgraph inside another, or one in a graph that is not top-down |
+| `subgraph layout: title` | a subgraph title for which no place was found clear of the edges that enter the box (rare: the box is made wider first) |
 | `subgraph layout: sides` | two subgraphs whose members interleave on the ranks, so their boxes cannot both have straight sides |
 | `subgraph layout: edge` | an edge would run through a box it has no end in, along a border, or out of a box that holds both its ends |
 | `subgraph layout: node`, `…: label`, `…: boxes`, `…: border` | a box with a footprint or edge label that is not its member's inside it, or with a member or label outside it, two boxes that touch, or a border over a box or a label (checks that catch a layout bug) |
@@ -430,11 +431,10 @@ itself; and `Valid?` and `Report` are joined in both directions.
 ## 12. Subgraphs
 
 A `subgraph … end` is drawn as a box around the boxes named inside it, so far only in a
-top-down graph (`TD` or `TB`), one level deep, and when its title is blank
-(`subgraph s[" "]`). The box is a plain outline in the theme's colour, under the boxes and
-edges and with no fill. Mermaid's membership rules apply: a box belongs to the subgraph
-that names it, even if it was first named outside, and to the one that closes first if
-two name it.
+top-down graph (`TD` or `TB`) and one level deep. The box is a plain outline in the theme's
+colour, under the boxes and edges and with no fill. Mermaid's membership rules apply: a box
+belongs to the subgraph that names it, even if it was first named outside, and to the one
+that closes first if two name it.
 
 The layout keeps each subgraph's boxes together. On every rank from its first member's to
 its last it holds a left and a right border, so the sides are straight, and an edge or box
@@ -443,6 +443,18 @@ An edge into or out of the subgraph crosses the border at a right angle; an edge
 two boxes outside it goes round; an edge between two members stays inside. A subgraph's box
 is one blank column from its members, and its top and bottom borders get rows of their own in
 the gaps between ranks.
+
+The title (`subgraph id [Title]`, `id["Title"]`, a bare id, a quoted id, or text with
+spaces; Markdown, `<br>` and entities as in a node's label) is written in bold under the
+top border, centred, in rows of its own between the border and the first rank. A blank
+title (`subgraph s[" "]`) is not drawn. The box is at least as wide as the title plus a
+blank column and the border on each side: if its members make it narrower it is widened,
+and the boxes beside it move out of the way. A title is never drawn over an edge. An edge
+that enters the box from above runs down through the title's row, so the title then moves
+along the row to the nearest place beside the edge, with a blank column on either side;
+where there is no such place the box grows on the side that the title goes, by just as much
+as that takes. A title wider than 24 columns is wrapped like a node label: a Markdown title
+at once, a plain one only if the diagram has to be [fitted](#13-fitting-the-width).
 
 ```mermaid
 graph TD
@@ -455,10 +467,22 @@ graph TD
     build --> ship
 ```
 
+A titled subgraph; the title sits beside the edge that enters the box:
+
+```mermaid
+graph TD
+    commit[Commit] --> build[Build]
+    subgraph checks[Checks]
+        build --> test[Test]
+        test --> lint[Lint]
+    end
+    lint --> ship[Ship]
+```
+
 A diagram whose subgraphs cannot be drawn without an edge running through a box, or whose
 boxes would cross, is declined (`subgraph layout: …`, see [the table](#2-diagrams-that-are-not-drawn-here)):
 a subgraph with members on far apart ranks and other boxes between them is the usual cause.
-Titles, nested subgraphs and the other directions are still declined as plain `subgraph layout`.
+Nested subgraphs and the other directions are still declined as plain `subgraph layout`.
 
 ## 13. Fitting the width
 
@@ -496,7 +520,7 @@ For the last two, a terminal narrower than 72 columns counts as 72 wide, so an
 80-column terminal allows 8 of each. Beyond that, a diagram is too tangled to
 read: it is shown as source, and `mmdc` is not asked to redraw it.
 
-Not drawn at all: `subgraph` with a title, nested, or in a graph that is not top-down (read, but declined as `subgraph layout` for now), `direction` inside a graph, and the other diagram types
+Not drawn at all: `subgraph` nested, or in a graph that is not top-down (read, but declined as `subgraph layout` for now), `direction` inside a graph, and the other diagram types
 (sequence, pie, class, state, Gantt, …). Colours, curves and other styling are read
 but have no effect. A flowchart that is declined goes to `mmdc` when it is
 available.

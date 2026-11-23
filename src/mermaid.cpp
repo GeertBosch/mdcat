@@ -27,6 +27,8 @@ bool renderMarkdown(Graph& g, const Env& env, int wrap, std::string& reason) {
         if (!render(n.label)) return false;
     for (Edge& e : g.edges)
         if (!render(e.label)) return false;
+    for (Cluster& c : g.clusters)
+        if (!render(c.title)) return false;
     return true;
 }
 
@@ -103,6 +105,7 @@ bool render(const std::vector<std::string>& body,
             if (a.wrap) {
                 for (Node& n : g.nodes) wrapPlain(n.label, env, a.wrap);
                 for (Edge& e : g.edges) wrapPlain(e.label, env, a.wrap);
+                for (Cluster& c : g.clusters) wrapPlain(c.title, env, a.wrap);
             }
             ok = layoutGraph(g, env, a.fit, lay, why_, declined);
         }

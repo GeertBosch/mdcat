@@ -14,7 +14,8 @@
 #     MDCAT_MERMAID_DEBUG=1 stderr equals <fixture>.w<N>.err (UPDATE=1 rewrites both). The
 #     previewer also fails on any PNG with a bad signature, CRC, zlib stream or size
 #     (cols*cellW x rows*cellH). A fixture with a <fixture>.w<N>.ansi.txt golden also has its text
-#     layer, with the styles it carries (ESC shown as \e), compared with it;
+#     layer, with the styles it carries (ESC shown as \e), compared with it (9-label-text: Markdown
+#     in labels; 14-subgraphs: the bold of subgraph titles);
 #   - --mermaid / MDCAT_MERMAID precedence: source shows the source, the flag beats the variable,
 #     and an invalid mode exits 2;
 #   - every APC's first chunk carries f=100, C=1, c=, r=, z=0 and q=2, and every chunk carries q=2;
@@ -132,7 +133,7 @@ golden_case mermaid-9-label-text 80 ansi
 golden_case mermaid-10-shapes 80
 golden_case mermaid-11-cycles 80
 golden_case mermaid-13-shapes-3 80
-golden_case mermaid-14-subgraphs 80
+golden_case mermaid-14-subgraphs 80 ansi
 # The checks after the goldens use the output of the last one, so 12-fit at 50 stays last.
 golden_case mermaid-12-fit 120
 golden_case mermaid-12-fit 80

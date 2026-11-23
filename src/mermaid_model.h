@@ -101,6 +101,9 @@ struct Layout {  // cells for boxes, half-cell units for paths
     // Per cluster: the cells of its outline, the border included. The border is the outermost
     // cells, so its strokes run through the centres of those cells, as a node's do.
     std::vector<CellBox> clusterBox;
+    // Per cluster: the cells of its title (the width of its longest line, one row per line), inside
+    // the box and clear of the edges (cols == 0 if untitled).
+    std::vector<CellBox> clusterLabel;
     std::vector<std::vector<Pt>> edgePath;  // per edge, orthogonal hu polyline, source to target
     // Per edge: its group, a split (edges from one source) or a merge (edges into one target) whose
     // edges share a port on each of their nodes, and have one style. Only edges of one group may

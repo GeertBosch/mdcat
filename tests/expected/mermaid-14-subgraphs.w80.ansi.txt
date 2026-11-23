@@ -1,0 +1,606 @@
+
+                                          X
+
+
+
+
+
+
+                                      A
+
+
+
+
+                                      B
+
+
+
+
+                                      C
+
+
+
+
+
+
+                                           Y
+
+
+
+                                       S
+
+
+
+
+
+                                      A1
+
+
+
+
+
+                                   A2
+
+
+
+
+
+
+
+                                   B1
+
+
+
+
+
+                                   B2
+
+
+
+
+
+                                    T
+
+
+
+                                 X
+
+
+
+
+
+
+                                     A        Z
+
+
+
+
+                                     B
+
+
+
+
+                                     C
+
+
+
+
+                                     D
+
+
+
+
+
+
+
+                                      Y
+
+
+
+                                      P
+
+
+
+
+
+
+                                  Q        A
+
+
+
+
+                                  R        B
+
+
+
+
+                                           C
+
+
+
+
+
+                                           D
+
+
+
+
+
+
+
+                                           A
+
+
+
+
+
+                                  X
+
+
+
+
+
+                                 Y         D
+
+
+
+
+
+                                       S
+
+
+
+
+
+
+
+                                       A
+
+
+
+
+
+
+
+                                    B
+
+
+
+
+                                     yes
+
+
+
+
+
+                                   C        D
+
+
+
+
+
+
+
+                                            T
+
+
+
+
+
+                              X        A
+
+
+
+
+
+                                       B
+
+
+
+
+
+                                       C        Z
+
+
+
+
+
+                                       Y
+
+
+
+
+
+                         \e[48;2;255;221;221mP1           \e[49mQ1           R1\e[22;23;39;49m
+
+
+
+
+
+                         P2           \e[48;2;221;255;221m\e[38;2;0;102;0mQ2\e[49m\e[39m\e[22;23;39;49m
+
+
+
+
+
+                                           A
+
+
+
+
+
+                                       B
+
+
+
+
+
+
+                                      C
+
+
+
+
+                                      D
+
+
+
+
+                                      E
+
+
+
+
+
+                                      F
+
+
+
+
+
+                                          G
+
+
+
+                                  Stable Probe    at minimum
+
+
+
+
+            above minimum or                          below max and
+                 at max                                 exhausted
+
+
+
+
+               Probe Down                               Probe Up
+
+
+
+
+      throughput       no throughput          throughput       no throughput
+      increased            gain               increased            gain
+
+
+
+    Decrease stable     Go back to          Increase stable     Go back to
+      concurrency         stable              concurrency         stable
+                        concurrency                             concurrency
+
+
+
+
+
+
+
+
+
+
+
+                                  Stable Probe
+
+
+
+                                     \e[1mPlan\e[22m\e[22;23;39;49m
+
+
+                                       A
+
+
+
+
+                                       B
+
+
+
+
+
+                                        X
+
+
+
+                                    \e[1mone\e[22m\e[22;23;39;49m
+
+
+                                        A
+
+
+
+
+                                        B
+
+
+
+
+
+                                        Y
+
+
+
+                                   \e[1mS\e[22m\e[22;23;39;49m
+
+
+                                  A1
+
+
+
+
+                                     \e[1mTitle one\e[22m\e[22;23;39;49m
+
+
+                                  A2
+
+
+
+
+                                     \e[1mTitle two\e[22m\e[22;23;39;49m
+
+
+                                  A3
+
+
+
+
+                                     \e[1mTitle three\e[22m\e[22;23;39;49m
+
+
+                                  A4
+
+
+
+
+
+                                        \e[1mQ::plan()\e[22m\e[22;23;39;49m
+
+
+                                            P
+
+
+
+
+                                            Q
+
+
+
+
+                              \e[1mIndex Tagging\e[22m\e[22;23;39;49m
+
+
+                                            R
+
+
+
+
+                                            S
+
+
+
+
+
+                                  \e[1m\e[1mMarkdown \e[22m\e[1mtitle\e[22m\e[22;23;39;49m
+
+
+                                       A8
+
+
+
+
+                                           \e[1mtwo\e[22m\e[22;23;39;49m
+                                          \e[1mlines\e[22m\e[22;23;39;49m
+
+
+                                       A9
+
+
+
+
+                               \e[1mA & B; C\e[22m\e[22;23;39;49m
+
+
+                                       A10
+
+
+
+
+
+                     X
+
+
+
+                       \e[1mA title much wider than its one member\e[22m\e[22;23;39;49m
+
+
+                     A
+
+
+
+
+                       \e[1mA \e[3mMarkdown \e[23mtitle that is\e[22m\e[22;23;39;49m
+                        \e[1ma good deal wider than\e[22m\e[22;23;39;49m
+                           \e[1manything inside\e[22m\e[22;23;39;49m
+
+
+                     C
+
+
+
+
+
+                               X
+
+
+
+
+        \e[1mAlpha subgraph        \e[22m\e[1mBravo subgraph        \e[22m\e[1mCharlie subgraph\e[22m\e[22;23;39;49m
+         \e[1mwith a long           \e[22m\e[1mwith a long            \e[22m\e[1mwith a long\e[22m\e[22;23;39;49m
+            \e[1mtitle                 \e[22m\e[1mtitle                  \e[22m\e[1mtitle\e[22m\e[22;23;39;49m
+
+
+                       A                     B                       C
+
+
+
+
+
+                                      X
+
+
+
+
+                              \e[1mtwo           \e[22m\e[1mone\e[22m\e[22;23;39;49m
+                             \e[1mlines\e[22m\e[22;23;39;49m
+
+
+                                   A            B
+
+
+
+
+                                   C            D
+
+
+
+
+
+                                  Stable Probe    at minimum
+
+
+
+
+            above minimum or                          below max and
+                 at max                                 exhausted
+
+
+           \e[1mdecrease                                \e[22m\e[1mincrease\e[22m\e[22;23;39;49m
+
+
+               Probe Down                               Probe Up
+
+
+
+
+      throughput       no throughput          throughput       no throughput
+      increased            gain               increased            gain
+
+
+
+    Decrease stable     Go back to          Increase stable     Go back to
+      concurrency         stable              concurrency         stable
+                        concurrency                             concurrency
+
+
+
+
+
+
+
+
+
+
+
+                                  Stable Probe
+
+
+
+                                       A
+
+
+
+                                     \e[1mS\e[22m\e[22;23;39;49m
+
+
+                                       C
+
+
+
+
+                                       F
+
+
+
+
+
+                                      \e[1mS1\e[22m\e[22;23;39;49m
+
+
+                                       X
+
+
+
+
+                                       Y
+
+
+
+
+                                         \e[1mS2\e[22m\e[22;23;39;49m
+
+
+                                       Z
+
+
+
+
+
+                                           \e[1mS\e[22m\e[22;23;39;49m
+
+
+                                  C        A
+
+
+
+
+                                  \e[48;2;255;0;0mD        \e[49mB\e[22;23;39;49m
+
+
+
+
+
+                              \e[1mS              \e[22m\e[1mT\e[22m\e[22;23;39;49m
+
+
+                           A      B          D        X
+
+
+
+
+
+
+                               C                      Y
+
+
+
+
+
+                                       \e[1mS\e[22m\e[22;23;39;49m
+
+
+                             endpoint         end
+
+
+
+
+                             subgraphx      the end
+
+
+
