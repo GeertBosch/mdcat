@@ -778,23 +778,35 @@ bool meet(Pt a0, Pt a1, Pt b0, Pt b1, Pt& at) {
         std::min(b0.first, b1.first) <= x && x <= std::max(b0.first, b1.first);
 }
 
-// The checks that go with subgraphs. Each box is clear of the others, holds exactly its members
-// (their footprints, and the labels and paths of the edges between them), and an edge with only
-// one end inside it crosses its border, never runs along it; an edge with no end inside never
-// touches it.
+// Whether cluster `c` is `of` or lies inside it (-1 is a node outside every cluster).
+bool clusterWithin(const Graph& g, int c, int of) {
+    for (; c >= 0; c = g.clusters[static_cast<size_t>(c)].parent)
+        if (c == of) return true;
+    return false;
+}
+
+// The checks that go with subgraphs. Each box is clear of the others, or strictly inside the one
+// that holds it (a blank cell from its border), holds exactly its members, those of the boxes
+// inside it too (their footprints, and the labels and paths of the edges between them), and an
+// edge with only one end inside it crosses its border, never runs along it; an edge with no end
+// inside never touches it.
 bool validateClusters(const Graph& g, const Layout& lay, std::string& reason) {
     const size_t count = lay.clusterBox.size();
     for (size_t c = 0; c < count; ++c) {
         const CellBox& box = lay.clusterBox[c];
         for (size_t d = c + 1; d < count; ++d) {
-            if (touches(box, lay.clusterBox[d])) {
+            const CellBox& other = lay.clusterBox[d];
+            // `d` closes after `c`, so if either holds the other it is `d` that holds `c`.
+            const bool held = clusterWithin(g, static_cast<int>(c), static_cast<int>(d));
+            const CellBox room{other.col + 1, other.row + 1, other.cols - 2, other.rows - 2};
+            if (held ? !inside(box, room) : touches(box, other)) {
                 reason = "subgraph layout: boxes";
                 return false;
             }
         }
         for (size_t i = 0; i < g.nodes.size(); ++i) {
             const CellBox& f = lay.nodeFoot[i];
-            const bool member = g.nodes[i].cluster == static_cast<int>(c);
+            const bool member = clusterWithin(g, g.nodes[i].cluster, static_cast<int>(c));
             if (member ? !inside(f, box) : touches(f, box)) {
                 reason = "subgraph layout: node";
                 return false;
@@ -831,10 +843,10 @@ bool validateClusters(const Graph& g, const Layout& lay, std::string& reason) {
                   b = 2 * (box.row + box.rows) - 1;
         const Pt corner[4] = {{l, t}, {r, t}, {r, b}, {l, b}};
         for (size_t k = 0; k < g.edges.size(); ++k) {
-            const bool from =
-                g.nodes[static_cast<size_t>(g.edges[k].from)].cluster == static_cast<int>(c);
-            const bool to =
-                g.nodes[static_cast<size_t>(g.edges[k].to)].cluster == static_cast<int>(c);
+            const bool from = clusterWithin(
+                g, g.nodes[static_cast<size_t>(g.edges[k].from)].cluster, static_cast<int>(c));
+            const bool to = clusterWithin(
+                g, g.nodes[static_cast<size_t>(g.edges[k].to)].cluster, static_cast<int>(c));
             const CellBox& label = lay.edgeLabel[k];
             if (label.cols > 0 && (from && to ? !inside(label, box) : touches(label, box))) {
                 reason = "subgraph layout: label";
@@ -1013,11 +1025,13 @@ bool drawDiagram(
     bool borderClear = true;
     for (const Stroke& st : strokes) {
         if (st.kind != Stroke::Outline || st.cluster < 0) continue;
-        outlineCells(st.pts[0], st.pts[1], [&](int c, int r) {
-            const Occ was = grid.get(c, r);
-            if (was != Occ::Empty && was != Occ::Cluster) borderClear = false;
-            grid.at(c, r) = Occ::Cluster;
-        });
+        // A cell is the border of one box only: two borders never share one. (An outline passes
+        // its corners twice.)
+        std::vector<std::pair<int, int>> cells;
+        outlineCells(st.pts[0], st.pts[1], [&](int c, int r) { cells.push_back({c, r}); });
+        for (const auto& [c, r] : cells)
+            if (grid.get(c, r) != Occ::Empty) borderClear = false;
+        for (const auto& [c, r] : cells) grid.at(c, r) = Occ::Cluster;
     }
     if (!borderClear) {
         reason = "subgraph layout: border";

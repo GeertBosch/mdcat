@@ -41,11 +41,11 @@ struct Item {
 };
 
 // The separation between neighbouring items: `base` between footprints, and a cluster's border is
-// as many blank cells from what lies inside the box as its `gap` says.
+// as many blank cells from what lies inside the box as its `gap` says, whether that is a member,
+// the border of a box inside it, or its other border.
 int separation(const std::vector<Item>& items, int base, int a, int b) {
     const Item &x = items[static_cast<size_t>(a)], &y = items[static_cast<size_t>(b)];
-    if (x.cluster < 0 || x.cluster != y.cluster) return base;
-    if (x.border == 1 && y.border == 2) return std::max(x.gap, y.gap);
+    if (x.border == 1 && y.border == 2 && x.cluster == y.cluster) return std::max(x.gap, y.gap);
     if (x.border == 1) return x.gap;
     if (y.border == 2) return y.gap;
     return base;
@@ -115,57 +115,86 @@ void setPositions(const std::vector<int>& row, std::vector<int>& pos) {
     for (size_t i = 0; i < row.size(); ++i) pos[static_cast<size_t>(row[i])] = static_cast<int>(i);
 }
 
-// A run of a rank that moves as one when the rank is sorted: an item outside every cluster, or a
-// cluster's block, from its left border to its right one.
+// A run of a rank that moves as one when it is sorted: an item that is no cluster's border, or a
+// cluster's block, from its left border to its right one, and what lies between.
 struct Entry {
     size_t begin, end;
-    int cluster;
+    bool block;
 };
 
-std::vector<Entry> entriesOf(const std::vector<int>& row, const std::vector<Item>& items) {
+// The entries of `row` from `begin` to `end`, which is a whole rank or what lies inside a block.
+std::vector<Entry> entriesOf(const std::vector<int>& row,
+                             const std::vector<Item>& items,
+                             size_t begin,
+                             size_t end) {
     std::vector<Entry> list;
-    for (size_t i = 0; i < row.size();) {
-        const int cl = items[static_cast<size_t>(row[i])].cluster;
+    for (size_t i = begin; i < end;) {
+        const Item& it = items[static_cast<size_t>(row[i])];
         size_t j = i + 1;
-        if (cl >= 0)
-            while (j < row.size() && items[static_cast<size_t>(row[j - 1])].border != 2) ++j;
-        list.push_back({i, j, cl});
+        if (it.border == 1) {
+            while (j < end &&
+                   !(items[static_cast<size_t>(row[j - 1])].border == 2 &&
+                     items[static_cast<size_t>(row[j - 1])].cluster == it.cluster))
+                ++j;
+        }
+        list.push_back({i, j, it.border == 1});
         i = j;
     }
     return list;
 }
 
-// Make each cluster's items contiguous in a rank: its left border, its members in their current
-// order, its right border. A block takes the place of its first member; one with no member (a rank
-// of the box's span that holds none) goes last, in the order of the clusters.
-void groupBlocks(std::vector<int>& row, const std::vector<Item>& items) {
-    std::map<int, std::vector<int>> members;
+// Make each cluster's items contiguous in a rank, and a cluster inside another within its block:
+// its left border, its members and the blocks inside it in their current order, its right border.
+// A block takes the place of its first member (or of the first member of the block inside it); one
+// with no member (a rank of the box's span that holds none) goes last, in the order of the
+// clusters.
+void groupBlocks(std::vector<int>& row,
+                 const std::vector<Item>& items,
+                 const std::vector<Cluster>& clusters) {
     std::map<int, int> left, right;
-    std::vector<int> out;
     for (int id : row) {
         const Item& it = items[static_cast<size_t>(id)];
-        if (it.cluster < 0) {
-            out.push_back(id);
-        } else if (it.border) {
-            (it.border == 1 ? left : right)[it.cluster] = id;
-        } else {
-            if (members[it.cluster].empty()) out.push_back(-1 - it.cluster);
-            members[it.cluster].push_back(id);
-        }
+        if (it.border) (it.border == 1 ? left : right)[it.cluster] = id;
     }
-    for (const auto& [cl, id] : left)
-        if (members[cl].empty()) out.push_back(-1 - cl);
-    row.clear();
-    for (int id : out) {
-        if (id >= 0) {
-            row.push_back(id);
-            continue;
-        }
-        const int cl = -1 - id;
-        row.push_back(left.at(cl));
-        row.insert(row.end(), members[cl].begin(), members[cl].end());
-        row.push_back(right.at(cl));
-    }
+    // The cluster directly inside `parent` that holds cluster `c`.
+    auto childOf = [&](int parent, int c) {
+        while (clusters[static_cast<size_t>(c)].parent != parent)
+            c = clusters[static_cast<size_t>(c)].parent;
+        return c;
+    };
+    std::function<void(int, const std::vector<int>&, std::vector<int>&)> build =
+        [&](int parent, const std::vector<int>& ids, std::vector<int>& out) {
+            std::vector<int> seq;  // an item, or -1 - c for the block of cluster c
+            std::map<int, std::vector<int>> within;
+            std::set<int> marked;
+            for (int id : ids) {
+                const Item& it = items[static_cast<size_t>(id)];
+                if (it.border && it.cluster == parent) continue;  // the caller places these
+                if (it.cluster == parent) {
+                    seq.push_back(id);
+                    continue;
+                }
+                const int child = childOf(parent, it.cluster);
+                within[child].push_back(id);
+                if (!it.border && marked.insert(child).second) seq.push_back(-1 - child);
+            }
+            for (const auto& [cl, id] : left)
+                if (clusters[static_cast<size_t>(cl)].parent == parent && !marked.count(cl))
+                    seq.push_back(-1 - cl);
+            for (int id : seq) {
+                if (id >= 0) {
+                    out.push_back(id);
+                    continue;
+                }
+                const int cl = -1 - id;
+                out.push_back(left.at(cl));
+                build(cl, within[cl], out);
+                out.push_back(right.at(cl));
+            }
+        };
+    std::vector<int> out;
+    build(-1, row, out);
+    row = out;
 }
 
 // The order that sorting units by key puts them in, as the unit that goes in each slot: a unit
@@ -189,9 +218,9 @@ std::vector<size_t> sortedSlots(const std::vector<std::pair<bool, long>>& key) {
 
 // Reorder one rank by the barycenter of each item's neighbours in the adjacent rank, in positions
 // times 1000. An item with no such neighbours keeps its slot; the others are sorted into the
-// remaining slots, ties staying in their old order. Clusters stay contiguous: the members of each
-// block are sorted among themselves, and then the entries of the rank, a block keyed by the mean
-// barycenter of its items, among theirs.
+// remaining slots, ties staying in their old order. Clusters stay contiguous, at every level: the
+// entries inside each block are sorted among themselves, innermost first, and then the entries of
+// the rank, a block keyed by the mean barycenter of its items, among theirs.
 void sortByBarycenter(std::vector<std::vector<int>>& order,
                       std::vector<int>& pos,
                       const std::vector<std::vector<int>>& nbr,
@@ -205,42 +234,39 @@ void sortByBarycenter(std::vector<std::vector<int>>& order,
         for (int p : from) sum += pos[static_cast<size_t>(p)];
         return {true, sum * 1000 / static_cast<long>(from.size())};
     };
-    std::vector<Entry> entries = entriesOf(row, items);
-    for (const Entry& e : entries) {
-        if (e.cluster < 0 || e.end - e.begin < 3) continue;
+    std::function<void(size_t, size_t)> sortRange = [&](size_t begin, size_t end) {
+        const std::vector<Entry> entries = entriesOf(row, items, begin, end);
+        for (const Entry& e : entries)
+            if (e.block) sortRange(e.begin + 1, e.end - 1);
         std::vector<std::pair<bool, long>> key;
-        std::vector<int> inner(row.begin() + static_cast<long>(e.begin) + 1,
-                               row.begin() + static_cast<long>(e.end) - 1);
-        for (int id : inner) key.push_back(keyOf(id));
-        const std::vector<size_t> by = sortedSlots(key);
-        for (size_t i = 0; i < by.size(); ++i) row[e.begin + 1 + i] = inner[by[i]];
-    }
-    std::vector<std::pair<bool, long>> key;
-    for (const Entry& e : entries) {
-        long sum = 0, count = 0;
-        for (size_t i = e.begin; i < e.end; ++i) {
-            const std::pair<bool, long> k = keyOf(row[i]);
-            if (!k.first) continue;
-            sum += k.second;
-            ++count;
+        for (const Entry& e : entries) {
+            long sum = 0, count = 0;
+            for (size_t i = e.begin; i < e.end; ++i) {
+                const std::pair<bool, long> k = keyOf(row[i]);
+                if (!k.first) continue;
+                sum += k.second;
+                ++count;
+            }
+            key.push_back(count ? std::pair<bool, long>{true, sum / count}
+                                : std::pair<bool, long>{false, 0});
         }
-        key.push_back(count ? std::pair<bool, long>{true, sum / count}
-                            : std::pair<bool, long>{false, 0});
-    }
-    const std::vector<size_t> by = sortedSlots(key);
-    std::vector<int> sorted;
-    for (size_t e : by)
-        sorted.insert(sorted.end(),
-                      row.begin() + static_cast<long>(entries[e].begin),
-                      row.begin() + static_cast<long>(entries[e].end));
-    row = sorted;
+        const std::vector<size_t> by = sortedSlots(key);
+        std::vector<int> sorted;
+        for (size_t e : by)
+            sorted.insert(sorted.end(),
+                          row.begin() + static_cast<long>(entries[e].begin),
+                          row.begin() + static_cast<long>(entries[e].end));
+        std::copy(sorted.begin(), sorted.end(), row.begin() + static_cast<long>(begin));
+    };
+    sortRange(0, row.size());
     setPositions(row, pos);
 }
 
 // Choose the order of the items in each rank so that few edges cross: sweeps of the barycenter
 // heuristic, each followed by swaps of adjacent items that strictly reduce the crossings. The best
 // order seen wins; the initial one on ties. A swap exchanges two items of one cluster (or of none),
-// or two entries of a rank when one is a cluster's block, so the blocks stay contiguous.
+// or two entries of a rank (or of a block) when one is a cluster's block, so the blocks stay
+// contiguous.
 void reduceCrossings(std::vector<std::vector<int>>& order,
                      const std::vector<Item>& items,
                      const std::vector<std::vector<int>>& up,
@@ -261,6 +287,32 @@ void reduceCrossings(std::vector<std::vector<int>>& order,
         const Item &x = items[static_cast<size_t>(a)], &y = items[static_cast<size_t>(b)];
         return x.cluster == y.cluster && !x.border && !y.border;
     };
+    bool improved = false;
+    // Exchange neighbouring entries of a rank, from `begin` to `end`, when that reduces the
+    // crossings and one of them is a block, then do the same inside each block.
+    std::function<void(size_t, size_t, size_t)> rotateRange =
+        [&](size_t r, size_t begin, size_t end) {
+            std::vector<int>& row = order[r];
+            std::vector<Entry> entries = entriesOf(row, items, begin, end);
+            for (size_t e = 0; e + 1 < entries.size(); ++e) {
+                if (!entries[e].block && !entries[e + 1].block) continue;
+                auto first = row.begin() + static_cast<long>(entries[e].begin);
+                auto mid = row.begin() + static_cast<long>(entries[e + 1].begin);
+                auto last = row.begin() + static_cast<long>(entries[e + 1].end);
+                int before = local(r);
+                std::rotate(first, mid, last);
+                setPositions(row, pos);
+                if (local(r) < before) {
+                    improved = true;
+                    entries = entriesOf(row, items, begin, end);
+                } else {
+                    std::rotate(first, first + (last - mid), last);
+                    setPositions(row, pos);
+                }
+            }
+            for (const Entry& e : entriesOf(row, items, begin, end))
+                if (e.block) rotateRange(r, e.begin + 1, e.end - 1);
+        };
     std::vector<std::vector<int>> best = order;
     int bestCount = total();
     for (int sweep = 0; sweep < 8 && bestCount > 0; ++sweep) {
@@ -269,7 +321,7 @@ void reduceCrossings(std::vector<std::vector<int>>& order,
         } else {
             for (size_t r = ranks - 1; r-- > 0;) sortByBarycenter(order, pos, down, items, r);
         }
-        for (bool improved = true; improved;) {
+        for (improved = true; improved;) {
             improved = false;
             for (size_t r = 0; r < ranks; ++r) {
                 std::vector<int>& row = order[r];
@@ -285,23 +337,7 @@ void reduceCrossings(std::vector<std::vector<int>>& order,
                         setPositions(row, pos);
                     }
                 }
-                std::vector<Entry> entries = entriesOf(row, items);
-                for (size_t e = 0; e + 1 < entries.size(); ++e) {
-                    if (entries[e].cluster < 0 && entries[e + 1].cluster < 0) continue;
-                    auto first = row.begin() + static_cast<long>(entries[e].begin);
-                    auto mid = row.begin() + static_cast<long>(entries[e + 1].begin);
-                    auto last = row.begin() + static_cast<long>(entries[e + 1].end);
-                    int before = local(r);
-                    std::rotate(first, mid, last);
-                    setPositions(row, pos);
-                    if (local(r) < before) {
-                        improved = true;
-                        entries = entriesOf(row, items);
-                    } else {
-                        std::rotate(first, first + (last - mid), last);
-                        setPositions(row, pos);
-                    }
-                }
+                rotateRange(r, 0, row.size());
             }
         }
         int count = total();
@@ -493,13 +529,13 @@ bool layoutOnce(const Graph& original,
                 std::string& reason,
                 Decline& why) {
     const size_t n = original.nodes.size();
-    // Subgraphs are laid out in every direction, one level deep; step 8 of
-    // docs/plan-mermaid-subgraphs.md lifts the rest of this gate.
-    {
-        bool drawn = true;
-        for (const Cluster& c : original.clusters) drawn = drawn && c.parent < 0;
-        if (!drawn) {
-            reason = "subgraph layout";
+    // Subgraphs are laid out in every direction, nested up to kMaxClusterDepth deep.
+    for (const Cluster& c : original.clusters) {
+        int depth = 1;
+        for (int p = c.parent; p >= 0; p = original.clusters[static_cast<size_t>(p)].parent)
+            ++depth;
+        if (depth > tune::kMaxClusterDepth) {
+            reason = "subgraph layout: depth";
             return false;
         }
     }
@@ -575,6 +611,20 @@ bool layoutOnce(const Graph& original,
     }
     // BT and RL are laid out as TB and LR, and mirrored along the flow at the end.
     const bool td = g.dir == Dir::TB || g.dir == Dir::BT;
+    // The clusters form a forest. `parentOf` steps up it, `within` says whether cluster `c` is
+    // `of` or lies inside it (-1 is no cluster, which holds everything), and `lowestCommon` is the
+    // deepest cluster that holds both of two clusters, or -1.
+    auto parentOf = [&](int c) { return g.clusters[static_cast<size_t>(c)].parent; };
+    auto within = [&](int c, int of) {
+        for (; c >= 0; c = parentOf(c))
+            if (c == of) return true;
+        return of < 0;
+    };
+    auto lowestCommon = [&](int a, int b) {
+        for (; a >= 0; a = parentOf(a))
+            if (within(b, a)) return a;
+        return -1;
+    };
 
     // Edge labels, as in Dagre: every rank and minimum length is doubled, so that a labelled edge
     // has a rank halfway along it. Its label is an item there, which ordering and placement treat
@@ -762,14 +812,14 @@ bool layoutOnce(const Graph& original,
             c.push_back(static_cast<int>(u));
             const Edge& edge = g.edges[static_cast<size_t>(k)];
             const int mid = rank[u] + (rank[v] - rank[u]) / 2;
-            // An edge inside a cluster stays inside it; any other, including one between two
-            // clusters, passes outside every box.
-            const int cu = g.nodes[u].cluster, cv = g.nodes[v].cluster;
+            // An edge inside a cluster stays inside it, and between two clusters it passes outside
+            // both, inside the one that holds both (the lowest common cluster) if there is one.
+            const int common = lowestCommon(g.nodes[u].cluster, g.nodes[v].cluster);
             for (int r = rank[u] + 1; r < rank[v]; ++r) {
                 Item d;
                 d.rank = r;
                 d.weight = kDummyWeight;
-                d.cluster = cu == cv ? cu : -1;
+                d.cluster = common;
                 if (!edge.label.lines.empty() && r == mid) {
                     const int lines = static_cast<int>(edge.label.lines.size());
                     int w = labelWidth(edge);
@@ -795,10 +845,11 @@ bool layoutOnce(const Graph& original,
             if (find(j) == root && inE[j].empty()) visit(j);
     }
 
-    // Border items. A cluster spans the ranks from its first member's to its last member's, and on
-    // each of them has a left and a right border item, which ordering and placement tie to those of
-    // the ranks before and after as if by an edge. A rank of the span that holds no member gets
-    // them too, so that nothing from outside lands inside the box there.
+    // Border items. A cluster spans the ranks from its first member's to its last member's (a
+    // member of a cluster inside it counts), and on each of them has a left and a right border
+    // item, which ordering and placement tie to those of the ranks before and after as if by an
+    // edge. A rank of the span that holds no member gets them too, so that nothing from outside
+    // lands inside the box there.
     const size_t clusterCount = g.clusters.size();
     std::vector<int> titleW(clusterCount, 0), titleL(clusterCount, 0);  // columns, lines
     for (size_t c = 0; c < clusterCount; ++c) {
@@ -807,11 +858,12 @@ bool layoutOnce(const Graph& original,
         titleL[c] = static_cast<int>(g.clusters[c].title.lines.size());
     }
     std::vector<int> spanLo(clusterCount, INT_MAX), spanHi(clusterCount, -1);
+    // A cluster spans the ranks of every node inside it, those of the clusters inside it too.
     for (size_t i = 0; i < n; ++i) {
-        const int c = g.nodes[i].cluster;
-        if (c < 0) continue;
-        spanLo[static_cast<size_t>(c)] = std::min(spanLo[static_cast<size_t>(c)], rank[i]);
-        spanHi[static_cast<size_t>(c)] = std::max(spanHi[static_cast<size_t>(c)], rank[i]);
+        for (int c = g.nodes[i].cluster; c >= 0; c = parentOf(c)) {
+            spanLo[static_cast<size_t>(c)] = std::min(spanLo[static_cast<size_t>(c)], rank[i]);
+            spanHi[static_cast<size_t>(c)] = std::max(spanHi[static_cast<size_t>(c)], rank[i]);
+        }
     }
     std::vector<std::vector<int>>
         borderPairs;  // consecutive border items: ties for order/placement
@@ -840,7 +892,7 @@ bool layoutOnce(const Graph& original,
         }
     }
     if (clusterCount) {
-        for (std::vector<int>& row : order) groupBlocks(row, items);
+        for (std::vector<int>& row : order) groupBlocks(row, items, g.clusters);
     }
 
     // Ports. The edges leaving a node through one port share their first run, and those arriving
@@ -1140,9 +1192,11 @@ bool layoutOnce(const Graph& original,
     }
     for (size_t i = 0; i < items.size(); ++i) items[i].left = best[i];
     // Straight sides. Each box spans from the leftmost of its left border items to the rightmost of
-    // its right ones; every border item goes to those sides, and the rest of the rank is made to
-    // keep clear of them. A box moves as a whole (its members and borders on every rank), so it
-    // stays straight; an item outside any box moves alone. Only ever rightward, so this ends
+    // its right ones, and wide enough to hold the boxes inside it; every border item goes to those
+    // sides, innermost box first, and the rest of the rank is made to keep clear of them. A box
+    // moves as a whole (its members, the boxes inside it and its borders, on every rank), so it
+    // stays straight; an item outside any box moves alone, as does a box's right border (the
+    // sides are then straightened again, which widens the box). Only ever rightward, so this ends
     // unless two boxes are in the wrong order on some pair of ranks, which there is no room for.
     // Each box's width in columns before a title widens it, and the columns it was widened by at
     // the start and at the end of the flow's axis it grows along: across the flow top-down, along
@@ -1151,17 +1205,41 @@ bool layoutOnce(const Graph& original,
         grewLast(clusterCount, 0);
     const bool hflip = g.dir == Dir::RL;  // the columns run against the layout's
     if (clusterCount) {
-        std::vector<std::vector<int>> held(clusterCount);
-        for (size_t i = 0; i < items.size(); ++i)
-            if (items[i].cluster >= 0)
-                held[static_cast<size_t>(items[i].cluster)].push_back(static_cast<int>(i));
-        for (size_t c = 0; c < clusterCount; ++c) {
-            int lo = INT_MAX, hi = INT_MIN;
+        // Every item of a box, those of the boxes inside it and its own borders too, and the
+        // same without its own borders.
+        std::vector<std::vector<int>> held(clusterCount), inner(clusterCount);
+        for (size_t i = 0; i < items.size(); ++i) {
+            for (int c = items[i].cluster; c >= 0; c = parentOf(c)) {
+                held[static_cast<size_t>(c)].push_back(static_cast<int>(i));
+                if (c != items[i].cluster || !items[i].border)
+                    inner[static_cast<size_t>(c)].push_back(static_cast<int>(i));
+            }
+        }
+        // The blank cells between a box's border and what lies inside it, on its left and right.
+        auto gapOf = [&](size_t c, int side) {
+            return items[static_cast<size_t>(side == 1 ? boxLeft[c] : boxRight[c])].gap;
+        };
+        std::vector<int> sideLo(clusterCount, 0), sideHi(clusterCount, 0);
+        // A box's sides, as its borders have them: the leftmost left border and the rightmost
+        // right one, beyond those of the boxes inside it (`enclose`, for the first time).
+        auto sides = [&](size_t c, bool enclose, int& lo, int& hi) {
+            lo = INT_MAX;
+            hi = INT_MIN;
             for (int id : held[c]) {
                 const Item& it = items[static_cast<size_t>(id)];
+                if (it.cluster != static_cast<int>(c)) continue;
                 if (it.border == 1) lo = std::min(lo, it.left);
                 if (it.border == 2) hi = std::max(hi, it.left);
             }
+            for (size_t d = 0; d < c; ++d) {
+                if (parentOf(static_cast<int>(d)) != static_cast<int>(c)) continue;
+                if (enclose) lo = std::min(lo, sideLo[d] - 1 - gapOf(c, 1));
+                hi = std::max(hi, sideHi[d] + 1 + gapOf(c, 2));
+            }
+        };
+        for (size_t c = 0; c < clusterCount; ++c) {
+            int lo, hi;
+            sides(c, true, lo, hi);
             // Top-down the box is at least as wide as its title and a blank column and the border
             // on each side, or as `grow` asks. Unless it asks, both sides move out, so the members
             // stay in the middle. The pass below makes room for it: where a neighbour is in the
@@ -1183,32 +1261,47 @@ bool layoutOnce(const Graph& original,
             }
             lo += nudge[c] - left;
             hi += nudge[c] + right;
+            for (int id : inner[c]) items[static_cast<size_t>(id)].left += nudge[c];
             for (int id : held[c]) {
                 Item& it = items[static_cast<size_t>(id)];
-                if (it.border)
+                if (it.cluster == static_cast<int>(c) && it.border)
                     it.left = it.border == 1 ? lo : hi;
-                else
-                    it.left += nudge[c];
             }
+            sideLo[c] = lo;
+            sideHi[c] = hi;
         }
         bool settled = false;
         for (int sweep = 0; sweep < 100 && !settled; ++sweep) {
             settled = true;
             for (const std::vector<int>& row : order) {
-                const std::vector<Entry> entries = entriesOf(row, items);
-                for (size_t e = 1; e < entries.size(); ++e) {
-                    const int prev = row[entries[e - 1].end - 1], next = row[entries[e].begin];
+                for (size_t i = 1; i < row.size(); ++i) {
+                    const int prev = row[i - 1], next = row[i];
                     const Item &a = items[static_cast<size_t>(prev)],
                                &b = items[static_cast<size_t>(next)];
                     const int delta = a.left + a.ext + sepOf(prev, next) - b.left;
                     if (delta <= 0) continue;
                     settled = false;
-                    if (b.cluster < 0) {
-                        items[static_cast<size_t>(next)].left += delta;
-                    } else {
+                    if (b.border == 1) {
                         for (int id : held[static_cast<size_t>(b.cluster)])
                             items[static_cast<size_t>(id)].left += delta;
+                    } else {
+                        items[static_cast<size_t>(next)].left += delta;
                     }
+                }
+            }
+            // A right border that was pushed makes its box wider on every rank.
+            for (size_t c = 0; c < clusterCount; ++c) {
+                int lo, hi;
+                sides(c, false, lo, hi);
+                sideLo[c] = lo;
+                sideHi[c] = hi;
+                for (int id : held[c]) {
+                    Item& it = items[static_cast<size_t>(id)];
+                    if (it.cluster != static_cast<int>(c) || !it.border) continue;
+                    const int at = it.border == 1 ? lo : hi;
+                    if (it.left == at) continue;
+                    it.left = at;
+                    settled = false;
                 }
             }
         }
@@ -1311,9 +1404,11 @@ bool layoutOnce(const Graph& original,
     }
     // A box's top border lies in the gap above its first rank, one row above the row where edges
     // arrive, which is the blank row inside the box; its bottom border lies in the gap below its
-    // last rank, one row below the row where edges leave. Top-level boxes never share a column, so
-    // those of one gap share a row, and a gap that holds borders is one row taller for each kind.
-    // Above the first rank and below the last, the border and its blank row get rows of their own.
+    // last rank, one row below the row where edges leave. Boxes that neither hold each other nor
+    // touch never share a column, so those of one gap share a row, and a gap that holds borders is
+    // one row taller for each kind, or as tall as the borders of boxes inside one another need
+    // (see `reaches`). Above the first rank and below the last, the border and its blank row get
+    // rows of their own.
     // Left to right the same holds for columns. A title is text, so it lies in the rows under the
     // box's top border as drawn: top-down they come between the border and the row where edges
     // arrive, bottom-up (where the flow's end is the top) between the row where edges leave and
@@ -1338,14 +1433,41 @@ bool layoutOnce(const Graph& original,
         growLast[c] = hflip ? grow[c].first : grow[c].second;
         asked[c] = growFirst[c] || growLast[c];
     }
+    // How far a box's borders lie from the nodes of its first and last rank, in rows or columns
+    // along the flow: the distance from the row where edges arrive back to the top border
+    // (`reachFirst`), and from the row where they leave on to the bottom one (`reachLast`). Those
+    // are one for the border itself, as many as the title or the growth for it takes, and, when a
+    // box inside it starts (ends) on the same rank, that box's reach and a blank row (column)
+    // between the two borders, so that nested borders never touch, which is also what `kClusterPad`
+    // makes of them across the flow. `reachNatural` is the same for a box's own length without
+    // what it takes for its title.
+    const bool bt = g.dir == Dir::BT;
+    std::vector<int> reachFirst(clusterCount, 0), reachLast(clusterCount, 0);
+    std::vector<int> reachFirstBare(clusterCount, 0), reachLastBare(clusterCount, 0);
+    auto reaches = [&] {
+        for (size_t c = 0; c < clusterCount; ++c) {  // inner boxes come first
+            const int own1 = td ? (bt ? 0 : titleL[c]) : growFirst[c];
+            const int own2 = td ? (bt ? titleL[c] : 0) : growLast[c];
+            reachFirstBare[c] = reachLastBare[c] = 1;
+            for (size_t d = 0; d < c; ++d) {
+                if (parentOf(static_cast<int>(d)) != static_cast<int>(c)) continue;
+                if (spanLo[d] == spanLo[c])
+                    reachFirstBare[c] = std::max(reachFirstBare[c], reachFirst[d] + 2);
+                if (spanHi[d] == spanHi[c])
+                    reachLastBare[c] = std::max(reachLastBare[c], reachLast[d] + 2);
+            }
+            reachFirst[c] = reachFirstBare[c] + own1;
+            reachLast[c] = reachLastBare[c] + own2;
+        }
+    };
     auto position = [&] {
         std::fill(endsAt.begin(), endsAt.end(), 0);
         std::fill(startsAt.begin(), startsAt.end(), 0);
+        reaches();
         for (size_t c = 0; c < clusterCount; ++c) {
             const size_t lo = static_cast<size_t>(spanLo[c]), hi = static_cast<size_t>(spanHi[c]);
-            const bool bt = g.dir == Dir::BT;
-            startsAt[lo] = std::max(startsAt[lo], 1 + (td ? (bt ? 0 : titleL[c]) : growFirst[c]));
-            endsAt[hi] = std::max(endsAt[hi], 1 + (td ? (bt ? titleL[c] : 0) : growLast[c]));
+            startsAt[lo] = std::max(startsAt[lo], reachFirst[c]);
+            endsAt[hi] = std::max(endsAt[hi], reachLast[c]);
         }
         start[0] = startsAt[0] ? startsAt[0] + 1 : 0;
         for (size_t r = 0; r + 1 < ranks; ++r) {
@@ -1367,27 +1489,33 @@ bool layoutOnce(const Graph& original,
     position();
     if (!td) {
         // Widen the boxes whose title is wider than they are, until none is. Each pass only ever
-        // adds columns, so this ends.
+        // adds columns, so this ends. A box with a box inside it that grew in the same pass waits
+        // for the next, as what it holds is longer than it was.
         for (size_t pass = 0; pass <= clusterCount; ++pass) {
             bool grew = false;
+            std::vector<char> changed(clusterCount, 0);
             for (size_t c = 0; c < clusterCount; ++c) {
-                if (!titleL[c] || asked[c]) continue;
+                if (changed[c] && parentOf(static_cast<int>(c)) >= 0)
+                    changed[static_cast<size_t>(parentOf(static_cast<int>(c)))] = 1;
+                if (!titleL[c] || asked[c] || changed[c]) continue;
                 const size_t lo = static_cast<size_t>(spanLo[c]),
                              hi = static_cast<size_t>(spanHi[c]);
-                natural[c] = start[hi] + thick[hi] - start[lo] + 4;
-                const int need =
-                    titleW[c] + 2 * tune::kClusterPad - (natural[c] + growFirst[c] + growLast[c]);
+                const int need = titleW[c] + 2 * tune::kClusterPad -
+                    (start[hi] + thick[hi] - start[lo] + 2 + reachFirst[c] + reachLast[c]);
                 if (need <= 0) continue;
                 growFirst[c] += need / 2;
                 growLast[c] += need - need / 2;
-                grew = true;
+                grew = changed[c] = 1;
+                if (parentOf(static_cast<int>(c)) >= 0)
+                    changed[static_cast<size_t>(parentOf(static_cast<int>(c)))] = 1;
             }
             if (!grew) break;
             position();
         }
         for (size_t c = 0; c < clusterCount; ++c) {
             const size_t lo = static_cast<size_t>(spanLo[c]), hi = static_cast<size_t>(spanHi[c]);
-            natural[c] = start[hi] + thick[hi] - start[lo] + 4;
+            natural[c] =
+                start[hi] + thick[hi] - start[lo] + 2 + reachFirstBare[c] + reachLastBare[c];
             grewFirst[c] = growFirst[c];
             grewLast[c] = growLast[c];
         }
@@ -1425,9 +1553,13 @@ bool layoutOnce(const Graph& original,
         const int l = items[static_cast<size_t>(boxLeft[c])].left;
         const int r = items[static_cast<size_t>(boxRight[c])].left;
         // Along the flow the box runs from the border of its first gap, which every box of the gap
-        // shares, to that of its last.
-        const int from = start[first] - 1 - startsAt[first];
-        const int to = start[last] + thick[last] + endsAt[last] + 1;
+        // shares, to that of its last. A box that starts (ends) on the rank of the box around it
+        // lies inside that one, at its own reach from the nodes.
+        const int par = parentOf(static_cast<int>(c));
+        const bool nestedFirst = par >= 0 && spanLo[static_cast<size_t>(par)] == spanLo[c];
+        const bool nestedLast = par >= 0 && spanHi[static_cast<size_t>(par)] == spanHi[c];
+        const int from = start[first] - 1 - (nestedFirst ? reachFirst[c] : startsAt[first]);
+        const int to = start[last] + thick[last] + (nestedLast ? reachLast[c] : endsAt[last]) + 1;
         CellBox& b = lay.clusterBox[c];
         b.col = td ? l : from;
         b.cols = td ? r - l + 1 : to - from;

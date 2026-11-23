@@ -1,14 +1,15 @@
 # Mermaid subgraphs
 
 `subgraph ... end` is read into the model (`Graph::clusters`, `Node::cluster`) and drawn, in every
-direction but only one level deep (docs/plan-mermaid-subgraphs.md, Steps 5-8): the box is one outline
-under the nodes and edges, around the nodes named inside it, with the subgraph's title, if it has one,
-in bold under the top border. The cases whose heading starts with *Drawn* are drawn; the title says the
-direction where it is not top-down. The rest are declined: a nested subgraph is `subgraph layout` for
-now, and the other cases are declined for the reason named in their heading or, for the membership
-cases, because of what they hold. `MDCAT_MERMAID_DEBUG=1` prints each reason on stderr, and
-`mermaid-kitty.sh` compares it with `expected/mermaid-14-subgraphs.w80.err`. Which node belongs to which
-subgraph is checked outside the repository, with a scratch parser.
+direction, nested up to three levels deep (docs/plan-mermaid-subgraphs.md, Steps 5-8): the box is one
+outline under the nodes and edges, around the nodes named inside it and the boxes of the subgraphs
+inside it, with the subgraph's title, if it has one, in bold under the top border. The cases whose
+heading starts with *Drawn* are drawn; the title says the direction where it is not top-down, and
+*nested* where a box holds another. The rest are declined: nesting deeper than three levels is
+`subgraph layout: depth`, and the other cases are declined for the reason named in their heading or,
+for the membership cases, because of what they hold. `MDCAT_MERMAID_DEBUG=1` prints each reason on
+stderr, and `mermaid-kitty.sh` compares it with `expected/mermaid-14-subgraphs.w80.err`. Which node
+belongs to which subgraph is checked outside the repository, with a scratch parser.
 
 A blank title (`subgraph s[" "]`) draws no title, so the first cases use it.
 
@@ -804,6 +805,381 @@ D --> H(Stable Probe)
 E --> H
 ```
 
+## Drawn, nested: edges into the inner box from outside both
+
+Expected: the inner box lies inside the outer one, with a blank column between each border and the
+next. X's and Y's edges merge above the outer box into one that crosses the outer border and then the
+inner one, into A. B's edge to C and D's merge below the inner box, inside the outer one.
+
+```mermaid
+graph TD
+    X --> A
+    Y --> A
+    subgraph outer[" "]
+        subgraph inner[" "]
+            A --> B
+        end
+        B --> C
+        D --> C
+    end
+```
+
+## Drawn, nested: an edge from the inner box to a member of the outer box only, and a back edge
+
+Expected: A and B in the inner box, C in the outer one beside it. B's edge to C leaves the inner box
+through its bottom border; the back edge from C to A runs up inside the outer box and enters the inner
+one through its right border.
+
+```mermaid
+graph TD
+    subgraph P[" "]
+        subgraph Q[" "]
+            A --> B
+        end
+        C
+    end
+    B --> C
+    C --> A
+```
+
+## Drawn, nested: a label, a self-loop and long edges
+
+Expected: the inner box holds A, B and C, with the label on A's edge to B, a loop on B and A's long
+edge to C. P's edge into A crosses the inner box's top border. P's long edge to R runs down the left of
+the inner box, and C's edge to R leaves it through its bottom border, both inside the outer one.
+
+```mermaid
+graph TD
+    subgraph outer[" "]
+        subgraph inner[" "]
+            A -- label --> B --> C
+            A --> C
+            B --> B
+        end
+        P --> Q --> R
+        P --> R
+        P --> A
+        C --> R
+    end
+```
+
+## Drawn, nested: titles, both boxes starting on one rank
+
+Expected: both titles in bold, each under its box's top border, with a blank row between the outer
+title and the inner border. X's edge to A runs through the outer title's row, so that title is moved
+left of the edge; the inner title is as well.
+
+```mermaid
+graph TD
+    subgraph outer["Outer Title"]
+        subgraph inner["Inner Title"]
+            A --> B
+        end
+    end
+    X --> A
+    B --> Y
+```
+
+## Drawn, nested: an inner box and a node of the outer box
+
+Expected: the outer box holds the inner one and C, which is below the inner box and so on a later rank.
+B's edge to C leaves the inner box through its bottom border.
+
+```mermaid
+graph TD
+    subgraph Outer
+        subgraph Inner
+            A --> B
+        end
+        C
+    end
+    X --> A
+    B --> C
+```
+
+## Drawn, nested: the inner title wider than the box, the outer wider still
+
+Expected: both titles lie to the right of X's edge, so both boxes are wider than their members, on the
+right, to hold them; the outer box is wider than the inner one by a blank column and the borders.
+
+```mermaid
+graph TD
+    subgraph outer["The outer subgraph with a long title"]
+        subgraph inner["The inner subgraph title"]
+            A --> B
+        end
+    end
+    X --> A
+```
+
+## Drawn, nested: an inner box that starts later and ends earlier
+
+Expected: P and Q above the inner box and R and S below it, all in the outer box. The inner box has
+its own title, "Inner", and the outer one "Outer". Q's edge to A crosses the inner top border, and B's
+edge to R the bottom one.
+
+```mermaid
+graph TD
+    subgraph outer["Outer"]
+        P --> Q
+        subgraph inner["Inner"]
+            A --> B
+        end
+        Q --> A
+        B --> R
+        R --> S
+    end
+```
+
+## Drawn, nested: siblings inside a parent, edges between them
+
+Expected: the box "Parent" holds the boxes "Left" (A, B) and "Right" (C, D), one above the other. B's
+edge to C crosses both inner borders and none of the parent's. X's edge to C goes round the right of
+the parent and enters it through its right border.
+
+```mermaid
+graph TD
+    subgraph Parent
+        subgraph Left
+            A --> B
+        end
+        subgraph Right
+            C --> D
+        end
+    end
+    B --> C
+    X --> A
+    X --> C
+```
+
+## Drawn, nested: two boxes in a parent, one nested again
+
+Expected: "Outer" holds "One" (A, B) and "Two"; "Two" holds "Three" (C, D) and E. X's two edges split
+above the outer box. B's edge to E leaves One through its bottom border and enters Two through its left
+border, where D's edge, from Three, joins it.
+
+```mermaid
+graph TD
+    subgraph outer["Outer"]
+        subgraph one["One"]
+            A --> B
+        end
+        subgraph two["Two"]
+            subgraph three["Three"]
+                C --> D
+            end
+            E
+        end
+    end
+    X --> A
+    X --> C
+    B --> E
+    D --> E
+```
+
+## Drawn, nested: three levels
+
+Expected: P holds Q, which holds R, which holds A and B, with a blank column between each border and
+the next. X's edge crosses all three top borders.
+
+```mermaid
+graph TD
+    subgraph P
+        subgraph Q
+            subgraph R
+                A --> B
+            end
+        end
+    end
+    X --> A
+```
+
+## Drawn, nested: MongoDB plan enumeration
+
+The diagram from `src/mongo/db/query/plan_enumerator/README.md`, with its `procs` shapes written as
+`subproc` and its `docs` and `doc` shapes as `rect`, which this renderer has. Expected: "QueryPlanner::plan()"
+holds no node of its own, only "Index Tagging" (C to F) and "Plan Enumeration" (G to J), one below the
+other. The title of the outer box is beside the edge from CanonicalQuery.
+
+```mermaid
+graph TD
+    %% Labels (High-Level Components)
+    A@{ shape: dbl-circ, label: CanonicalQuery }
+    subgraph "QueryPlanner::plan()"
+        subgraph Index Tagging
+            C["Identify Indexable Fields"]
+            D["Find Relevant Indexes"]
+            E["Evaluate Index Applicability"]
+            F["Tag MatchExpression<br>with RelevantTags"]
+        end
+
+        subgraph Plan Enumeration
+            G@{ shape: subproc, label: "Generate Logical Plans<br>(Assign IndexTags)" }
+            H@{ shape: subproc, label: "Build Data Access Plans" }
+            I@{ shape: subproc, label: "Coverage Analysis<br>(Sort, Project)" }
+            J@{ shape: rect, label: "Candidate Plans" }
+        end
+    end
+
+    K["MultiPlanner"]
+    L@{ shape: rect, label: "Winning Plan" }
+
+    %% Flow Connections
+    A -->  C
+    C --> D
+    D --> E
+    E --> F
+    F --> G
+    G --> H
+    H --> I
+    I --> J
+    J --> K
+    K --> L
+```
+
+## Drawn, LR, nested: an inner box and a node of the outer box
+
+Expected: X's edge crosses the outer left border and then the inner one, into A; B's edge to C crosses
+the inner right border. The outer title is centred under the outer top border, the inner one under the
+inner top border.
+
+```mermaid
+graph LR
+    subgraph Outer
+        subgraph Inner
+            A --> B
+        end
+        C
+    end
+    X --> A
+    B --> C
+```
+
+## Drawn, LR, nested: titles, both boxes starting on one rank
+
+Expected: the outer and inner titles each in the rows under their box's top border, and the columns
+of the two left borders two apart.
+
+```mermaid
+graph LR
+    subgraph outer["Outer Title"]
+        subgraph inner["Inner Title"]
+            A --> B
+        end
+    end
+    X --> A
+    B --> Y
+```
+
+## Drawn, LR, nested: three levels
+
+Expected: Outer holds Middle, which holds Innermost, which holds A and B; C is in Outer only. X's edge
+crosses three left borders, B's edge to C two right borders and C's edge to Y one.
+
+```mermaid
+graph LR
+    subgraph outer["Outer"]
+        subgraph mid["Middle"]
+            subgraph in["Innermost"]
+                A --> B
+            end
+        end
+        C
+    end
+    X --> A
+    B --> C
+    C --> Y
+```
+
+## Drawn, BT, nested: titles
+
+Expected: the flow runs upward, so the top borders are where the boxes end, and the titles are under
+them as drawn: the outer title above C, the inner title above B. C is above the inner box, A and B are
+inside it, and X's edge comes from below the outer box.
+
+```mermaid
+graph BT
+    subgraph Outer Title
+        subgraph Inner Title
+            A --> B
+        end
+        C
+    end
+    X --> A
+    B --> C
+```
+
+## Drawn, BT, nested: two boxes in a parent
+
+Expected: two untitled boxes side by side in an untitled parent, X below them all and Y above. X's two
+edges split below the parent and cross its bottom border and that of each inner box; B's edge to Y
+crosses the top borders of the first inner box and of the parent.
+
+```mermaid
+graph BT
+    subgraph outer[" "]
+        subgraph s1[" "]
+            A --> B
+        end
+        subgraph s2[" "]
+            C --> D
+        end
+    end
+    X --> A
+    X --> C
+    B --> Y
+```
+
+## Drawn, RL, nested: titles
+
+Expected: the flow runs right to left; the titles are under the top borders and not mirrored.
+
+```mermaid
+graph RL
+    subgraph Outer Title
+        subgraph Inner Title
+            A --> B
+        end
+        C
+    end
+    X --> A
+    B --> C
+```
+
+## Drawn, RL, nested: a title wider than the box
+
+Expected: the outer title is wider than the outer box would be, so the box is as wide as the title with
+a blank column and the border on each side.
+
+```mermaid
+graph RL
+    subgraph outer["The outer subgraph title"]
+        subgraph inner["Inner"]
+            A --> B
+        end
+    end
+    X --> A
+    B --> Y
+```
+
+## Declined: subgraphs nested more than three levels
+
+Expected: declined as `subgraph layout: depth`: S is the fourth level.
+
+```mermaid
+graph TD
+    subgraph P
+        subgraph Q
+            subgraph R
+                subgraph S
+                    A --> B
+                end
+            end
+        end
+    end
+    X --> A
+```
+
 ## Drawn: membership, a node named outside first
 
 `C` and `F` belong to `S`, `A` does not.
@@ -830,9 +1206,10 @@ graph TD
     end
 ```
 
-## Membership: nesting
+## Drawn, nested: membership, a box inside the outer one
 
-`A` and `B` belong to `Q`, `C` and `D` to `P`.
+`A` and `B` belong to `Q`, `C` and `D` to `P`. Expected: the box of `Q` holds A and B, one above the
+other, and the box of `P` holds it and C and D, one above the other, to its right.
 
 ```mermaid
 graph TD
@@ -845,9 +1222,11 @@ graph TD
     end
 ```
 
-## Membership: a node named again in the outer subgraph
+## Drawn, nested: membership, a node named again in the outer subgraph
 
-`A` stays in `Q`, `C` is in `P`.
+`A` stays in `Q`, `C` is in `P`. Expected: A and B are in the box of `Q`, C beside B in that of `P`
+only. A's edges to B and C split below A, inside the inner box; the one to C leaves the inner box
+through its right border.
 
 ```mermaid
 graph TD
@@ -859,7 +1238,10 @@ graph TD
     end
 ```
 
-## Membership: three levels and siblings
+## Drawn, nested: membership, three levels and siblings
+
+Expected: `R` holds A, `Q` holds `R` and B, `T` holds C, and `P` holds `Q`, `T` and D. E is outside
+every box: its edge to A crosses the left borders of `P` and `Q` and then the top border of `R`.
 
 ```mermaid
 graph TD
@@ -878,9 +1260,11 @@ graph TD
     E --> A
 ```
 
-## Membership: a subgraph of subgraphs only
+## Drawn, nested: membership, a subgraph of subgraphs only
 
-The outer subgraph names no node itself, as in MongoDB's plan enumerator diagram.
+The outer subgraph names no node itself, as in MongoDB's plan enumerator diagram. Expected: the outer
+box holds the boxes of `Index Tagging` (C, D) and `Plan Enumeration` (G, H) and no node; A is above it,
+and its edge to C crosses its top border, beside the title.
 
 ```mermaid
 graph TD

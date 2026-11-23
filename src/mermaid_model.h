@@ -158,6 +158,7 @@ constexpr int kClusterPad = 2;    // columns a subgraph's box adds between its m
                                   // outside: its border's column and a blank one inside it
 constexpr int kClusterPadLr = 2;  // rows a left-to-right subgraph's box adds between its members
                                   // and what lies outside: its border's row and a blank one
+constexpr int kMaxClusterDepth = 3;  // subgraphs inside subgraphs this deep are drawn, no deeper
 constexpr int kMinCylinderLabel =
     8;  // columns a cylinder is at least as wide as its label ("database")
 }  // namespace tune

@@ -797,6 +797,516 @@
 
 
 
+                                 X      Y
+
+
+
+
+
+
+
+
+                                    A
+
+
+
+
+                                    B        D
+
+
+
+
+
+
+                                         C
+
+
+
+
+
+
+
+
+
+                                      A
+
+
+
+
+
+                                      B
+
+
+
+
+
+
+                                          C
+
+
+
+
+
+
+
+                                 P
+
+
+
+
+
+
+
+
+
+
+                            Q                A
+
+
+
+
+                                       label
+
+
+
+                                         B
+
+
+
+
+
+
+
+
+
+                                          C
+
+
+
+
+
+
+
+
+
+
+
+                                 R
+
+
+
+
+
+                                          X
+
+
+
+                              \e[1mOuter Title\e[22m\e[22;23;39;49m
+
+
+                              \e[1mInner Title\e[22m\e[22;23;39;49m
+
+
+                                          A
+
+
+
+
+                                          B
+
+
+
+
+
+
+
+                                          Y
+
+
+
+                                          X
+
+
+
+                                    \e[1mOuter\e[22m\e[22;23;39;49m
+
+
+                                    \e[1mInner\e[22m\e[22;23;39;49m
+
+
+                                          A
+
+
+
+
+                                          B
+
+
+
+
+
+                                          C
+
+
+
+
+
+                X
+
+
+
+                     \e[1mThe outer subgraph with a long title\e[22m\e[22;23;39;49m
+
+
+                  \e[1mThe inner subgraph title\e[22m\e[22;23;39;49m
+
+
+                A
+
+
+
+
+                B
+
+
+
+
+
+
+
+                                     \e[1mOuter\e[22m\e[22;23;39;49m
+
+
+                                         P
+
+
+
+
+                                         Q
+
+
+
+                                   \e[1mInner\e[22m\e[22;23;39;49m
+
+
+                                         A
+
+
+
+
+                                         B
+
+
+
+
+
+                                         R
+
+
+
+
+                                         S
+
+
+
+
+
+                                          X
+
+
+
+
+                                       \e[1mParent\e[22m\e[22;23;39;49m
+
+
+                                       \e[1mLeft\e[22m\e[22;23;39;49m
+
+
+                                     A
+
+
+
+
+                                     B
+
+
+
+
+
+                                  \e[1mRight\e[22m\e[22;23;39;49m
+
+
+                                        C
+
+
+
+
+                                        D
+
+
+
+
+
+
+
+                                    X
+
+
+
+
+                                     \e[1mOuter\e[22m\e[22;23;39;49m
+
+
+                                            \e[1mTwo\e[22m\e[22;23;39;49m
+
+
+                           \e[1mOne            \e[22m\e[1mThree\e[22m\e[22;23;39;49m
+
+
+                               A                C
+
+
+
+
+                               B                D
+
+
+
+
+
+
+                                              E
+
+
+
+
+
+
+
+                                       X
+
+
+
+                                     \e[1mP\e[22m\e[22;23;39;49m
+
+
+                                     \e[1mQ\e[22m\e[22;23;39;49m
+
+
+                                     \e[1mR\e[22m\e[22;23;39;49m
+
+
+                                       A
+
+
+
+
+                                       B
+
+
+
+
+
+
+
+
+
+                               CanonicalQuery
+
+
+
+                                        \e[1mQueryPlanner::plan()\e[22m\e[22;23;39;49m
+
+
+                        \e[1mIndex Tagging\e[22m\e[22;23;39;49m
+
+
+                          Identify Indexable Fields
+
+
+
+
+                            Find Relevant Indexes
+
+
+
+
+                        Evaluate Index Applicability
+
+
+
+
+                             Tag MatchExpression
+                              with RelevantTags
+
+
+
+
+                     \e[1mPlan Enumeration\e[22m\e[22;23;39;49m
+
+
+                           Generate Logical Plans
+                             (Assign IndexTags)
+
+
+
+
+                           Build Data Access Plans
+
+
+
+
+                              Coverage Analysis
+                               (Sort, Project)
+
+
+
+
+                               Candidate Plans
+
+
+
+
+
+
+
+                                MultiPlanner
+
+
+
+
+                                Winning Plan
+
+
+
+                                        \e[1mOuter\e[22m\e[22;23;39;49m
+
+
+                                    \e[1mInner\e[22m\e[22;23;39;49m
+
+
+                        X         A        B        C
+
+
+
+
+
+
+
+                                  \e[1mOuter Title\e[22m\e[22;23;39;49m
+
+
+                                  \e[1mInner Title\e[22m\e[22;23;39;49m
+
+
+                         X         A        B         Y
+
+
+
+
+
+
+
+                                    \e[1mOuter\e[22m\e[22;23;39;49m
+
+
+                                 \e[1mMiddle\e[22m\e[22;23;39;49m
+
+
+                               \e[1mInnermost\e[22m\e[22;23;39;49m
+
+
+                   X           A        B         C        Y
+
+
+
+
+
+
+
+
+
+                                  \e[1mOuter Title\e[22m\e[22;23;39;49m
+
+
+                                            C
+
+
+
+                                \e[1mInner Title\e[22m\e[22;23;39;49m
+
+
+                                            B
+
+
+
+
+                                            A
+
+
+
+
+
+
+
+                                            X
+
+
+
+                                  Y
+
+
+
+
+
+
+
+                                  B          D
+
+
+
+
+                                  A          C
+
+
+
+
+
+
+
+
+                                      X
+
+
+
+                               \e[1mOuter Title\e[22m\e[22;23;39;49m
+
+
+                                  \e[1mInner Title\e[22m\e[22;23;39;49m
+
+
+                          C        B        A         X
+
+
+
+
+
+
+
+                            \e[1mThe outer subgraph title\e[22m\e[22;23;39;49m
+
+
+                                     \e[1mInner\e[22m\e[22;23;39;49m
+
+
+                      Y            B        A            X
+
+
+
+
+
+
+
                                        A
 
 
@@ -832,6 +1342,106 @@
 
 
                                        Z
+
+
+
+
+
+                                       \e[1mP\e[22m\e[22;23;39;49m
+
+
+                                    \e[1mQ\e[22m\e[22;23;39;49m
+
+
+                                    A        C
+
+
+
+
+                                    B        D
+
+
+
+
+
+
+
+                                       \e[1mP\e[22m\e[22;23;39;49m
+
+
+                                   \e[1mQ\e[22m\e[22;23;39;49m
+
+
+                                    A
+
+
+
+
+
+                                   B         C
+
+
+
+
+
+
+
+                                           \e[1mP\e[22m\e[22;23;39;49m
+
+
+                                  \e[1mQ            \e[22m\e[1mT\e[22m\e[22;23;39;49m
+
+
+                     E             B           C        D
+
+
+
+
+
+                                \e[1mR\e[22m\e[22;23;39;49m
+
+
+                                  A
+
+
+
+
+
+
+
+
+
+                                A
+
+
+
+                                  \e[1mQueryPlanner::plan()\e[22m\e[22;23;39;49m
+
+
+                  \e[1mIndex Tagging\e[22m\e[22;23;39;49m
+
+
+                                C
+
+
+
+
+                                D
+
+
+
+
+                                  \e[1mPlan Enumeration\e[22m\e[22;23;39;49m
+
+
+                                G
+
+
+
+
+                                H
+
+
 
 
 

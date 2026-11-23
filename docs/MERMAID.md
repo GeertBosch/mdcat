@@ -90,11 +90,11 @@ The reasons, as `MDCAT_MERMAID_DEBUG=1` words them:
 | ------ | ------- |
 | `not a flowchart` | `sequenceDiagram`, `pie`, `gantt`, `classDiagram`, … |
 | `unsupported syntax: …` | `direction` inside a graph, `end` as an id, a link with mismatched ends such as `A o--> B`, an unclosed shape or quote |
-| `subgraph layout` | a `subgraph … end` that is read without error but not drawn yet: a subgraph inside another |
+| `subgraph layout: depth` | subgraphs nested more than three levels deep |
 | `subgraph layout: title` | a subgraph title for which no place was found clear of the edges that enter the box (rare: the box is made wider first) |
 | `subgraph layout: sides` | two subgraphs whose members interleave on the ranks, so their boxes cannot both have straight sides |
 | `subgraph layout: edge` | an edge would run through a box it has no end in, along a border, or out of a box that holds both its ends |
-| `subgraph layout: node`, `…: label`, `…: boxes`, `…: border` | a box with a footprint or edge label that is not its member's inside it, or with a member or label outside it, two boxes that touch, or a border over a box or a label (checks that catch a layout bug) |
+| `subgraph layout: node`, `…: label`, `…: boxes`, `…: border` | a box with a footprint or edge label that is not its member's inside it, or with a member or label outside it, two boxes that touch (or an inner one that is not strictly inside the outer), or a border over a box or a label (checks that catch a layout bug) |
 | `unsupported syntax: direction in subgraph` | a `direction` statement inside a `subgraph` |
 | `unsupported syntax: link to subgraph S` | an edge that starts or ends at a subgraph's id (`A --> S`) |
 | `unsupported syntax: subgraph S named as a node` | a subgraph's id used as a node with no link (`S`, `S:::cls`) |
@@ -431,7 +431,7 @@ itself; and `Valid?` and `Report` are joined in both directions.
 ## 12. Subgraphs
 
 A `subgraph … end` is drawn as a box around the boxes named inside it, in a graph of any
-direction (`TD`, `TB`, `BT`, `LR` or `RL`), so far only one level deep. The box is a plain outline in the theme's
+direction (`TD`, `TB`, `BT`, `LR` or `RL`), nested up to three levels deep. The box is a plain outline in the theme's
 colour, under the boxes and edges and with no fill. Mermaid's membership rules apply: a box
 belongs to the subgraph that names it, even if it was first named outside, and to the one
 that closes first if two name it.
@@ -513,7 +513,58 @@ is declined as `subgraph layout: edge`.
 A diagram whose subgraphs cannot be drawn without an edge running through a box, or whose
 boxes would cross, is declined (`subgraph layout: …`, see [the table](#2-diagrams-that-are-not-drawn-here)):
 a subgraph with members on far apart ranks and other boxes between them is the usual cause.
-Nested subgraphs are still declined as plain `subgraph layout`.
+
+### Nested subgraphs
+
+A subgraph written inside another is drawn as a box inside its box, up to three levels deep;
+a fourth level is declined as `subgraph layout: depth`. A node belongs to the innermost
+subgraph that names it, and the outer box holds the inner one and the nodes named directly
+in it. An outer subgraph may hold only inner subgraphs and no node of its own, as in
+MongoDB's plan-enumeration diagram. The outer box encloses the inner one with a blank
+column (top-down; a blank row, left to right) between each border and the next, so two
+nested borders are never closer than that, and never share a cell.
+
+The rules above hold at every level: the sides of every box are straight, only a box's
+members lie in it (those of a box inside it too), and an edge crosses each border it meets
+at a right angle and never runs along one. An edge from outside both boxes into the inner
+one crosses the outer border and then the inner one; an edge between two members of the
+outer box that passes the inner box goes round it.
+
+Along the flow, when a box and the one inside it start (or end) on the same rank, their
+top (bottom) borders take rows of their own in the gap before the rank, the outer one first
+(for ends, the inner one first), with the outer box's title rows and a blank row between them:
+a title is never run into the border of the box inside it. Each takes columns of its own the
+same way left to right. A box that starts later, or ends earlier, than the one around it has
+its borders in the gap where it starts or ends, inside the outer box.
+
+```mermaid
+graph TD
+    commit[Commit] --> build[Build]
+    subgraph pipeline[Pipeline]
+        subgraph checks[Checks]
+            build --> test[Test]
+            test --> lint[Lint]
+        end
+        lint --> pack[Pack]
+    end
+    pack --> ship[Ship]
+```
+
+The same left to right, with a third level:
+
+```mermaid
+graph LR
+    subgraph all[Everything]
+        subgraph mid[Middle]
+            subgraph core[Core]
+                a[A] --> b[B]
+            end
+        end
+        c[C]
+    end
+    x[X] --> a
+    b --> c
+```
 
 ## 13. Fitting the width
 
@@ -551,7 +602,7 @@ For the last two, a terminal narrower than 72 columns counts as 72 wide, so an
 80-column terminal allows 8 of each. Beyond that, a diagram is too tangled to
 read: it is shown as source, and `mmdc` is not asked to redraw it.
 
-Not drawn at all: `subgraph` nested (read, but declined as `subgraph layout` for now), `direction` inside a graph, and the other diagram types
+Not drawn at all: `subgraph` nested more than three deep (`subgraph layout: depth`), `direction` inside a graph, and the other diagram types
 (sequence, pie, class, state, Gantt, …). Colours, curves and other styling are read
 but have no effect. A flowchart that is declined goes to `mmdc` when it is
 available.
