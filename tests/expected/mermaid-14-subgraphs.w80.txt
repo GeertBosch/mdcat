@@ -1,17 +1,18 @@
 Mermaid subgraphs
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-subgraph ... end is read into the model (Graph::clusters, Node::cluster) and, so
-far, drawn only top-down and one level deep (docs/plan-mermaid-subgraphs.md,
-Steps 5-8): the box is one outline under the nodes and edges, around the nodes
-named inside it, with the subgraph's title, if it has one, in bold under the top
-border. The cases whose heading starts with Drawn are drawn. The rest are
-declined: a nested subgraph or a direction other than TD is subgraph layout for
-now, and the other cases are declined for the reason named in their heading or,
-for the membership cases, because of what they hold. MDCAT_MERMAID_DEBUG=1
-prints each reason on stderr, and mermaid-kitty.sh compares it with
-expected/mermaid-14-subgraphs.w80.err. Which node belongs to which subgraph is
-checked outside the repository, with a scratch parser.
+subgraph ... end is read into the model (Graph::clusters, Node::cluster) and
+drawn, in every direction but only one level deep
+(docs/plan-mermaid-subgraphs.md, Steps 5-8): the box is one outline under the
+nodes and edges, around the nodes named inside it, with the subgraph's title, if
+it has one, in bold under the top border. The cases whose heading starts with
+Drawn are drawn; the title says the direction where it is not top-down. The rest
+are declined: a nested subgraph is subgraph layout for now, and the other cases
+are declined for the reason named in their heading or, for the membership cases,
+because of what they hold. MDCAT_MERMAID_DEBUG=1 prints each reason on stderr,
+and mermaid-kitty.sh compares it with expected/mermaid-14-subgraphs.w80.err.
+Which node belongs to which subgraph is checked outside the repository, with a
+scratch parser.
 
 A blank title (subgraph s[" "]) draws no title, so the first cases use it.
 
@@ -22,12 +23,12 @@ Expected: a box around A, B and C, one blank column inside it on each side. X's
 edge enters it through the top border and C's leaves through the bottom border.
 Y is reached by X's second edge, which goes round the right of the box.
 
-image @24,34 c=12 r=27 z=0 C=1 png=120x540
-                                        ▗▄▄▄▄
-                                        ▐ X ▐
-                                        ▐▄▄▄▟
-                                          ▐
-                                      ▗▄▄▄█▄▄▄
+image @25,34 c=12 r=27 z=0 C=1 png=120x540
+                                       ▗▄▄▄▄
+                                       ▐ X ▐
+                                       ▐▄▄▄▟
+                                         ▐
+                                      ▗▄▄█▄▄▄▄
                                   ▗▄▄▄▟▄▄▄▄  ▐
                                   ▐   ▐   ▐  ▐
                                   ▐ ▗▄█▙▄ ▐  ▐
@@ -45,11 +46,11 @@ image @24,34 c=12 r=27 z=0 C=1 png=120x540
                                   ▐ ▐▄▄▄▟ ▐  ▐
                                   ▐   ▐   ▐  ▐
                                   ▐▄▄▄▟▄▄▄▟  ▐
-                                      ▐▄▄▄▄ ▗▛
-                                          ▐ ▐
-                                         ▗█▙█▙
-                                         ▐ Y ▐
-                                         ▐▄▄▄▟
+                                      ▐▄▄▄ ▗▄▛
+                                         ▐ ▐
+                                        ▗█▙█▙
+                                        ▐ Y ▐
+                                        ▐▄▄▄▟
 
 Drawn: two boxes, both directions and a back edge
 ────────────────────────────────────────────────────────────────────────────────
@@ -58,25 +59,26 @@ Expected: two boxes one above the other. The edge from the first to the second
 crosses both borders; the back edge from the second to the first goes round the
 right of both boxes and enters the first box through its right border.
 
-image @59,31 c=17 r=35 z=0 C=1 png=170x700
+image @60,31 c=18 r=36 z=0 C=1 png=180x720
                                      ▗▄▄▄▄
                                      ▐ S ▐
                                      ▐▄▄▄▟
                                        ▐
-                               ▗▄▄▄▄▄▄▄▟▄▄▄▄▄
-                               ▐       ▐    ▐
-                               ▐    ▗▄▄█▙▄▄ ▐
-                               ▐    ▐ A1  ▐ ▐
-                               ▐    ▐▄▄▄▄▄▟ ▐
-                               ▐      ▐ ▜▘  ▐
-                               ▐    ▗▄▛ ▐▄▄▄▟▄▄▄
-                               ▐    ▐       ▐  ▐
-                               ▐ ▗▄▄█▙▄▄    ▐  ▐
-                               ▐ ▐ A2  ▐    ▐  ▐
-                               ▐ ▐▄▄▄▄▄▟    ▐  ▐
-                               ▐    ▐       ▐  ▐
-                               ▐▄▄▄▄▟▄▄▄▄▄▄▄▟  ▐
-                                    ▐       ▗▄▄▛
+                                       ▐▄
+                                ▗▄▄▄▄▄▄▄▟▄▄▄▄▄
+                                ▐       ▐    ▐
+                                ▐    ▗▄▄█▙▄▄ ▐
+                                ▐    ▐ A1  ▐ ▐
+                                ▐    ▐▄▄▄▄▄▟ ▐
+                                ▐      ▐ ▜▘  ▐
+                                ▐    ▗▄▛ ▐▄▄▄▟▄▄▄
+                                ▐    ▐       ▐  ▐
+                                ▐ ▗▄▄█▙▄▄    ▐  ▐
+                                ▐ ▐ A2  ▐    ▐  ▐
+                                ▐ ▐▄▄▄▄▄▟    ▐  ▐
+                                ▐    ▐       ▐  ▐
+                                ▐▄▄▄▄▟▄▄▄▄▄▄▄▟  ▐
+                                    ▗▛      ▗▄▄▄▛
                                ▗▄▄▄▄▟▄▄▄▄▄  ▐
                                ▐    ▐    ▐  ▐
                                ▐ ▗▄▄█▙▄▄ ▐  ▐
@@ -102,36 +104,36 @@ Expected: X's edge to Y runs down the left of the box, round it, and Z's edge
 down the right; the edge into A crosses the top border and D's leaves through
 the bottom one.
 
-image @102,30 c=19 r=33 z=0 C=1 png=190x660
+image @104,30 c=20 r=33 z=0 C=1 png=200x660
                                ▗▄▄▄▄
                                ▐ X ▐
                                ▐▄▄▄▟
                                  ▐
-                              ▗▄▄█▄▄▄█▄▄▄▄▄▄▄▄▄
-                              ▐  ▗▄▄▄▟▄▄▄▄    ▐
-                              ▐  ▐   ▐   ▐    ▐
-                              ▐  ▐ ▗▄█▙▄ ▐  ▗▄█▙▄
-                              ▐  ▐ ▐ A ▐ ▐  ▐ Z ▐
-                              ▐  ▐ ▐▄▄▄▟ ▐  ▐▄▄▄▟
-                              ▐  ▐   ▐   ▐    ▐
-                              ▐  ▐   ▐   ▐    ▐
-                              ▐  ▐ ▗▄█▙▄ ▐    ▐
-                              ▐  ▐ ▐ B ▐ ▐    ▐
-                              ▐  ▐ ▐▄▄▄▟ ▐    ▐
-                              ▐  ▐   ▐   ▐    ▐
-                              ▐  ▐   ▐   ▐    ▐
-                              ▐  ▐ ▗▄█▙▄ ▐    ▐
-                              ▐  ▐ ▐ C ▐ ▐    ▐
-                              ▐  ▐ ▐▄▄▄▟ ▐    ▐
-                              ▐  ▐   ▐   ▐    ▐
-                              ▐  ▐   ▐   ▐    ▐
-                              ▐  ▐ ▗▄█▙▄ ▐    ▐
-                              ▐  ▐ ▐ D ▐ ▐    ▐
-                              ▐  ▐ ▐▄▄▄▟ ▐    ▐
-                              ▐  ▐   ▐   ▐    ▐
-                              ▐  ▐▄▄▄▟▄▄▄▟    ▐
-                              ▐      ▐▄█▄▄▄▄▄▄▛
-                              ▐▄▄▄▄▄▄▄ ▐
+                              ▗▄▄█▄▄▄▄█▄▄▄▄▄▄▄▄▄
+                              ▐   ▗▄▄▄▟▄▄▄▄    ▐
+                              ▐   ▐   ▐   ▐    ▐
+                              ▐   ▐ ▗▄█▙▄ ▐  ▗▄█▙▄
+                              ▐   ▐ ▐ A ▐ ▐  ▐ Z ▐
+                              ▐   ▐ ▐▄▄▄▟ ▐  ▐▄▄▄▟
+                              ▐   ▐   ▐   ▐    ▐
+                              ▐   ▐   ▐   ▐   ▗▛
+                              ▐   ▐   ▐   ▐   ▐
+                              ▐   ▐ ▗▄█▙▄ ▐   ▐
+                              ▐   ▐ ▐ B ▐ ▐   ▐
+                              ▐   ▐ ▐▄▄▄▟ ▐   ▐
+                              ▐   ▐   ▐   ▐   ▐
+                              ▐   ▐   ▐   ▐   ▐
+                              ▐   ▐ ▗▄█▙▄ ▐   ▐
+                              ▐   ▐ ▐ C ▐ ▐   ▐
+                              ▐   ▐ ▐▄▄▄▟ ▐   ▐
+                              ▐   ▐   ▐   ▐   ▐
+                              ▐   ▐   ▐   ▐   ▐
+                              ▐   ▐ ▗▄█▙▄ ▐   ▐
+                              ▐   ▐ ▐ D ▐ ▐   ▐
+                              ▐   ▐ ▐▄▄▄▟ ▐   ▐
+                              ▐   ▐   ▐   ▐   ▐
+                              ▐   ▐▄▄▄▟▄▄▄▟   ▐
+                              ▐▄▄▄▄▄▄▄▐█▄▄▄▄▄▄▛
                                      ▐ ▐
                                     ▗█▙█▙
                                     ▐ Y ▐
@@ -143,7 +145,7 @@ Drawn: an edge between two outsiders, passing a box
 Expected: R's edge to D enters the box through its left border, below C, and
 nothing outside it runs through the box.
 
-image @142,32 c=16 r=28 z=0 C=1 png=160x560
+image @144,32 c=16 r=28 z=0 C=1 png=160x560
                                     ▗▄▄▄▄
                                     ▐ P ▐
                                     ▐▄▄▄▟
@@ -180,7 +182,7 @@ Expected: A and D are in the box and X, between them, is not. The box is wide
 enough to be clear of X on the rank that holds only X, and the edges between A,
 X and D cross its left border.
 
-image @178,31 c=17 r=19 z=0 C=1 png=170x380
+image @180,31 c=17 r=19 z=0 C=1 png=170x380
                                        ▗▄▄▄▄▄▄▄▄
                                        ▐       ▐
                                        ▐ ▗▄▄▄▄ ▐
@@ -207,7 +209,7 @@ Drawn: a long edge, a label and a self-loop inside a box
 Expected: everything is inside the box: the edge from A to C runs down its
 right, "yes" sits between B and D, and the loop on C is beside C.
 
-image @204,31 c=18 r=38 z=0 C=1 png=180x760
+image @206,31 c=18 r=38 z=0 C=1 png=180x760
                                      ▗▄▄▄▄
                                      ▐ S ▐
                                      ▐▄▄▄▟
@@ -253,7 +255,7 @@ Drawn: edges into and out of the middle of a box
 Expected: X's edge joins the one into B, crossing the left border; B's edge to Z
 leaves through the right border.
 
-image @249,28 c=23 r=23 z=0 C=1 png=230x460
+image @251,28 c=23 r=23 z=0 C=1 png=230x460
                                    ▗▄▄▄▄▄▄▄▄
                                    ▐       ▐
                             ▗▄▄▄▄  ▐ ▗▄▄▄▄ ▐
@@ -284,7 +286,7 @@ Drawn: styled members, a lone box and boxes on one rank
 Expected: three boxes side by side. P1 is filled red and Q2 green with a green
 label; the outlines of the boxes keep the theme's colour.
 
-image @279,21 c=37 r=13 z=0 C=1 png=370x260
+image @281,21 c=37 r=13 z=0 C=1 png=370x260
                      ▗▄▄▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄▄▄
                      ▐         ▐  ▐         ▐  ▐         ▐
                      ▐ ▗▄▄▄▄▄▄ ▐  ▐ ▗▄▄▄▄▄▄ ▐  ▐ ▗▄▄▄▄▄▄ ▐
@@ -305,7 +307,7 @@ Drawn: a box inside a longer chain
 Expected: the chain A, B passes into the box at C and leaves it after E; the
 edge from A to G goes round the right of the box.
 
-image @299,34 c=12 r=38 z=0 C=1 png=120x760
+image @301,34 c=12 r=38 z=0 C=1 png=120x760
                                          ▗▄▄▄▄
                                          ▐ A ▐
                                          ▐▄▄▄▟
@@ -378,7 +380,7 @@ The same diagram with its edge labels cut to at most 24 columns. Expected: the
 two boxes side by side under Stable Probe, each with a probe and two hexagons,
 and all four edges merging into the last Stable Probe below them.
 
-image @371,0 c=79 r=38 z=0 C=1 png=790x760
+image @373,0 c=79 r=38 z=0 C=1 png=790x760
                                  ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                                  ▐Stable Probe ▐██at minimum
                                  ▝▙▄▄▄▄▄▄▄▄▄▄▄▟▀▀▘
@@ -425,7 +427,7 @@ Expected: a box around A and B with Plan in bold on the row under the top
 border, in the middle of the box, which is as wide as its members make it:
 nothing enters the box from above.
 
-image @417,35 c=9 r=13 z=0 C=1 png=90x260
+image @419,35 c=9 r=13 z=0 C=1 png=90x260
                                    ▗▄▄▄▄▄▄▄▄
                                    ▐ Plan  ▐
                                    ▐       ▐
@@ -448,7 +450,7 @@ the box's title row, so one is not centred: it sits beside the edge, a blank
 column from it, and the box is as wide as that takes, growing to the right of
 the members.
 
-image @439,34 c=11 r=21 z=0 C=1 png=110x420
+image @441,34 c=11 r=21 z=0 C=1 png=110x420
                                       ▗▄▄▄▄
                                       ▐ X ▐
                                       ▐▄▄▄▟
@@ -479,7 +481,7 @@ edge from the box above: a bare id (S), id [Title one], id[Title two] and
 id["Title three"]. The title of S is the widest thing in its box; the others are
 beside their edge.
 
-image @469,30 c=20 r=32 z=0 C=1 png=200x640
+image @471,30 c=20 r=32 z=0 C=1 png=200x640
                               ▗▄▄▄▄▄▄▄▄▄▄
                               ▐    S    ▐
                               ▐         ▐
@@ -520,7 +522,7 @@ Expected: the boxes Q::plan() and Index Tagging (a generated id), one above the
 other, with the edge from Q to R between them. The second title sits left of the
 edge into R, and its box grows to the right, not to the left.
 
-image @509,28 c=23 r=26 z=0 C=1 png=230x520
+image @511,28 c=23 r=26 z=0 C=1 png=230x520
                                       ▗▄▄▄▄▄▄▄▄▄▄▄▄
                                       ▐ Q::plan() ▐
                                       ▐           ▐
@@ -555,7 +557,7 @@ Expected: Markdown title with Markdown bold on top of the bold of the title (so
 it reads the same), two over lines in a box with a two-line title, and A & B; C
 as written.
 
-image @543,29 c=21 r=25 z=0 C=1 png=210x500
+image @545,29 c=21 r=25 z=0 C=1 png=210x500
                                 ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                                 ▐ Markdown title ▐
                                 ▐                ▐
@@ -591,7 +593,7 @@ neither title is centred: each sits to the right of the entering edge, a blank
 column from it, and the box grows to the right, leaving its one member near its
 left side. The second box has a Markdown title that is wrapped at 24 columns.
 
-image @578,17 c=46 r=22 z=0 C=1 png=460x440
+image @580,17 c=46 r=22 z=0 C=1 png=460x440
                    ▗▄▄▄▄
                    ▐ X ▐
                    ▐▄▄▄▟
@@ -623,7 +625,7 @@ more. At 80 columns they do not fit with their titles on one line, so the fit
 attempts wrap the titles at spaces, in three lines each, and the box widths
 follow.
 
-image @609,6 c=67 r=15 z=0 C=1 png=670x300
+image @611,6 c=67 r=15 z=0 C=1 png=670x300
                               ▗▄▄
                               ▐X▐
                               ▐▄▟
@@ -647,7 +649,7 @@ Expected: the top borders of the two boxes are on one row. The title of the left
 one is two lines and the right one's is one; the right box has a blank row more
 between its title and its first member.
 
-image @632,27 c=26 r=19 z=0 C=1 png=260x380
+image @634,27 c=26 r=19 z=0 C=1 png=260x380
                                     ▗▄▄▄▄
                                     ▐ X ▐
                                     ▐▄▄▄▟
@@ -676,7 +678,7 @@ the edge labels cut to at most 24 columns. Expected: the two boxes side by side
 under Stable Probe, each with its title in bold at the top, and the edges into
 the probes crossing the top borders.
 
-image @660,0 c=79 r=39 z=0 C=1 png=790x780
+image @662,0 c=79 r=39 z=0 C=1 png=790x780
                                  ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                                  ▐Stable Probe ▐██at minimum
                                  ▝▙▄▄▄▄▄▄▄▄▄▄▄▟▀▀▘
@@ -716,6 +718,476 @@ image @660,0 c=79 r=39 z=0 C=1 png=790x780
                                  ▗▄▄▄▄▄▄█▙▄▄▄▄▄▄
                                  ▐Stable Probe ▐
                                  ▝▙▄▄▄▄▄▄▄▄▄▄▄▟▀
+
+Drawn, LR: one box around a chain
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the top-down chain case turned on its side. A box around A, B and C,
+one blank column and one blank row inside it on each side. X's edge enters it
+through the left border and C's leaves through the right border. Y is reached by
+X's second edge, which goes round under the box.
+
+image @710,18 c=43 r=9 z=0 C=1 png=430x180
+                          ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                          ▐                         ▐
+                          ▐ ▗▄▄▄▄    ▗▄▄▄▄    ▗▄▄▄▄ ▐
+                        ▗▄▟▟█ A ▐▄▄▄▟█ B ▐▄▄▄▟█ C ▐▄▟▄▄
+                  ▗▄▄▄▄ ▐ ▐ ▐▄▄▄▟    ▐▄▄▄▟    ▐▄▄▄▟ ▐ ▐
+                  ▐ X ▐▄█ ▐                         ▐ ▐▗▄▄▄▄▄
+                  ▐▄▄▄▟ ▐ ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟ ▝▜█ Y ▐
+                        ▐                             ▐▀▜▄▄▄▟
+                        ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▛
+
+Drawn, LR: two boxes, both directions and a back edge
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: two boxes side by side, a few columns apart so that the jog of the
+edge between them is a blank column from each border. That edge crosses both
+borders; the back edge from the second to the first goes round under both boxes
+and enters the first box through its bottom border.
+
+image @728,11 c=58 r=12 z=0 C=1 png=580x240
+                                          ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                   ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   ▐                  ▐
+                   ▐                  ▐   ▐ ▗▄▄▄▄▄   ▗▄▄▄▄▄▄ ▐  ▗▄▄▄▄
+                   ▐           ▗▄▄▄▄▄ ▐ ▗▄▟▟█ B1 ▐▄▛▀▀▜ B2 ▐▄▟▄▟█ T ▐
+           ▗▄▄▄▄   ▐        ▗▄▟█ A2 ▐▄▟▄▛ ▐ ▐▄▄▄▄▟ ▐▀▀▜▄▄▄▄▟ ▐  ▐▄▄▄▟
+           ▐ S ▐▄▄ ▐ ▗▄▄▄▄▄ ▟  ▐▄▄▄▄▟ ▐   ▐        ▐         ▐
+           ▐▄▄▄▟ ▐▄▟▟█ A1 ▐█▘         ▐   ▐▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▟
+                   ▐ ▐▄▄▄▄▟▀▜         ▐            ▐
+                   ▐        ▐         ▐ ▗▄▄▄▄▄▄▄▄▄▄▛
+                   ▐▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▟ ▐
+                            ▐           ▐
+                            ▐▄▄▄▄▄▄▄▄▄▄▄▛
+
+Drawn, LR: an edge goes round a box
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: X's edge to Y runs above the box and Z's below it; the edge into A
+crosses the left border and D's leaves through the right one.
+
+image @747,14 c=52 r=14 z=0 C=1 png=520x280
+                    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+              ▗▄▄▄▄ ▐                                      ▐
+              ▐ X ▐▄█                                      ▐
+              ▐▄▄▄▟ ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ ▐
+                    ▐ ▐                                  ▐ ▐
+                    ▐ ▐ ▗▄▄▄▄    ▗▄▄▄▄    ▗▄▄▄▄    ▗▄▄▄▄ ▐ ▐▗▄▄▄▄▄
+                    █▄▟▟█ A ▐▄▄▄▟█ B ▐▄▄▄▟█ C ▐▄▄▄▟█ D ▐▄▟▄▟▜█ Y ▐
+                    ▐ ▐ ▐▄▄▄▟    ▐▄▄▄▟    ▐▄▄▄▟    ▐▄▄▄▟ ▐ ▜▀▜▄▄▄▟
+                    ▐ ▐                                  ▐ ▐
+                    ▐ ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟ ▐
+                    ▐                                      ▐
+                    ▐   ▗▄▄▄▄ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▛
+                    ▐▄▄▟█ Z ▐▄▛
+                        ▐▄▄▄▟
+
+Drawn, LR: a rank of the span that holds no member
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: A and D are in the box and X, between them, is not. X is above the
+box, and the edges from A to X and from X to D cross its top border.
+
+image @768,26 c=27 r=12 z=0 C=1 png=270x240
+                                     ▗▄▄▄▄    ▗▄▄▄▄
+                                  ▗▄▟█ X ▐▄█▄▟█ Y ▐
+                                  ▐  ▐▄▄▄▟ ▐  ▐▄▄▄▟
+                                  ▐        ▐
+                          ▗▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄
+                          ▐       ▐        ▐        ▐
+                          ▐ ▗▄▄▄▄ ▐        ▐        ▐
+                          ▐ ▐ A ▐▄▛        ▐  ▗▄▄▄▄ ▐
+                          ▐ ▐▄▄▄▟          ▐▄▟█ D ▐ ▐
+                          ▐                   ▐▄▄▄▟ ▐
+                          ▐                         ▐
+                          ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+Drawn, LR: a long edge, a label and a self-loop inside a box
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: everything is inside the box: the edge from A to C runs along its
+bottom, "yes" sits between B and D, and the loop on C is below C.
+
+image @787,11 c=57 r=12 z=0 C=1 png=570x240
+                     ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                     ▐                                   ▐
+                     ▐                            ▗▄▄▄▄▄ ▐
+                     ▐             ▗▄▄▄▄ ▗▄▄▄▄▄▄▛▀▜█ C ▐ ▐
+                     ▐       ▗▄▄▄▄▟█ B ▐▄█      ▐▀▀▜▄▄▄▟ ▐
+           ▗▄▄▄▄     ▐ ▗▄▄▄▄ ▐     ▐▄▄▄▟ ▐▄▖yes▗▟▄  ▐▄▛▘ ▐
+           ▐ S ▐▄▄▄▄▄▟▟█ A ▐▄█                  ▐▐       ▐
+           ▐▄▄▄▟     ▐ ▐▄▄▄▟ ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▛▐ ▗▄▄▄▄ ▐     ▗▄▄▄▄
+                     ▐                           ▐▟█ D ▐▄▟▄▄▄▄▟█ T ▐
+                     ▐                             ▐▄▄▄▟ ▐     ▐▄▄▄▟
+                     ▐                                   ▐
+                     ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+Drawn, LR: a title, centred where no edge crosses it
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: a box around A and B with Plan in bold on the row under the top
+border, in the middle of the box, then a blank row, then the members. Nothing
+crosses the top border.
+
+image @807,31 c=18 r=8 z=0 C=1 png=180x160
+                               ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                               ▐      Plan      ▐
+                               ▐                ▐
+                               ▐ ▗▄▄▄▄    ▗▄▄▄▄ ▐
+                               ▐ ▐ A ▐▄▄▄▟█ B ▐ ▐
+                               ▐ ▐▄▄▄▟    ▐▄▄▄▟ ▐
+                               ▐                ▐
+                               ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+Drawn, LR: a title wider than the box
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the box is as wide as its title needs plus a blank column and the
+border on each side, not as wide as its one member: the extra columns are inside
+the box, half before the member and half after it, so the edges into and out of
+the box are longer there.
+
+image @824,13 c=54 r=8 z=0 C=1 png=540x160
+                   ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                   ▐ A title much wider than its one member ▐
+                   ▐                                        ▐
+             ▗▄▄▄▄ ▐                 ▗▄▄▄▄                  ▐ ▗▄▄▄▄
+             ▐ X ▐▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟█ A ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▟█ Y ▐
+             ▐▄▄▄▟ ▐                 ▐▄▄▄▟                  ▐ ▐▄▄▄▟
+                   ▐                                        ▐
+                   ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+Drawn, LR: a title beside an edge that crosses the top border
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: Y is above the box, and its edge from X runs along above the box and
+then down into D, through the top border. A long title here for the box to hold
+is not centred: it sits to the right of that edge, a blank column from it, and
+the box grows to the right of D to make room.
+
+image @841,2 c=75 r=13 z=0 C=1 png=750x260
+            ▗▄▄▄▄
+        ▗▄▄▟█ Y ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+        ▐   ▐▄▄▄▟                   ▐
+  ▗▄▄▄▄ ▐                           ▐
+  ▐ X ▐▄█                           ▐
+  ▐▄▄▄▟ ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+        ▐ ▐                         ▐ A long title here for the box to hold ▐
+        ▐ ▐                         ▐                                       ▐
+        ▐ ▐ ▗▄▄▄▄    ▗▄▄▄▄    ▗▄▄▄▄ ▐  ▗▄▄▄▄                                ▐
+        ▐▄▟▟█ A ▐▄▄▄▟█ B ▐▄▄▄▟█ C ▐▄█▄▟█ D ▐                                ▐
+          ▐ ▐▄▄▄▟    ▐▄▄▄▟    ▐▄▄▄▟    ▐▄▄▄▟                                ▐
+          ▐                                                                 ▐
+          ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+Drawn, LR: boxes side by side, titles of different heights
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: two boxes, one above the other, X's edges entering both through their
+left borders. The title of the upper one is two lines and the lower one's is
+one; each has a blank row after its title and then its members.
+
+image @862,27 c=26 r=18 z=0 C=1 png=260x360
+                                   ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                                   ▐      two       ▐
+                                   ▐     lines      ▐
+                                   ▐                ▐
+                                   ▐ ▗▄▄▄▄    ▗▄▄▄▄ ▐
+                                 ▗▄▟▟█ A ▐▄▄▄▟█ C ▐ ▐
+                           ▗▄▄▄▄ ▐ ▐ ▐▄▄▄▟    ▐▄▄▄▟ ▐
+                           ▐ X ▐▄█ ▐                ▐
+                           ▐▄▄▄▟ ▐ ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                                 ▐
+                                 ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                                 ▐ ▐      one       ▐
+                                 ▐ ▐                ▐
+                                 ▐ ▐ ▗▄▄▄▄    ▗▄▄▄▄ ▐
+                                 ▐▄▟▟█ B ▐▄▄▄▟█ D ▐ ▐
+                                   ▐ ▐▄▄▄▟    ▐▄▄▄▟ ▐
+                                   ▐                ▐
+                                   ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+Drawn, LR: the title of a box that an edge leaves through the top
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the box's first member has an edge to Y, which lies above the box. The
+edge runs up from the gap between A and B, through the top border and past the
+title: Wide title here for it sits to the right of that edge, and the box grows
+to the right.
+
+image @889,18 c=43 r=13 z=0 C=1 png=430x260
+                                    ▗▄▄▄▄▄
+                                  ▐▀▜█ Y ▐
+                        ▗▄▄▄▄▄▄▄▄▄▛▐▀▜▄▄▄▟
+                  ▗▄▄▄▄ ▐          ▐
+                  ▐ P ▐▄█          ▐
+                  ▐▄▄▄▟ ▐ ▗▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                        ▐ ▐        ▐ Wide title here for it ▐
+                        ▐ ▐        ▐                        ▐
+                        ▐ ▐ ▗▄▄▄▄  ▐ ▗▄▄▄▄                  ▐
+                        ▐▄▟▟█ A ▐▄▄█▟█ B ▐                  ▐
+                          ▐ ▐▄▄▄▟    ▐▄▄▄▟                  ▐
+                          ▐                                 ▐
+                          ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+Drawn, BT: a titled box, an edge leaving through the title's rows
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the flow runs upwards, so the top of the box is where its edges leave:
+X's edge enters it through the bottom border and B's leaves through the top one,
+past the title. one is in bold on the row under the top border, left of that
+edge and a blank column from it.
+
+image @911,34 c=11 r=21 z=0 C=1 png=110x420
+                                      ▗▄▄▄▄
+                                      ▐ Y ▐
+                                      ▐▄▄▄▟
+                                        ▜▘
+                                  ▗▄▄▄▄▄▟▄▄▄▄
+                                  ▐ one ▐   ▐
+                                  ▐     ▐   ▐
+                                  ▐   ▗▄▟▄▄ ▐
+                                  ▐   ▐ B ▐ ▐
+                                  ▐   ▐▄▄▄▟ ▐
+                                  ▐     ▜▘  ▐
+                                  ▐     ▐   ▐
+                                  ▐   ▗▄▟▄▄ ▐
+                                  ▐   ▐ A ▐ ▐
+                                  ▐   ▐▄▄▄▟ ▐
+                                  ▐     ▜▘  ▐
+                                  ▐▄▄▄▄▄▟▄▄▄▟
+                                        ▐
+                                      ▗▄▟▄▄
+                                      ▐ X ▐
+                                      ▐▄▄▄▟
+
+Drawn, BT: boxes in a chain, titled
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: two boxes one above the other, each with its title in bold under its
+top border. A1's edge leaves the lower box through its top border and enters the
+upper box through its bottom border, and A2's edge to A3 leaves that through its
+top border. Both leave through the title's rows, so each title sits beside its
+edge, a blank column from it.
+
+image @942,31 c=18 r=20 z=0 C=1 png=180x400
+                                 ▗▄▄▄▄▄▄
+                                 ▐ A3  ▐
+                                 ▐▄▄▄▄▄▟
+                                    ▜▘
+                               ▗▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄
+                               ▐    ▐ Title one ▐
+                               ▐    ▐           ▐
+                               ▐ ▗▄▄▟▄▄▄        ▐
+                               ▐ ▐ A2  ▐        ▐
+                               ▐ ▐▄▄▄▄▄▟        ▐
+                               ▐    ▜▘          ▐
+                               ▐▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▟
+                               ▗▄▄▄▄▟▄▄▄▄▄
+                               ▐  S ▐    ▐
+                               ▐    ▐    ▐
+                               ▐ ▗▄▄▟▄▄▄ ▐
+                               ▐ ▐ A1  ▐ ▐
+                               ▐ ▐▄▄▄▄▄▟ ▐
+                               ▐         ▐
+                               ▐▄▄▄▄▄▄▄▄▄▟
+
+Drawn, BT: two boxes, both directions and a back edge, one title two lines high
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the second box has the two-line title two and lines under its top
+border, and the first none. The back edge goes round the right of both boxes.
+
+image @969,31 c=18 r=38 z=0 C=1 png=180x760
+                                  ▗▄▄▄▄
+                                  ▐ T ▐
+                                  ▐▄▄▄▟
+                                    ▜▘
+                               ▗▄▄▄▄▟▄▄▄▄▄▄▄▄
+                               ▐    ▐  two  ▐
+                               ▐    ▐ lines ▐
+                               ▐    ▐       ▐
+                               ▐ ▗▄▄▟▄▄▄    ▐
+                               ▐ ▐ B2  ▐    ▐
+                               ▐ ▐▄▄▄▄▄▟    ▐
+                               ▐   ▜▘▐      ▐
+                               ▐   ▐▄▐▄▄▄▄▄▄▟▄▄▄
+                               ▐    ▐       ▐  ▐
+                               ▐ ▗▄▄▟▄▄▄    ▐  ▐
+                               ▐ ▐ B1  ▐    ▐  ▐
+                               ▐ ▐▄▄▄▄▄▟    ▐  ▐
+                               ▐    ▜▘      ▐  ▐
+                               ▐▄▄▄▄▟▄▄▄▄▄▄▄▟  ▐
+                                    ▐▄         ▐▄
+                                ▗▄▄▄▄▟▄▄▄▄▄▄▄▄  ▐
+                                ▐    ▐       ▐  ▐
+                                ▐ ▗▄▄▟▄▄▄    ▐  ▐
+                                ▐ ▐ A2  ▐    ▐  ▐
+                                ▐ ▐▄▄▄▄▄▟    ▐  ▐
+                                ▐    ▜▘      ▐  ▐
+                                ▐    ▐▄▄ ▗▄▄▄▟▄▄▛
+                                ▐      ▐ ▐   ▐
+                                ▐    ▗▄▟▄█▙▄ ▐
+                                ▐    ▐ A1  ▐ ▐
+                                ▐    ▐▄▄▄▄▄▟ ▐
+                                ▐       ▜▘   ▐
+                                ▐▄▄▄▄▄▄▄▟▄▄▄▄▟
+                                       ▗▛
+                                       ▐
+                                     ▗▄▟▄▄
+                                     ▐ S ▐
+                                     ▐▄▄▄▟
+
+Drawn, RL: a titled box
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the flow runs from the right: X is at the right of the box, which
+holds A then B right to left, and Y is at the left. one is centred under the top
+border.
+
+image @1015,24 c=32 r=8 z=0 C=1 png=320x160
+                               ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                               ▐      one       ▐
+                               ▐                ▐
+                        ▗▄▄▄▄  ▐ ▗▄▄▄▄    ▗▄▄▄▄ ▐  ▗▄▄▄▄
+                        ▐ Y ▐█▄▟▄▟ B ▐█▄▄▄▟ A ▐█▟▄▄▟ X ▐
+                        ▐▄▄▄▟  ▐ ▐▄▄▄▟    ▐▄▄▄▟ ▐  ▐▄▄▄▟
+                               ▐                ▐
+                               ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+Drawn, RL: a title wider than the box, and one beside an edge
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the first box is as wide as its title needs, with the extra columns
+inside it before and after the member. In the second, Y is above the box and its
+edge enters through the top border, so the title is not centred: it sits at the
+left of that edge and the box grows to the left.
+
+image @1032,13 c=54 r=8 z=0 C=1 png=540x160
+                   ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                   ▐ A title much wider than its one member ▐
+                   ▐                                        ▐
+             ▗▄▄▄▄ ▐                  ▗▄▄▄▄                 ▐ ▗▄▄▄▄
+             ▐ Y ▐█▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟ A ▐█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▟ X ▐
+             ▐▄▄▄▟ ▐                  ▐▄▄▄▟                 ▐ ▐▄▄▄▟
+                   ▐                                        ▐
+                   ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+image @1041,18 c=43 r=13 z=0 C=1 png=430x260
+                                     ▗▄▄▄▄▄
+                                     ▐ Y ▐█▀▜
+                                     ▐▄▄▄▟▀▜▐▄▄▄▄▄▄▄▄▄▄
+                                           ▐          ▐ ▗▄▄▄▄
+                                           ▐          █▄▟ P ▐
+                  ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄ ▐ ▐▄▄▄▟
+                  ▐ Wide title here for it ▐        ▐ ▐
+                  ▐                        ▐        ▐ ▐
+                  ▐                  ▗▄▄▄▄ ▐  ▗▄▄▄▄ ▐ ▐
+                  ▐                  ▐ B ▐██▄▄▟ A ▐█▟▄▛
+                  ▐                  ▐▄▄▄▟    ▐▄▄▄▟ ▐
+                  ▐                                 ▐
+                  ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+Drawn, RL: two boxes, both directions and a back edge
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the left-to-right case mirrored: two boxes side by side, the first on
+the right, and the back edge goes round under both. The first box has no title
+and the second has two lines.
+
+image @1062,11 c=58 r=14 z=0 C=1 png=580x280
+                  ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                  ▐       two        ▐
+                  ▐      lines       ▐
+                  ▐                  ▐   ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+           ▗▄▄▄▄  ▐ ▗▄▄▄▄▄▄   ▗▄▄▄▄▄ ▐   ▐                  ▐
+           ▐ T ▐█▄▟▄▟ B2 ▐▀▀▜▄▟ B1 ▐█▟▄▄ ▐ ▗▄▄▄▄▄           ▐
+           ▐▄▄▄▟  ▐ ▐▄▄▄▄▟▀▀▜ ▐▄▄▄▄▟ ▐ ▐▄▟▄▟ A2 ▐█▄▄        ▐   ▗▄▄▄▄
+                  ▐         ▐        ▐   ▐ ▐▄▄▄▄▟  ▐ ▗▄▄▄▄▄ ▐ ▗▄▟ S ▐
+                  ▐▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▟   ▐         ▝▜█ A1 ▐█▟▄▛ ▐▄▄▄▟
+                            ▐            ▐         ▐▀▜▄▄▄▄▟ ▐
+                            ▐▄▄▄▄▄▄▄▄▄▄▄ ▐         ▐        ▐
+                                       ▐ ▐▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▟
+                                       ▐           ▐
+                                       ▐▄▄▄▄▄▄▄▄▄▄▄▛
+
+Drawn, LR: MongoDB query commands, shorter edge labels
+────────────────────────────────────────────────────────────────────────────────
+
+The diagram from src/mongo/db/commands/query_cmd/README.md, with its subgraph
+title blank as written and its edge labels cut to at most 24 columns, and n10's
+extract shape (which this renderer has not got) left out. Expected: the box
+holds Find, Distinct and Count, and the three edges from it merge into IDL
+Parsing, outside it to its right.
+
+image @1086,0 c=184 r=15 z=0 C=1 png=1840x300
+▗▄▄▄▄▄▄▄▄▄▄▄▄▄
+▐            ▐
+▐ ▗▄▄▄▄▄     ▐
+▐ ▐Find▐▄▄▄▄▄▟▄▄▄▄
+▐ ▐▄▄▄▄▟     ▐   ▐
+▐            ▐   ▐               ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+▐ ▗▄▄▄▄▄▄▄▄▄ ▐   ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄ ▐                                                     ▐▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+▐ ▐Distinct▐▄▟▄▄▄█▟█IDL Parsing▐▄█▄▄▄▄ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄                           ▝▜█FindCommandRequest▐▄▄▄▄▄    find::parse()       ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+▐ ▐▄▄▄▄▄▄▄▄▟ ▐   ▐ ▐▄▄▄▄▄▄▄▄▄▄▄▟ ▐   ▐▟█CountCommandRequest▐▄▄▄▄▄▄▄▖parseFromCount()▗▄▄▛▀▜▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟    ▝▘MatchParser::parse()▝▜▟█ParsedFindCommand▐▄▄▄▄
+▐            ▐   ▐               ▐▄▄▄▄ ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟                                                                              ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟   ▐
+▐ ▗▄▄▄▄▄▄    ▐   ▐                   ▐                                                                                                                          ▐   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+▐ ▐Count▐▄▄▄▄▟▄▄▄▛                   ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄                                                                                                 █▟██▛ CanonicalQuery ▜██
+▐ ▐▄▄▄▄▄▟    ▐                       ▐▟█DistinctCommandRequest▐▄▄  distinct::parse()     ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄                                                ▐  ▝▀▀▀▀▀▀██████▛▀▀▀▀▀▘
+▐            ▐                         ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟ ▝▘MatchParser::parse()▝▜▟█ParsedDistinctCommand▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▛
+▐▄▄▄▄▄▄▄▄▄▄▄▄▟                                                                           ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+Declined, LR: a box that an edge would have to cross
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: declined, as the same graph is top-down: N1's edge to N6 would cross
+the box of N3, N4 and N5.
+
+  graph LR
+      subgraph c0[" "]
+          N3
+          N4
+          N5
+      end
+      subgraph c1[" "]
+          N2
+          N6
+      end
+      N0 --> N2
+      N0 --> N6
+      N1 --> N5
+      N1 --> N6
+      N2 --> N5
+      N3 --> N0
+      N3 --> N4
+      N3 --> N5
+      N4 --> N6
+      N5 --> N5
+
+Declined, LR: MongoDB query commands, as written
+────────────────────────────────────────────────────────────────────────────────
+
+The diagram exactly as MongoDB wrote it, except for the extract shape left out.
+Declined for the 30-column edge label, as it would be without the subgraph.
+
+  flowchart LR
+   subgraph s1[" "]
+          n1["Find"]
+          n2["Distinct"]
+          n3["Count"]
+    end
+      n1 --> n10["IDL Parsing"]
+      n2 --> n10
+      n3 --> n10
+      n10 --> n11["FindCommandRequest"] & n12["DistinctCommandRequest"]
+      n10 --> n21["CountCommandRequest"]
+      n13["ParsedFindCommand"] --> n17["CanonicalQuery"]
+      n19["ParsedDistinctCommand"] --> n17
+      n21 -- parseFromCount() --> n11
+      n11 -- "parsed_find_command::parse()<br>MatchExpressionParser::parse()" --> n13
+      n12 -- "parsed_distinct_command::parse()<br>MatchExpressionParser::parse()" --> n19
+
+      n17@{ shape: dbl-circ}
 
 Declined: a box that an edge would have to cross
 ────────────────────────────────────────────────────────────────────────────────
@@ -776,7 +1248,7 @@ Drawn: membership, a node named outside first
 
 C and F belong to S, A does not.
 
-image @759,35 c=9 r=17 z=0 C=1 png=90x340
+image @1213,35 c=9 r=17 z=0 C=1 png=90x340
                                      ▗▄▄▄▄
                                      ▐ A ▐
                                      ▐▄▄▄▟
@@ -800,7 +1272,7 @@ Drawn: membership, a node named in two siblings
 
 Y belongs to S1, which closes first.
 
-image @782,35 c=10 r=21 z=0 C=1 png=100x420
+image @1236,35 c=10 r=21 z=0 C=1 png=100x420
                                    ▗▄▄▄▄▄▄▄▄
                                    ▐  S1   ▐
                                    ▐       ▐
@@ -892,7 +1364,7 @@ Drawn: membership, style and class do not name a node
 C and D are outside S: only a node declaration or a link puts a node in a
 subgraph.
 
-image @873,32 c=16 r=13 z=0 C=1 png=160x260
+image @1327,32 c=16 r=13 z=0 C=1 png=160x260
                                        ▗▄▄▄▄▄▄▄▄
                                        ▐   S   ▐
                                        ▐       ▐
@@ -910,7 +1382,7 @@ image @873,32 c=16 r=13 z=0 C=1 png=160x260
 Drawn: membership, &, ; and one line
 ────────────────────────────────────────────────────────────────────────────────
 
-image @890,23 c=34 r=15 z=0 C=1 png=340x300
+image @1344,23 c=34 r=15 z=0 C=1 png=340x300
                        ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄
                        ▐      S       ▐  ▐   T   ▐
                        ▐              ▐  ▐       ▐
@@ -930,7 +1402,7 @@ image @890,23 c=34 r=15 z=0 C=1 png=340x300
 Drawn: ids that start with end or subgraph
 ────────────────────────────────────────────────────────────────────────────────
 
-image @909,25 c=30 r=13 z=0 C=1 png=300x260
+image @1363,25 c=30 r=13 z=0 C=1 png=300x260
                          ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                          ▐             S              ▐
                          ▐                            ▐

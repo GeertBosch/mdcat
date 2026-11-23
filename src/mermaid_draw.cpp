@@ -800,6 +800,11 @@ bool validateClusters(const Graph& g, const Layout& lay, std::string& reason) {
                 return false;
             }
         }
+        // No edge is level with a border, which would make it seem to run into it.
+        if (alignedWithBorder(lay, c)) {
+            reason = "subgraph layout: edge";
+            return false;
+        }
         const CellBox& title = lay.clusterLabel[c];
         if (title.cols > 0) {
             // Clear of the border and a blank cell from it on both sides, so that it is read as

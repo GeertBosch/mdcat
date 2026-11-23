@@ -152,10 +152,12 @@ constexpr int kColsPerCrossing = 10;  // a diagram may have one edge crossing (b
 constexpr int kColsPerBackEdge = 10;  // likewise for the edges that close a cycle
 constexpr int kMinGateCols = 72;  // a narrower terminal counts as this wide for those two limits
 constexpr int kMaxLabelWidth =
-    24;                         // columns an edge label may take, and a Markdown string wraps at
-constexpr int kNoWrap = 4096;   // a wrap width that no label reaches, for markdownAutoWrap: false
-constexpr int kClusterPad = 2;  // columns a subgraph's box adds between its members and what lies
-                                // outside: its border's column and a blank one inside it
+    24;                           // columns an edge label may take, and a Markdown string wraps at
+constexpr int kNoWrap = 4096;     // a wrap width that no label reaches, for markdownAutoWrap: false
+constexpr int kClusterPad = 2;    // columns a subgraph's box adds between its members and what lies
+                                  // outside: its border's column and a blank one inside it
+constexpr int kClusterPadLr = 2;  // rows a left-to-right subgraph's box adds between its members
+                                  // and what lies outside: its border's row and a blank one
 constexpr int kMinCylinderLabel =
     8;  // columns a cylinder is at least as wide as its label ("database")
 }  // namespace tune
@@ -185,6 +187,12 @@ bool layoutGraph(
 // ending or bending there. Where one edge bends off a run that another passes straight along, the
 // two share a port and the point is a junction, not a crossing.
 std::vector<Pt> crossingPoints(const Layout& lay);
+
+// Whether an edge's path runs level with a side of cluster `c`'s box, along it or within two cells
+// of its end, so that the two seem to join: a segment on the row of a top or bottom border, or the
+// column of a left or right one, that reaches to within two cells of the border's length. Edges
+// cross a border at right angles, so a crossing is never level with it.
+bool alignedWithBorder(const Layout& lay, size_t c);
 
 // Turn a layout into strokes, a text layer and a PNG, validating it on the way.
 bool drawDiagram(

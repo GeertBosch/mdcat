@@ -1,14 +1,14 @@
 # Mermaid subgraphs
 
-`subgraph ... end` is read into the model (`Graph::clusters`, `Node::cluster`) and, so far, drawn only
-top-down and one level deep (docs/plan-mermaid-subgraphs.md, Steps 5-8): the box is one outline under
-the nodes and edges, around the nodes named inside it, with the subgraph's title, if it has one, in
-bold under the top border. The cases whose heading starts with *Drawn* are drawn. The rest are
-declined: a nested subgraph or a direction other than `TD` is `subgraph layout` for now, and the
-other cases are declined for the reason named in their heading or, for the membership cases, because
-of what they hold. `MDCAT_MERMAID_DEBUG=1` prints each reason on stderr, and `mermaid-kitty.sh`
-compares it with `expected/mermaid-14-subgraphs.w80.err`. Which node belongs to which subgraph is
-checked outside the repository, with a scratch parser.
+`subgraph ... end` is read into the model (`Graph::clusters`, `Node::cluster`) and drawn, in every
+direction but only one level deep (docs/plan-mermaid-subgraphs.md, Steps 5-8): the box is one outline
+under the nodes and edges, around the nodes named inside it, with the subgraph's title, if it has one,
+in bold under the top border. The cases whose heading starts with *Drawn* are drawn; the title says the
+direction where it is not top-down. The rest are declined: a nested subgraph is `subgraph layout` for
+now, and the other cases are declined for the reason named in their heading or, for the membership
+cases, because of what they hold. `MDCAT_MERMAID_DEBUG=1` prints each reason on stderr, and
+`mermaid-kitty.sh` compares it with `expected/mermaid-14-subgraphs.w80.err`. Which node belongs to which
+subgraph is checked outside the repository, with a scratch parser.
 
 A blank title (`subgraph s[" "]`) draws no title, so the first cases use it.
 
@@ -388,6 +388,365 @@ B --> |no throughput gain|E{{Go back to stable concurrency}}
 end
 D --> H(Stable Probe)
 E --> H
+```
+
+## Drawn, LR: one box around a chain
+
+Expected: the top-down chain case turned on its side. A box around A, B and C, one blank column and one
+blank row inside it on each side. X's edge enters it through the left border and C's leaves through the
+right border. Y is reached by X's second edge, which goes round under the box.
+
+```mermaid
+graph LR
+    X --> A
+    subgraph s[" "]
+        A --> B --> C
+    end
+    C --> Y
+    X --> Y
+```
+
+## Drawn, LR: two boxes, both directions and a back edge
+
+Expected: two boxes side by side, a few columns apart so that the jog of the edge between them is a
+blank column from each border. That edge crosses both borders; the back edge from the second to the
+first goes round under both boxes and enters the first box through its bottom border.
+
+```mermaid
+graph LR
+    subgraph a[" "]
+        A1 --> A2
+    end
+    subgraph b[" "]
+        B1 --> B2
+    end
+    A2 --> B1
+    B2 --> A1
+    S --> A1
+    B2 --> T
+```
+
+## Drawn, LR: an edge goes round a box
+
+Expected: X's edge to Y runs above the box and Z's below it; the edge into A crosses the left border
+and D's leaves through the right one.
+
+```mermaid
+graph LR
+    X --> Y
+    subgraph s[" "]
+        A --> B --> C --> D
+    end
+    X --> A
+    X --> Z
+    Z --> Y
+    D --> Y
+```
+
+## Drawn, LR: a rank of the span that holds no member
+
+Expected: A and D are in the box and X, between them, is not. X is above the box, and the edges from A
+to X and from X to D cross its top border.
+
+```mermaid
+graph LR
+    subgraph s[" "]
+        A
+        D
+    end
+    A --> X --> D
+    X --> Y
+```
+
+## Drawn, LR: a long edge, a label and a self-loop inside a box
+
+Expected: everything is inside the box: the edge from A to C runs along its bottom, "yes" sits between
+B and D, and the loop on C is below C.
+
+```mermaid
+graph LR
+    subgraph s[" "]
+        A --> B --> C
+        A --> C
+        B -->|yes| D
+        C --> C
+    end
+    S --> A
+    D --> T
+```
+
+## Drawn, LR: a title, centred where no edge crosses it
+
+Expected: a box around A and B with `Plan` in bold on the row under the top border, in the middle of
+the box, then a blank row, then the members. Nothing crosses the top border.
+
+```mermaid
+graph LR
+    subgraph s[Plan]
+        A --> B
+    end
+```
+
+## Drawn, LR: a title wider than the box
+
+Expected: the box is as wide as its title needs plus a blank column and the border on each side, not
+as wide as its one member: the extra columns are inside the box, half before the member and half after
+it, so the edges into and out of the box are longer there.
+
+```mermaid
+graph LR
+    subgraph s[A title much wider than its one member]
+        A
+    end
+    X --> A
+    A --> Y
+```
+
+## Drawn, LR: a title beside an edge that crosses the top border
+
+Expected: Y is above the box, and its edge from X runs along above the box and then down into D, through
+the top border. `A long title here for the box to hold` is not centred: it sits to the right of that edge,
+a blank column from it, and the box grows to the right of D to make room.
+
+```mermaid
+graph LR
+    X --> Y
+    Y --> D
+    X --> A
+    subgraph s[A long title here for the box to hold]
+        A --> B --> C --> D
+    end
+```
+
+## Drawn, LR: boxes side by side, titles of different heights
+
+Expected: two boxes, one above the other, X's edges entering both through their left borders. The title
+of the upper one is two lines and the lower one's is one; each has a blank row after its title and then
+its members.
+
+```mermaid
+graph LR
+    subgraph l["two<br>lines"]
+        A --> C
+    end
+    subgraph r[one]
+        B --> D
+    end
+    X --> A
+    X --> B
+```
+
+## Drawn, LR: the title of a box that an edge leaves through the top
+
+Expected: the box's first member has an edge to Y, which lies above the box. The edge runs up from the
+gap between A and B, through the top border and past the title: `Wide title here for it` sits to the
+right of that edge, and the box grows to the right.
+
+```mermaid
+graph LR
+    P --> Y
+    subgraph s[Wide title here for it]
+        A --> B
+    end
+    P --> A
+    A --> Y
+```
+
+## Drawn, BT: a titled box, an edge leaving through the title's rows
+
+Expected: the flow runs upwards, so the top of the box is where its edges leave: X's edge enters it
+through the bottom border and B's leaves through the top one, past the title. `one` is in bold on
+the row under the top border, left of that edge and a blank column from it.
+
+```mermaid
+graph BT
+    X --> A
+    subgraph one
+        A --> B
+    end
+    B --> Y
+```
+
+## Drawn, BT: boxes in a chain, titled
+
+Expected: two boxes one above the other, each with its title in bold under its top border. A1's edge
+leaves the lower box through its top border and enters the upper box through its bottom border, and A2's
+edge to A3 leaves that through its top border. Both leave through the title's rows, so each title sits
+beside its edge, a blank column from it.
+
+```mermaid
+graph BT
+    subgraph S
+        A1
+    end
+    subgraph id1 [Title one]
+        A2
+    end
+    A1 --> A2
+    A2 --> A3
+```
+
+## Drawn, BT: two boxes, both directions and a back edge, one title two lines high
+
+Expected: the second box has the two-line title `two` and `lines` under its top border, and the first
+none. The back edge goes round the right of both boxes.
+
+```mermaid
+graph BT
+    subgraph a[" "]
+        A1 --> A2
+    end
+    subgraph b["two<br>lines"]
+        B1 --> B2
+    end
+    A2 --> B1
+    B2 --> A1
+    S --> A1
+    B2 --> T
+```
+
+## Drawn, RL: a titled box
+
+Expected: the flow runs from the right: X is at the right of the box, which holds A then B right to
+left, and Y is at the left. `one` is centred under the top border.
+
+```mermaid
+graph RL
+    X --> A
+    subgraph one
+        A --> B
+    end
+    B --> Y
+```
+
+## Drawn, RL: a title wider than the box, and one beside an edge
+
+Expected: the first box is as wide as its title needs, with the extra columns inside it before and
+after the member. In the second, Y is above the box and its edge enters through the top border, so the
+title is not centred: it sits at the left of that edge and the box grows to the left.
+
+```mermaid
+graph RL
+    subgraph s[A title much wider than its one member]
+        A
+    end
+    X --> A
+    A --> Y
+```
+
+```mermaid
+graph RL
+    P --> Y
+    subgraph t[Wide title here for it]
+        A --> B
+    end
+    P --> A
+    A --> Y
+```
+
+## Drawn, RL: two boxes, both directions and a back edge
+
+Expected: the left-to-right case mirrored: two boxes side by side, the first on the right, and the back
+edge goes round under both. The first box has no title and the second has two lines.
+
+```mermaid
+graph RL
+    subgraph a[" "]
+        A1 --> A2
+    end
+    subgraph b["two<br>lines"]
+        B1 --> B2
+    end
+    A2 --> B1
+    B2 --> A1
+    S --> A1
+    B2 --> T
+```
+
+## Drawn, LR: MongoDB query commands, shorter edge labels
+
+The diagram from `src/mongo/db/commands/query_cmd/README.md`, with its subgraph title blank as written
+and its edge labels cut to at most 24 columns, and `n10`'s `extract` shape (which this renderer has
+not got) left out. Expected: the box holds Find, Distinct and Count, and the three edges from it merge
+into IDL Parsing, outside it to its right.
+
+```mermaid
+---
+config:
+  themeVariables:
+    fontSize: 32px
+---
+flowchart LR
+ subgraph s1[" "]
+        n1["Find"]
+        n2["Distinct"]
+        n3["Count"]
+  end
+    n1 --> n10["IDL Parsing"]
+    n2 --> n10
+    n3 --> n10
+    n10 --> n11["FindCommandRequest"] & n12["DistinctCommandRequest"]
+    n10 --> n21["CountCommandRequest"]
+    n13["ParsedFindCommand"] --> n17["CanonicalQuery"]
+    n19["ParsedDistinctCommand"] --> n17
+    n21 -- parseFromCount() --> n11
+    n11 -- "find::parse()<br>MatchParser::parse()" --> n13
+    n12 -- "distinct::parse()<br>MatchParser::parse()" --> n19
+
+    n17@{ shape: dbl-circ}
+```
+
+## Declined, LR: a box that an edge would have to cross
+
+Expected: declined, as the same graph is top-down: N1's edge to N6 would cross the box of N3, N4 and N5.
+
+```mermaid
+graph LR
+    subgraph c0[" "]
+        N3
+        N4
+        N5
+    end
+    subgraph c1[" "]
+        N2
+        N6
+    end
+    N0 --> N2
+    N0 --> N6
+    N1 --> N5
+    N1 --> N6
+    N2 --> N5
+    N3 --> N0
+    N3 --> N4
+    N3 --> N5
+    N4 --> N6
+    N5 --> N5
+```
+
+## Declined, LR: MongoDB query commands, as written
+
+The diagram exactly as MongoDB wrote it, except for the `extract` shape left out. Declined for the 30-column
+edge label, as it would be without the subgraph.
+
+```mermaid
+flowchart LR
+ subgraph s1[" "]
+        n1["Find"]
+        n2["Distinct"]
+        n3["Count"]
+  end
+    n1 --> n10["IDL Parsing"]
+    n2 --> n10
+    n3 --> n10
+    n10 --> n11["FindCommandRequest"] & n12["DistinctCommandRequest"]
+    n10 --> n21["CountCommandRequest"]
+    n13["ParsedFindCommand"] --> n17["CanonicalQuery"]
+    n19["ParsedDistinctCommand"] --> n17
+    n21 -- parseFromCount() --> n11
+    n11 -- "parsed_find_command::parse()<br>MatchExpressionParser::parse()" --> n13
+    n12 -- "parsed_distinct_command::parse()<br>MatchExpressionParser::parse()" --> n19
+
+    n17@{ shape: dbl-circ}
 ```
 
 ## Declined: a box that an edge would have to cross

@@ -1,5 +1,5 @@
 
-                                          X
+                                         X
 
 
 
@@ -23,7 +23,7 @@
 
 
 
-                                           Y
+                                          Y
 
 
 
@@ -33,13 +33,14 @@
 
 
 
-                                      A1
+
+                                       A1
 
 
 
 
 
-                                   A2
+                                    A2
 
 
 
@@ -70,23 +71,23 @@
 
 
 
-                                     A        Z
+                                      A        Z
 
 
 
 
-                                     B
+
+                                      B
 
 
 
 
-                                     C
+                                      C
 
 
 
 
-                                     D
-
+                                      D
 
 
 
@@ -519,6 +520,280 @@
 
 
                                   Stable Probe
+
+
+
+
+
+                              A        B        C
+
+                    X
+                                                          Y
+
+
+
+
+
+
+                                              B1        B2        T
+                                 A2
+             S
+                       A1
+
+
+
+
+
+
+
+
+                X
+
+
+
+                          A        B        C        D         Y
+
+
+
+
+
+                          Z
+
+
+
+                                       X        Y
+
+
+
+
+
+                              A
+                                                D
+
+
+
+
+
+
+
+                                                     C
+                                     B
+                                            yes
+             S           A
+
+                                                     D           T
+
+
+
+
+
+                                      \e[1mPlan\e[22m\e[22;23;39;49m
+
+
+                                   A        B
+
+
+
+
+
+                     \e[1mA title much wider than its one member\e[22m\e[22;23;39;49m
+
+
+               X                       A                        Y
+
+
+
+
+
+              Y
+
+
+    X
+
+                                      \e[1mA long title here for the box to hold\e[22m\e[22;23;39;49m
+
+
+              A        B        C        D
+
+
+
+
+
+                                          \e[1mtwo\e[22m\e[22;23;39;49m
+                                         \e[1mlines\e[22m\e[22;23;39;49m
+
+
+                                       A        C
+
+                             X
+
+
+
+                                          \e[1mone\e[22m\e[22;23;39;49m
+
+
+                                       B        D
+
+
+
+
+
+                                       Y
+
+
+                    P
+
+                                     \e[1mWide title here for it\e[22m\e[22;23;39;49m
+
+
+                              A        B
+
+
+
+
+
+                                        Y
+
+
+
+                                    \e[1mone\e[22m\e[22;23;39;49m
+
+
+                                        B
+
+
+
+
+                                        A
+
+
+
+
+
+                                        X
+
+
+
+                                   A3
+
+
+
+                                      \e[1mTitle one\e[22m\e[22;23;39;49m
+
+
+                                   A2
+
+
+
+
+                                  \e[1mS\e[22m\e[22;23;39;49m
+
+
+                                   A1
+
+
+
+
+
+                                    T
+
+
+
+                                       \e[1mtwo\e[22m\e[22;23;39;49m
+                                      \e[1mlines\e[22m\e[22;23;39;49m
+
+
+                                   B2
+
+
+
+
+
+                                   B1
+
+
+
+
+
+
+
+                                    A2
+
+
+
+
+
+                                       A1
+
+
+
+
+
+
+                                       S
+
+
+
+                                      \e[1mone\e[22m\e[22;23;39;49m
+
+
+                          Y        B        A        X
+
+
+
+
+
+                     \e[1mA title much wider than its one member\e[22m\e[22;23;39;49m
+
+
+               Y                        A                       X
+
+
+
+
+
+                                       Y
+
+
+                                                          P
+
+                    \e[1mWide title here for it\e[22m\e[22;23;39;49m
+
+
+                                       B        A
+
+
+
+
+
+                          \e[1mtwo\e[22m\e[22;23;39;49m
+                         \e[1mlines\e[22m\e[22;23;39;49m
+
+
+             T        B2        B1
+                                             A2
+                                                                  S
+                                                       A1
+
+
+
+
+
+
+
+
+
+   Find
+
+
+
+   Distinct         IDL Parsing                                                           FindCommandRequest          find::parse()
+                                        CountCommandRequest         parseFromCount()                               MatchParser::parse()    ParsedFindCommand
+
+
+   Count                                                                                                                                                              CanonicalQuery
+                                        DistinctCommandRequest     distinct::parse()
+                                                                  MatchParser::parse()    ParsedDistinctCommand
 
 
 
