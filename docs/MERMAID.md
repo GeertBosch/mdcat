@@ -106,7 +106,7 @@ The reasons, as `MDCAT_MERMAID_DEBUG=1` words them:
 | `unsupported label: …` | a label that is not valid where it stands, such as `"say "hi""` |
 | `unsupported entity: …` | `#nosuchentity;` |
 | `html in label` | an HTML tag other than `<br>`, such as `<b>` or `a<b`; a `<` before a space, digit or `=` is plain text |
-| `label too wide: N > 24` | an edge label over 24 columns |
+| `label too wide: N > 24` | an edge label with a single word over 24 columns (any other long label is wrapped) |
 | `back edges: N > M`, `crossings: N > M` | too tangled to read, see [Limits](#limits) |
 | `too many nodes`, `too many ranks`, `too many ports` | more than 60 boxes or ranks, or an edge fan too wide to give every edge a port |
 
@@ -309,8 +309,11 @@ not hold brackets or parentheses (Mermaid reports a parse error there, as it doe
 `a --x--> b`). Text that touches the end of its link (`a -- foo--> b`) is declined,
 since Mermaid reads the `o` as a marker and drops it.
 
-A label may be up to 24 columns wide. Anything wider, a label with an HTML tag other
-than `<br>`, and a label on an invisible link are [declined](#2-diagrams-that-are-not-drawn-here).
+A label over 24 columns wide is wrapped after spaces, so that no line is wider than 24
+(a `<br>` is a break of its own, and each line is wrapped in turn). It is declined only
+when a single word is wider than that, as are a label with an HTML tag other than
+`<br>` and a label on an invisible link
+(see [section 2](#2-diagrams-that-are-not-drawn-here)).
 
 ## 9. Label text
 
@@ -330,7 +333,8 @@ Labels follow Mermaid's rules for text.
   drops its text) and is declined.
 - **Markdown strings**, ``a["`**bold** and *italic*`"]``, are the one kind of label
   that interprets Markdown: bold, italic, `` `code` `` and a newline as a hard
-  break. They wrap at 24 columns. A plain label such as `a*b*c` is drawn exactly as
+  break. They wrap at 24 columns, as does a plain label with spaces (after a space,
+  never in the middle of a word). A plain label such as `a*b*c` is drawn exactly as
   written, and so is an entity such as `#35;` inside a Markdown string. Front matter
   `config: markdownAutoWrap: false` turns the wrapping off.
 - **Wide characters** are measured by display width: CJK and emoji take two
@@ -594,7 +598,7 @@ graph LR
 | ----- | ----- | ------------ |
 | boxes | 60 | `too many nodes` |
 | ranks | 60 (long links add some) | `too many ranks` |
-| edge label width | 24 columns | `label too wide` |
+| edge label word | 24 columns | `label too wide` |
 | back edges | one per ten columns of the terminal's width | `back edges: N > M` |
 | crossings (bridges) | one per ten columns of the terminal's width | `crossings: N > M` |
 

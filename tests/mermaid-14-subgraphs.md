@@ -169,8 +169,8 @@ graph TD
 
 ## Drawn: MongoDB admission control, titles blanked
 
-The diagram as MongoDB wrote it, with the subgraph titles blanked. It is declined because of its
-36-column edge label, as it would be without the subgraphs.
+The diagram as MongoDB wrote it, with the subgraph titles blanked. Its 36-column edge label wraps
+at 24 columns, as it would without the subgraphs.
 
 ```mermaid
 flowchart TB
@@ -726,8 +726,9 @@ graph LR
 
 ## Declined, LR: MongoDB query commands, as written
 
-The diagram exactly as MongoDB wrote it, except for the `extract` shape left out. Declined for the 30-column
-edge label, as it would be without the subgraph.
+The diagram exactly as MongoDB wrote it, except for the `extract` shape left out. Declined for its
+labels' words, `parsed_find_command::parse()` and the like, which are over 24 columns and cannot be
+wrapped, as it would be without the subgraph.
 
 ```mermaid
 flowchart LR
@@ -779,10 +780,10 @@ graph TD
     N5 --> N5
 ```
 
-## Declined: MongoDB admission control, real titles
+## Drawn: MongoDB admission control, real titles
 
 The Mermaid source is the MongoDB diagram as written; its subgraphs have no titles of their own, so
-the id is the title. Declined only for the 36-column edge label, as it would be without subgraphs.
+the id is the title. The 36-column edge label wraps at 24 columns, as it would without subgraphs.
 
 ```mermaid
 flowchart TB

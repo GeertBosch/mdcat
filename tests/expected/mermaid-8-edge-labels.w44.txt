@@ -296,25 +296,53 @@ image @278,0 c=51 r=7 z=0 C=1 png=510x140
                                             ▐▟█Two▐
                                               ▐▄▄▄▟
 
+Long labels
+────────────────────────────────────────────
+
+Expected: a label over 24 columns wraps
+after a space, so that no line is over 24
+columns, and is drawn on its edge with the
+rank made as wide as it needs. The same
+holds for a label with a <br> that is too
+long on one of its lines, and for a quoted
+label.
+
+image @297,0 c=44 r=14 z=0 C=1 png=440x280
+                    ▗▄▄▄▄
+                    ▐ A ▐
+                    ▐▄▄▄▟
+                      ▐
+           ▗▄▄▄▄▄▄▄▄▄▄█▄▄▄▄▄▄▄▄▄▄▄▄
+           ▐                      ▐
+this label is much too      a quoted one,
+  long for the edge      that is long on its
+           ▐               second line too
+           ▐                      ▐
+           ▐                      ▐
+         ▗▄█▙▄                  ▗▄█▙▄
+         ▐ B ▐                  ▐ C ▐
+         ▐▄▄▄▟                  ▐▄▄▄▟
+
 Declined
 ────────────────────────────────────────────
 
 Expected: shown as source, as the .err
-golden says, in this order. A label over 24
-columns is too wide; a label with HTML other
-than a line break, or an invisible link with
-a label, is not drawn. A |text| label with
-parentheses or brackets is a parse error in
-Mermaid, and so is --x-->, where --x is a
-link end. Text that touches the end of its
-link (-- foo--> ) is read by Mermaid as fo
-with the o taken as a marker, so it is
-declined rather than drawn as foo. (Quoted
-and Markdown labels are drawn:
+golden says, in this order. A label with a
+single word over 24 columns is too wide, as
+that cannot be wrapped; a label with HTML
+other than a line break, or an invisible
+link with a label, is not drawn. A |text|
+label with parentheses or brackets is a
+parse error in Mermaid, and so is --x-->,
+where --x is a link end. Text that touches
+the end of its link (-- foo--> ) is read by
+Mermaid as fo with the o taken as a marker,
+so it is declined rather than drawn as foo.
+(Quoted and Markdown labels are drawn:
 mermaid-9-label-text.md.)
 
   graph TD
-      a[A] -->|this label is much too long for the edge| b[B]
+      a[A] -->|internationalization_and_localization_of_labels| b[B]
 
   graph TD
       a[A] -->|<b>bold</b>| b[B]

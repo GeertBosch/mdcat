@@ -172,11 +172,24 @@ graph LR
     c -->|fan| d[One] & e[Two]
 ```
 
+## Long labels
+
+Expected: a label over 24 columns wraps after a space, so that no line is over 24
+columns, and is drawn on its edge with the rank made as wide as it needs. The same
+holds for a label with a `<br>` that is too long on one of its lines, and for a
+quoted label.
+
+```mermaid
+graph TD
+    a[A] -->|this label is much too long for the edge| b[B]
+    a -- "a quoted one, <br>that is long on its second line too" --> c[C]
+```
+
 ## Declined
 
-Expected: shown as source, as the `.err` golden says, in this order. A label over 24
-columns is too wide; a label with HTML other than a line break, or an invisible link
-with a label, is not drawn. A `|text|` label with parentheses or brackets is a parse
+Expected: shown as source, as the `.err` golden says, in this order. A label with a
+single word over 24 columns is too wide, as that cannot be wrapped; a label with HTML
+other than a line break, or an invisible link with a label, is not drawn. A `|text|` label with parentheses or brackets is a parse
 error in Mermaid, and so is `--x-->`, where `--x` is a link end. Text that touches
 the end of its link (`-- foo--> `) is read by Mermaid as `fo` with the `o` taken as a
 marker, so it is declined rather than drawn as `foo`. (Quoted and Markdown labels are
@@ -184,7 +197,7 @@ drawn: `mermaid-9-label-text.md`.)
 
 ```mermaid
 graph TD
-    a[A] -->|this label is much too long for the edge| b[B]
+    a[A] -->|internationalization_and_localization_of_labels| b[B]
 ```
 
 ```mermaid

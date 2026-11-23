@@ -1,5 +1,6 @@
 
-                     text (with) [brackets] {and} | pipes
+                            text (with) [brackets]
+                                {and} | pipes
 
 
 

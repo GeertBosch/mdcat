@@ -262,6 +262,47 @@
                                           G
 
 
+                                                  at minimum and
+                                  Stable Probe     tickets not
+                                                    exhausted
+
+
+
+             (above minimum                           below maximum
+            and tickets not                            and tickets
+            exhausted) or at                            exhausted
+                maximum
+
+
+
+
+               Probe Down                               Probe Up
+
+
+
+
+      throughput      throughput did          throughput      throughput did
+      increased        not increase           increased        not increase
+
+
+
+    Decrease stable     Go back to          Increase stable     Go back to
+      concurrency         stable              concurrency         stable
+                        concurrency                             concurrency
+
+
+
+
+
+
+
+
+
+
+
+                                  Stable Probe
+
+
 
                                   Stable Probe    at minimum
 
@@ -796,6 +837,48 @@
                                                                   MatchParser::parse()    ParsedDistinctCommand
 
 
+                                                  at minimum and
+                                  Stable Probe     tickets not
+                                                    exhausted
+
+
+
+             (above minimum                           below maximum
+            and tickets not                            and tickets
+            exhausted) or at                            exhausted
+                maximum
+
+
+           \e[1mdecrease                                \e[22m\e[1mincrease\e[22m\e[22;23;39;49m
+
+
+               Probe Down                               Probe Up
+
+
+
+
+      throughput      throughput did          throughput      throughput did
+      increased        not increase           increased        not increase
+
+
+
+    Decrease stable     Go back to          Increase stable     Go back to
+      concurrency         stable              concurrency         stable
+                        concurrency                             concurrency
+
+
+
+
+
+
+
+
+
+
+
+                                  Stable Probe
+
+
 
                                  X      Y
 
@@ -1111,58 +1194,60 @@
 
 
 
-                               CanonicalQuery
+                            CanonicalQuery
 
 
 
-                                        \e[1mQueryPlanner::plan()\e[22m\e[22;23;39;49m
+                                     \e[1mQueryPlanner::plan()\e[22m\e[22;23;39;49m
 
 
-                        \e[1mIndex Tagging\e[22m\e[22;23;39;49m
+                     \e[1mIndex Tagging\e[22m\e[22;23;39;49m
 
 
-                          Identify Indexable Fields
-
-
-
-
-                            Find Relevant Indexes
+                          Identify Indexable
+                                Fields
 
 
 
 
-                        Evaluate Index Applicability
+                         Find Relevant Indexes
 
 
 
 
-                             Tag MatchExpression
-                              with RelevantTags
+                            Evaluate Index
+                            Applicability
 
 
 
 
-                     \e[1mPlan Enumeration\e[22m\e[22;23;39;49m
-
-
-                           Generate Logical Plans
-                             (Assign IndexTags)
+                          Tag MatchExpression
+                           with RelevantTags
 
 
 
 
-                           Build Data Access Plans
+                                     \e[1mPlan Enumeration\e[22m\e[22;23;39;49m
+
+
+                        Generate Logical Plans
+                          (Assign IndexTags)
 
 
 
 
-                              Coverage Analysis
-                               (Sort, Project)
+                        Build Data Access Plans
 
 
 
 
-                               Candidate Plans
+                           Coverage Analysis
+                            (Sort, Project)
+
+
+
+
+                            Candidate Plans
 
 
 
@@ -1170,12 +1255,12 @@
 
 
 
-                                MultiPlanner
+                             MultiPlanner
 
 
 
 
-                                Winning Plan
+                             Winning Plan
 
 
 

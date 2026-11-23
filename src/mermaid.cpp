@@ -62,7 +62,8 @@ void wrapPlain(Label& label, const Env& env, int wrap) {
 }
 
 // What one attempt to lay a diagram out is allowed to change: the spacing, and the width at which
-// labels are wrapped (0: only Markdown strings, at kMaxLabelWidth).
+// plain subgraph titles are wrapped (0: not at all). Node and edge labels with spaces are always
+// wrapped, at that width or at kMaxLabelWidth, so that a long label is never a reason to decline.
 struct Attempt {
     Fit fit;
     int wrap;
@@ -102,11 +103,11 @@ bool render(const std::vector<std::string>& body,
         std::string why_;
         bool ok = renderMarkdown(g, env, a.wrap ? a.wrap : tune::kMaxLabelWidth, why_);
         if (ok) {
-            if (a.wrap) {
-                for (Node& n : g.nodes) wrapPlain(n.label, env, a.wrap);
-                for (Edge& e : g.edges) wrapPlain(e.label, env, a.wrap);
+            const int plainWrap = a.wrap ? a.wrap : tune::kMaxLabelWidth;
+            for (Node& n : g.nodes) wrapPlain(n.label, env, plainWrap);
+            for (Edge& e : g.edges) wrapPlain(e.label, env, plainWrap);
+            if (a.wrap)
                 for (Cluster& c : g.clusters) wrapPlain(c.title, env, a.wrap);
-            }
             ok = layoutGraph(g, env, a.fit, lay, why_, declined);
         }
         Diagram d;

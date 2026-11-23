@@ -351,28 +351,50 @@ image @302,34 c=12 r=38 z=0 C=1 png=120x760
 Drawn: MongoDB admission control, titles blanked
 ────────────────────────────────────────────────────────────────────────────────
 
-The diagram as MongoDB wrote it, with the subgraph titles blanked. It is
-declined because of its 36-column edge label, as it would be without the
-subgraphs.
+The diagram as MongoDB wrote it, with the subgraph titles blanked. Its 36-column
+edge label wraps at 24 columns, as it would without the subgraphs.
 
-  flowchart TB
-  A(Stable Probe) --> |at minimum and tickets not exhausted|A
-
-  A --> |"(above minimum and tickets not exhausted) or at maximum"|C(Probe Down)
-  subgraph decrease[" "]
-  C --> |throughput increased|F{{Decrease stable concurrency}}
-  C --> |throughput did not increase|G{{Go back to stable concurrency}}
-  end
-  F --> H
-  G --> H
-
-  A --> |below maximum and tickets exhausted| B(Probe Up)
-  subgraph increase[" "]
-  B --> |throughput increased|D{{Increase stable concurrency}}
-  B --> |throughput did not increase|E{{Go back to stable concurrency}}
-  end
-  D --> H(Stable Probe)
-  E --> H
+image @347,0 c=79 r=40 z=0 C=1 png=790x800
+                                 ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄  at minimum and
+                                 ▐Stable Probe ▐██ tickets not
+                                 ▝▙▄▄▄▄▄▄▄▄▄▄▄▟▀▀▘  exhausted
+                                        ▐
+                    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                    ▐                                       ▐
+             (above minimum                           below maximum
+            and tickets not                            and tickets
+            exhausted) or at                            exhausted
+                maximum                                     ▐
+                    ▐                                       ▐
+▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+▐                   ▐                 ▐ ▐                   ▐                 ▐
+▐             ▗▄▄▄▄▄█▙▄▄▄▄▄           ▐ ▐              ▗▄▄▄▄█▙▄▄▄▄            ▐
+▐             ▐Probe Down ▐           ▐ ▐              ▐Probe Up ▐            ▐
+▐             ▝▙▄▄▄▄▄▄▄▄▄▟▀           ▐ ▐              ▝▙▄▄▄▄▄▄▄▟▀            ▐
+▐                   ▐                 ▐ ▐                   ▐                 ▐
+▐          ▗▄▄▄▄▄▄▄▄█▄▄▄▄▄▄▄▄▄        ▐ ▐          ▗▄▄▄▄▄▄▄▄█▄▄▄▄▄▄▄▄▄        ▐
+▐          ▐                 ▐        ▐ ▐          ▐                 ▐        ▐
+▐     throughput      throughput did  ▐ ▐     throughput      throughput did  ▐
+▐     increased        not increase   ▐ ▐     increased        not increase   ▐
+▐          ▐                 ▐        ▐ ▐          ▐                 ▐        ▐
+▐          ▐                 ▐        ▐ ▐          ▐                 ▐        ▐
+▐  ▗▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▖    ▄▄▄▄▄█▙▄▄▄▄▖  ▐ ▐  ▗▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▖    ▄▄▄▄▄█▙▄▄▄▄▖  ▐
+▐ ▗▛Decrease stable▜▄  ▟Go back to▝█▖ ▐ ▐ ▗▛Increase stable▜▄  ▟Go back to▝█▖ ▐
+▐ ▝▙  concurrency  ▟▀ ▐▌  stable   ▝█ ▐ ▐ ▝▙  concurrency  ▟▀ ▐▌  stable   ▝█ ▐
+▐  ▝█▄▄▄▄▄▄▄▄▄▄▄▄▄▟▘  ▝█concurrency▟▘ ▐ ▐  ▝█▄▄▄▄▄▄▄▄▄▄▄▄▄▟▘  ▝█concurrency▟▘ ▐
+▐          ▐           ▝█▄▄▄▄▄▄▄▄▄▟▘  ▐ ▐          ▐           ▝█▄▄▄▄▄▄▄▄▄▟▘  ▐
+▐          ▐                 ▐        ▐ ▐          ▐                 ▐        ▐
+▐▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▟ ▐▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▟
+           ▐                 ▐▄▄▄▄▄▄▄▄▄▄ ▗▄▄▄▄▄▄▄▄▄▛                 ▐
+           ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ ▐ ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▛
+                                     ▐ ▐ ▐ ▐
+                                     ▐ ▐ ▐ ▐
+                                     ▐ ▐ ▐ ▐
+                                     ▐▄███▄▛
+                                        ▐
+                                 ▗▄▄▄▄▄▄█▙▄▄▄▄▄▄
+                                 ▐Stable Probe ▐
+                                 ▝▙▄▄▄▄▄▄▄▄▄▄▄▟▀
 
 Drawn: MongoDB admission control, shorter edge labels
 ────────────────────────────────────────────────────────────────────────────────
@@ -381,7 +403,7 @@ The same diagram with its edge labels cut to at most 24 columns. Expected: the
 two boxes side by side under Stable Probe, each with a probe and two hexagons,
 and all four edges merging into the last Stable Probe below them.
 
-image @374,0 c=79 r=38 z=0 C=1 png=790x760
+image @395,0 c=79 r=38 z=0 C=1 png=790x760
                                  ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                                  ▐Stable Probe ▐██at minimum
                                  ▝▙▄▄▄▄▄▄▄▄▄▄▄▟▀▀▘
@@ -428,7 +450,7 @@ Expected: a box around A and B with Plan in bold on the row under the top
 border, in the middle of the box, which is as wide as its members make it:
 nothing enters the box from above.
 
-image @420,35 c=9 r=13 z=0 C=1 png=90x260
+image @441,35 c=9 r=13 z=0 C=1 png=90x260
                                    ▗▄▄▄▄▄▄▄▄
                                    ▐ Plan  ▐
                                    ▐       ▐
@@ -451,7 +473,7 @@ the box's title row, so one is not centred: it sits beside the edge, a blank
 column from it, and the box is as wide as that takes, growing to the right of
 the members.
 
-image @442,34 c=11 r=21 z=0 C=1 png=110x420
+image @463,34 c=11 r=21 z=0 C=1 png=110x420
                                       ▗▄▄▄▄
                                       ▐ X ▐
                                       ▐▄▄▄▟
@@ -482,7 +504,7 @@ edge from the box above: a bare id (S), id [Title one], id[Title two] and
 id["Title three"]. The title of S is the widest thing in its box; the others are
 beside their edge.
 
-image @472,30 c=20 r=32 z=0 C=1 png=200x640
+image @493,30 c=20 r=32 z=0 C=1 png=200x640
                               ▗▄▄▄▄▄▄▄▄▄▄
                               ▐    S    ▐
                               ▐         ▐
@@ -523,7 +545,7 @@ Expected: the boxes Q::plan() and Index Tagging (a generated id), one above the
 other, with the edge from Q to R between them. The second title sits left of the
 edge into R, and its box grows to the right, not to the left.
 
-image @512,28 c=23 r=26 z=0 C=1 png=230x520
+image @533,28 c=23 r=26 z=0 C=1 png=230x520
                                       ▗▄▄▄▄▄▄▄▄▄▄▄▄
                                       ▐ Q::plan() ▐
                                       ▐           ▐
@@ -558,7 +580,7 @@ Expected: Markdown title with Markdown bold on top of the bold of the title (so
 it reads the same), two over lines in a box with a two-line title, and A & B; C
 as written.
 
-image @546,29 c=21 r=25 z=0 C=1 png=210x500
+image @567,29 c=21 r=25 z=0 C=1 png=210x500
                                 ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                                 ▐ Markdown title ▐
                                 ▐                ▐
@@ -594,7 +616,7 @@ neither title is centred: each sits to the right of the entering edge, a blank
 column from it, and the box grows to the right, leaving its one member near its
 left side. The second box has a Markdown title that is wrapped at 24 columns.
 
-image @581,17 c=46 r=22 z=0 C=1 png=460x440
+image @602,17 c=46 r=22 z=0 C=1 png=460x440
                    ▗▄▄▄▄
                    ▐ X ▐
                    ▐▄▄▄▟
@@ -626,7 +648,7 @@ more. At 80 columns they do not fit with their titles on one line, so the fit
 attempts wrap the titles at spaces, in three lines each, and the box widths
 follow.
 
-image @612,6 c=67 r=15 z=0 C=1 png=670x300
+image @633,6 c=67 r=15 z=0 C=1 png=670x300
                               ▗▄▄
                               ▐X▐
                               ▐▄▟
@@ -650,7 +672,7 @@ Expected: the top borders of the two boxes are on one row. The title of the left
 one is two lines and the right one's is one; the right box has a blank row more
 between its title and its first member.
 
-image @635,27 c=26 r=19 z=0 C=1 png=260x380
+image @656,27 c=26 r=19 z=0 C=1 png=260x380
                                     ▗▄▄▄▄
                                     ▐ X ▐
                                     ▐▄▄▄▟
@@ -679,7 +701,7 @@ the edge labels cut to at most 24 columns. Expected: the two boxes side by side
 under Stable Probe, each with its title in bold at the top, and the edges into
 the probes crossing the top borders.
 
-image @663,0 c=79 r=39 z=0 C=1 png=790x780
+image @684,0 c=79 r=39 z=0 C=1 png=790x780
                                  ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                                  ▐Stable Probe ▐██at minimum
                                  ▝▙▄▄▄▄▄▄▄▄▄▄▄▟▀▀▘
@@ -728,7 +750,7 @@ one blank column and one blank row inside it on each side. X's edge enters it
 through the left border and C's leaves through the right border. Y is reached by
 X's second edge, which goes round under the box.
 
-image @711,18 c=43 r=9 z=0 C=1 png=430x180
+image @732,18 c=43 r=9 z=0 C=1 png=430x180
                           ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                           ▐                         ▐
                           ▐ ▗▄▄▄▄    ▗▄▄▄▄    ▗▄▄▄▄ ▐
@@ -747,7 +769,7 @@ edge between them is a blank column from each border. That edge crosses both
 borders; the back edge from the second to the first goes round under both boxes
 and enters the first box through its bottom border.
 
-image @729,11 c=58 r=12 z=0 C=1 png=580x240
+image @750,11 c=58 r=12 z=0 C=1 png=580x240
                                           ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   ▐                  ▐
                    ▐                  ▐   ▐ ▗▄▄▄▄▄   ▗▄▄▄▄▄▄ ▐  ▗▄▄▄▄
@@ -767,7 +789,7 @@ Drawn, LR: an edge goes round a box
 Expected: X's edge to Y runs above the box and Z's below it; the edge into A
 crosses the left border and D's leaves through the right one.
 
-image @748,14 c=52 r=14 z=0 C=1 png=520x280
+image @769,14 c=52 r=14 z=0 C=1 png=520x280
                     ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
               ▗▄▄▄▄ ▐                                      ▐
               ▐ X ▐▄█                                      ▐
@@ -789,7 +811,7 @@ Drawn, LR: a rank of the span that holds no member
 Expected: A and D are in the box and X, between them, is not. X is above the
 box, and the edges from A to X and from X to D cross its top border.
 
-image @769,26 c=27 r=12 z=0 C=1 png=270x240
+image @790,26 c=27 r=12 z=0 C=1 png=270x240
                                      ▗▄▄▄▄    ▗▄▄▄▄
                                   ▗▄▟█ X ▐▄█▄▟█ Y ▐
                                   ▐  ▐▄▄▄▟ ▐  ▐▄▄▄▟
@@ -809,7 +831,7 @@ Drawn, LR: a long edge, a label and a self-loop inside a box
 Expected: everything is inside the box: the edge from A to C runs along its
 bottom, "yes" sits between B and D, and the loop on C is below C.
 
-image @788,11 c=57 r=12 z=0 C=1 png=570x240
+image @809,11 c=57 r=12 z=0 C=1 png=570x240
                      ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                      ▐                                   ▐
                      ▐                            ▗▄▄▄▄▄ ▐
@@ -830,7 +852,7 @@ Expected: a box around A and B with Plan in bold on the row under the top
 border, in the middle of the box, then a blank row, then the members. Nothing
 crosses the top border.
 
-image @808,31 c=18 r=8 z=0 C=1 png=180x160
+image @829,31 c=18 r=8 z=0 C=1 png=180x160
                                ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                                ▐      Plan      ▐
                                ▐                ▐
@@ -848,7 +870,7 @@ border on each side, not as wide as its one member: the extra columns are inside
 the box, half before the member and half after it, so the edges into and out of
 the box are longer there.
 
-image @825,13 c=54 r=8 z=0 C=1 png=540x160
+image @846,13 c=54 r=8 z=0 C=1 png=540x160
                    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                    ▐ A title much wider than its one member ▐
                    ▐                                        ▐
@@ -866,7 +888,7 @@ then down into D, through the top border. A long title here for the box to hold
 is not centred: it sits to the right of that edge, a blank column from it, and
 the box grows to the right of D to make room.
 
-image @842,2 c=75 r=13 z=0 C=1 png=750x260
+image @863,2 c=75 r=13 z=0 C=1 png=750x260
             ▗▄▄▄▄
         ▗▄▄▟█ Y ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
         ▐   ▐▄▄▄▟                   ▐
@@ -888,7 +910,7 @@ Expected: two boxes, one above the other, X's edges entering both through their
 left borders. The title of the upper one is two lines and the lower one's is
 one; each has a blank row after its title and then its members.
 
-image @863,27 c=26 r=18 z=0 C=1 png=260x360
+image @884,27 c=26 r=18 z=0 C=1 png=260x360
                                    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                                    ▐      two       ▐
                                    ▐     lines      ▐
@@ -916,7 +938,7 @@ edge runs up from the gap between A and B, through the top border and past the
 title: Wide title here for it sits to the right of that edge, and the box grows
 to the right.
 
-image @890,18 c=43 r=13 z=0 C=1 png=430x260
+image @911,18 c=43 r=13 z=0 C=1 png=430x260
                                     ▗▄▄▄▄▄
                                   ▐▀▜█ Y ▐
                         ▗▄▄▄▄▄▄▄▄▄▛▐▀▜▄▄▄▟
@@ -939,7 +961,7 @@ X's edge enters it through the bottom border and B's leaves through the top one,
 past the title. one is in bold on the row under the top border, left of that
 edge and a blank column from it.
 
-image @912,34 c=11 r=21 z=0 C=1 png=110x420
+image @933,34 c=11 r=21 z=0 C=1 png=110x420
                                       ▗▄▄▄▄
                                       ▐ Y ▐
                                       ▐▄▄▄▟
@@ -971,7 +993,7 @@ upper box through its bottom border, and A2's edge to A3 leaves that through its
 top border. Both leave through the title's rows, so each title sits beside its
 edge, a blank column from it.
 
-image @943,31 c=18 r=20 z=0 C=1 png=180x400
+image @964,31 c=18 r=20 z=0 C=1 png=180x400
                                  ▗▄▄▄▄▄▄
                                  ▐ A3  ▐
                                  ▐▄▄▄▄▄▟
@@ -999,7 +1021,7 @@ Drawn, BT: two boxes, both directions and a back edge, one title two lines high
 Expected: the second box has the two-line title two and lines under its top
 border, and the first none. The back edge goes round the right of both boxes.
 
-image @970,31 c=18 r=38 z=0 C=1 png=180x760
+image @991,31 c=18 r=38 z=0 C=1 png=180x760
                                   ▗▄▄▄▄
                                   ▐ T ▐
                                   ▐▄▄▄▟
@@ -1046,7 +1068,7 @@ Expected: the flow runs from the right: X is at the right of the box, which
 holds A then B right to left, and Y is at the left. one is centred under the top
 border.
 
-image @1016,24 c=32 r=8 z=0 C=1 png=320x160
+image @1037,24 c=32 r=8 z=0 C=1 png=320x160
                                ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                                ▐      one       ▐
                                ▐                ▐
@@ -1064,7 +1086,7 @@ inside it before and after the member. In the second, Y is above the box and its
 edge enters through the top border, so the title is not centred: it sits at the
 left of that edge and the box grows to the left.
 
-image @1033,13 c=54 r=8 z=0 C=1 png=540x160
+image @1054,13 c=54 r=8 z=0 C=1 png=540x160
                    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                    ▐ A title much wider than its one member ▐
                    ▐                                        ▐
@@ -1074,7 +1096,7 @@ image @1033,13 c=54 r=8 z=0 C=1 png=540x160
                    ▐                                        ▐
                    ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
 
-image @1042,18 c=43 r=13 z=0 C=1 png=430x260
+image @1063,18 c=43 r=13 z=0 C=1 png=430x260
                                      ▗▄▄▄▄▄
                                      ▐ Y ▐█▀▜
                                      ▐▄▄▄▟▀▜▐▄▄▄▄▄▄▄▄▄▄
@@ -1096,7 +1118,7 @@ Expected: the left-to-right case mirrored: two boxes side by side, the first on
 the right, and the back edge goes round under both. The first box has no title
 and the second has two lines.
 
-image @1063,11 c=58 r=14 z=0 C=1 png=580x280
+image @1084,11 c=58 r=14 z=0 C=1 png=580x280
                   ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                   ▐       two        ▐
                   ▐      lines       ▐
@@ -1121,7 +1143,7 @@ extract shape (which this renderer has not got) left out. Expected: the box
 holds Find, Distinct and Count, and the three edges from it merge into IDL
 Parsing, outside it to its right.
 
-image @1087,0 c=184 r=15 z=0 C=1 png=1840x300
+image @1108,0 c=184 r=15 z=0 C=1 png=1840x300
 ▗▄▄▄▄▄▄▄▄▄▄▄▄▄
 ▐            ▐
 ▐ ▗▄▄▄▄▄     ▐
@@ -1169,7 +1191,8 @@ Declined, LR: MongoDB query commands, as written
 ────────────────────────────────────────────────────────────────────────────────
 
 The diagram exactly as MongoDB wrote it, except for the extract shape left out.
-Declined for the 30-column edge label, as it would be without the subgraph.
+Declined for its labels' words, parsed_find_command::parse() and the like, which
+are over 24 columns and cannot be wrapped, as it would be without the subgraph.
 
   flowchart LR
    subgraph s1[" "]
@@ -1218,31 +1241,55 @@ it: here N1's edge to N6 would cross the box of N3, N4 and N5.
       N4 --> N6
       N5 --> N5
 
-Declined: MongoDB admission control, real titles
+Drawn: MongoDB admission control, real titles
 ────────────────────────────────────────────────────────────────────────────────
 
 The Mermaid source is the MongoDB diagram as written; its subgraphs have no
-titles of their own, so the id is the title. Declined only for the 36-column
-edge label, as it would be without subgraphs.
+titles of their own, so the id is the title. The 36-column edge label wraps at
+24 columns, as it would without subgraphs.
 
-  flowchart TB
-  A(Stable Probe) --> |at minimum and tickets not exhausted|A
-
-  A --> |"(above minimum and tickets not exhausted) or at maximum"|C(Probe Down)
-  subgraph decrease
-  C --> |throughput increased|F{{Decrease stable concurrency}}
-  C --> |throughput did not increase|G{{Go back to stable concurrency}}
-  end
-  F --> H
-  G --> H
-
-  A --> |below maximum and tickets exhausted| B(Probe Up)
-  subgraph increase
-  B --> |throughput increased|D{{Increase stable concurrency}}
-  B --> |throughput did not increase|E{{Go back to stable concurrency}}
-  end
-  D --> H(Stable Probe)
-  E --> H
+image @1212,0 c=79 r=41 z=0 C=1 png=790x820
+                                 ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄  at minimum and
+                                 ▐Stable Probe ▐██ tickets not
+                                 ▝▙▄▄▄▄▄▄▄▄▄▄▄▟▀▀▘  exhausted
+                                        ▐
+                    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                    ▐                                       ▐
+             (above minimum                           below maximum
+            and tickets not                            and tickets
+            exhausted) or at                            exhausted
+                maximum                                     ▐
+                    ▐                                       ▐
+▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+▐          decrease ▐                 ▐ ▐          increase ▐                 ▐
+▐                   ▐                 ▐ ▐                   ▐                 ▐
+▐             ▗▄▄▄▄▄█▙▄▄▄▄▄           ▐ ▐              ▗▄▄▄▄█▙▄▄▄▄            ▐
+▐             ▐Probe Down ▐           ▐ ▐              ▐Probe Up ▐            ▐
+▐             ▝▙▄▄▄▄▄▄▄▄▄▟▀           ▐ ▐              ▝▙▄▄▄▄▄▄▄▟▀            ▐
+▐                   ▐                 ▐ ▐                   ▐                 ▐
+▐          ▗▄▄▄▄▄▄▄▄█▄▄▄▄▄▄▄▄▄        ▐ ▐          ▗▄▄▄▄▄▄▄▄█▄▄▄▄▄▄▄▄▄        ▐
+▐          ▐                 ▐        ▐ ▐          ▐                 ▐        ▐
+▐     throughput      throughput did  ▐ ▐     throughput      throughput did  ▐
+▐     increased        not increase   ▐ ▐     increased        not increase   ▐
+▐          ▐                 ▐        ▐ ▐          ▐                 ▐        ▐
+▐          ▐                 ▐        ▐ ▐          ▐                 ▐        ▐
+▐  ▗▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▖    ▄▄▄▄▄█▙▄▄▄▄▖  ▐ ▐  ▗▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▖    ▄▄▄▄▄█▙▄▄▄▄▖  ▐
+▐ ▗▛Decrease stable▜▄  ▟Go back to▝█▖ ▐ ▐ ▗▛Increase stable▜▄  ▟Go back to▝█▖ ▐
+▐ ▝▙  concurrency  ▟▀ ▐▌  stable   ▝█ ▐ ▐ ▝▙  concurrency  ▟▀ ▐▌  stable   ▝█ ▐
+▐  ▝█▄▄▄▄▄▄▄▄▄▄▄▄▄▟▘  ▝█concurrency▟▘ ▐ ▐  ▝█▄▄▄▄▄▄▄▄▄▄▄▄▄▟▘  ▝█concurrency▟▘ ▐
+▐          ▐           ▝█▄▄▄▄▄▄▄▄▄▟▘  ▐ ▐          ▐           ▝█▄▄▄▄▄▄▄▄▄▟▘  ▐
+▐          ▐                 ▐        ▐ ▐          ▐                 ▐        ▐
+▐▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▟ ▐▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▟
+           ▐                 ▐▄▄▄▄▄▄▄▄▄▄ ▗▄▄▄▄▄▄▄▄▄▛                 ▐
+           ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ ▐ ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▛
+                                     ▐ ▐ ▐ ▐
+                                     ▐ ▐ ▐ ▐
+                                     ▐ ▐ ▐ ▐
+                                     ▐▄███▄▛
+                                        ▐
+                                 ▗▄▄▄▄▄▄█▙▄▄▄▄▄▄
+                                 ▐Stable Probe ▐
+                                 ▝▙▄▄▄▄▄▄▄▄▄▄▄▟▀
 
 Drawn, nested: edges into the inner box from outside both
 ────────────────────────────────────────────────────────────────────────────────
@@ -1252,7 +1299,7 @@ each border and the next. X's and Y's edges merge above the outer box into one
 that crosses the outer border and then the inner one, into A. B's edge to C and
 D's merge below the inner box, inside the outer one.
 
-image @1217,30 c=20 r=26 z=0 C=1 png=200x520
+image @1262,30 c=20 r=26 z=0 C=1 png=200x520
                                ▗▄▄▄▄  ▗▄▄▄▄
                                ▐ X ▐  ▐ Y ▐
                                ▐▄▄▄▟  ▐▄▄▄▟
@@ -1287,7 +1334,7 @@ Expected: A and B in the inner box, C in the outer one beside it. B's edge to C
 leaves the inner box through its bottom border; the back edge from C to A runs
 up inside the outer box and enters the inner one through its right border.
 
-image @1251,31 c=17 r=22 z=0 C=1 png=170x440
+image @1296,31 c=17 r=22 z=0 C=1 png=170x440
                                ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                                ▐               ▐
                                ▐  ▗▄▄▄▄▄▄▄▄    ▐
@@ -1319,7 +1366,7 @@ loop on B and A's long edge to C. P's edge into A crosses the inner box's top
 border. P's long edge to R runs down the left of the inner box, and C's edge to
 R leaves it through its bottom border, both inside the outer one.
 
-image @1282,24 c=32 r=49 z=0 C=1 png=320x980
+image @1327,24 c=32 r=49 z=0 C=1 png=320x980
                         ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                         ▐                              ▐
                         ▐      ▗▄▄▄▄                   ▐
@@ -1378,7 +1425,7 @@ between the outer title and the inner border. X's edge to A runs through the
 outer title's row, so that title is moved left of the edge; the inner title is
 as well.
 
-image @1340,26 c=28 r=26 z=0 C=1 png=280x520
+image @1385,26 c=28 r=26 z=0 C=1 png=280x520
                                         ▗▄▄▄▄
                                         ▐ X ▐
                                         ▐▄▄▄▟
@@ -1413,7 +1460,7 @@ Expected: the outer box holds the inner one and C, which is below the inner box
 and so on a later rank. B's edge to C leaves the inner box through its bottom
 border.
 
-image @1374,30 c=19 r=26 z=0 C=1 png=190x520
+image @1419,30 c=19 r=26 z=0 C=1 png=190x520
                                         ▗▄▄▄▄
                                         ▐ X ▐
                                         ▐▄▄▄▟
@@ -1448,7 +1495,7 @@ Expected: both titles lie to the right of X's edge, so both boxes are wider than
 their members, on the right, to hold them; the outer box is wider than the inner
 one by a blank column and the borders.
 
-image @1408,10 c=59 r=22 z=0 C=1 png=590x440
+image @1453,10 c=59 r=22 z=0 C=1 png=590x440
               ▗▄▄▄▄
               ▐ X ▐
               ▐▄▄▄▟
@@ -1479,7 +1526,7 @@ Expected: P and Q above the inner box and R and S below it, all in the outer
 box. The inner box has its own title, "Inner", and the outer one "Outer". Q's
 edge to A crosses the inner top border, and B's edge to R the bottom one.
 
-image @1438,31 c=17 r=36 z=0 C=1 png=170x720
+image @1483,31 c=17 r=36 z=0 C=1 png=170x720
                                ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                                ▐     Outer     ▐
                                ▐               ▐
@@ -1525,7 +1572,7 @@ above the other. B's edge to C crosses both inner borders and none of the
 parent's. X's edge to C goes round the right of the parent and enters it through
 its right border.
 
-image @1483,30 c=20 r=37 z=0 C=1 png=200x740
+image @1528,30 c=20 r=37 z=0 C=1 png=200x740
                                         ▗▄▄▄▄
                                         ▐ X ▐
                                         ▐▄▄▄▟
@@ -1572,7 +1619,7 @@ E. X's two edges split above the outer box. B's edge to E leaves One through its
 bottom border and enters Two through its left border, where D's edge, from
 Three, joins it.
 
-image @1529,23 c=34 r=33 z=0 C=1 png=340x660
+image @1574,23 c=34 r=33 z=0 C=1 png=340x660
                                   ▗▄▄▄▄
                                   ▐ X ▐
                                   ▐▄▄▄▟
@@ -1613,7 +1660,7 @@ Drawn, nested: three levels
 Expected: P holds Q, which holds R, which holds A and B, with a blank column
 between each border and the next. X's edge crosses all three top borders.
 
-image @1569,31 c=17 r=27 z=0 C=1 png=170x540
+image @1614,31 c=17 r=27 z=0 C=1 png=170x540
                                      ▗▄▄▄▄
                                      ▐ X ▐
                                      ▐▄▄▄▟
@@ -1651,74 +1698,76 @@ renderer has. Expected: "QueryPlanner::plan()" holds no node of its own, only
 "Index Tagging" (C to F) and "Plan Enumeration" (G to J), one below the other.
 The title of the outer box is beside the edge from CanonicalQuery.
 
-image @1606,17 c=45 r=67 z=0 C=1 png=450x1340
-                             ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
-                           ▐█▛ CanonicalQuery  ▜██
-                            ▝▀▀▀▀▀▀███████▀▀▀▀▀▀▘
-                                      ▐
-                 ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
-                 ▐                    ▐ QueryPlanner::plan() ▐
-                 ▐                    ▐                      ▐
-                 ▐  ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄    ▐
-                 ▐  ▐   Index Tagging ▐                 ▐    ▐
-                 ▐  ▐                 ▐                 ▐    ▐
-                 ▐  ▐   ▗▄▄▄▄▄▄▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄▄▄▄▄▄▄   ▐    ▐
-                 ▐  ▐   ▐ Identify Indexable Fields ▐   ▐    ▐
-                 ▐  ▐   ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟   ▐    ▐
-                 ▐  ▐                 ▐                 ▐    ▐
-                 ▐  ▐                 ▐                 ▐    ▐
-                 ▐  ▐     ▗▄▄▄▄▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄▄▄▄▄     ▐    ▐
-                 ▐  ▐     ▐ Find Relevant Indexes ▐     ▐    ▐
-                 ▐  ▐     ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟     ▐    ▐
-                 ▐  ▐                 ▐                 ▐    ▐
-                 ▐  ▐                 ▐                 ▐    ▐
-                 ▐  ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ ▐    ▐
-                 ▐  ▐ ▐ Evaluate Index Applicability  ▐ ▐    ▐
-                 ▐  ▐ ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟ ▐    ▐
-                 ▐  ▐                 ▐                 ▐    ▐
-                 ▐  ▐                 ▐                 ▐    ▐
-                 ▐  ▐      ▗▄▄▄▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄▄▄▄      ▐    ▐
-                 ▐  ▐      ▐ Tag MatchExpression ▐      ▐    ▐
-                 ▐  ▐      ▐  with RelevantTags  ▐      ▐    ▐
-                 ▐  ▐      ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟      ▐    ▐
-                 ▐  ▐                 ▐                 ▐    ▐
-                 ▐  ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟    ▐
-                 ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄      ▐
-                 ▐ ▐ Plan Enumeration ▐               ▐      ▐
-                 ▐ ▐                  ▐               ▐      ▐
-                 ▐ ▐    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄▄▄▄▄▄▄ ▐      ▐
-                 ▐ ▐    ▐▌ Generate Logical Plans   █ ▐      ▐
-                 ▐ ▐    ▐▌   (Assign IndexTags)     █ ▐      ▐
-                 ▐ ▐    ▐▙▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ ▐      ▐
-                 ▐ ▐                  ▐               ▐      ▐
-                 ▐ ▐                  ▐               ▐      ▐
-                 ▐ ▐    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄▄▄▄▄▄▄ ▐      ▐
-                 ▐ ▐    ▐▌ Build Data Access Plans  █ ▐      ▐
-                 ▐ ▐    ▐▙▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█ ▐      ▐
-                 ▐ ▐                  ▐               ▐      ▐
-                 ▐ ▐                  ▐               ▐      ▐
-                 ▐ ▐       ▗▄▄▄▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄▄▄▄    ▐      ▐
-                 ▐ ▐       ▐▌ Coverage Analysis  █    ▐      ▐
-                 ▐ ▐       ▐▌  (Sort, Project)   █    ▐      ▐
-                 ▐ ▐       ▐▙▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█    ▐      ▐
-                 ▐ ▐                  ▐               ▐      ▐
-                 ▐ ▐                  ▐               ▐      ▐
-                 ▐ ▐         ▗▄▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄▄      ▐      ▐
-                 ▐ ▐         ▐ Candidate Plans ▐      ▐      ▐
-                 ▐ ▐         ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟      ▐      ▐
-                 ▐ ▐                  ▐               ▐      ▐
-                 ▐ ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟      ▐
-                 ▐                    ▐                      ▐
-                 ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
-                                      ▐
-                              ▗▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄
-                              ▐ MultiPlanner  ▐
-                              ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
-                                      ▐
-                                      ▐
-                              ▗▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄
-                              ▐ Winning Plan  ▐
-                              ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+image @1651,17 c=45 r=69 z=0 C=1 png=450x1380
+                          ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                        ▐█▛ CanonicalQuery  ▜██
+                         ▝▀▀▀▀▀▀███████▀▀▀▀▀▀▘
+                                   ▐
+                 ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                 ▐                 ▐ QueryPlanner::plan()    ▐
+                 ▐                 ▐                         ▐
+                 ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄           ▐
+                 ▐ ▐ Index Tagging ▐             ▐           ▐
+                 ▐ ▐               ▐             ▐           ▐
+                 ▐ ▐    ▗▄▄▄▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄▄▄▄  ▐           ▐
+                 ▐ ▐    ▐ Identify Indexable  ▐  ▐           ▐
+                 ▐ ▐    ▐       Fields        ▐  ▐           ▐
+                 ▐ ▐    ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟  ▐           ▐
+                 ▐ ▐               ▐             ▐           ▐
+                 ▐ ▐               ▐             ▐           ▐
+                 ▐ ▐   ▗▄▄▄▄▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄▄▄▄▄ ▐           ▐
+                 ▐ ▐   ▐ Find Relevant Indexes ▐ ▐           ▐
+                 ▐ ▐   ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟ ▐           ▐
+                 ▐ ▐               ▐             ▐           ▐
+                 ▐ ▐               ▐             ▐           ▐
+                 ▐ ▐      ▗▄▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄▄    ▐           ▐
+                 ▐ ▐      ▐ Evaluate Index  ▐    ▐           ▐
+                 ▐ ▐      ▐ Applicability   ▐    ▐           ▐
+                 ▐ ▐      ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟    ▐           ▐
+                 ▐ ▐               ▐             ▐           ▐
+                 ▐ ▐               ▐             ▐           ▐
+                 ▐ ▐    ▗▄▄▄▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄▄▄▄  ▐           ▐
+                 ▐ ▐    ▐ Tag MatchExpression ▐  ▐           ▐
+                 ▐ ▐    ▐  with RelevantTags  ▐  ▐           ▐
+                 ▐ ▐    ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟  ▐           ▐
+                 ▐ ▐               ▐             ▐           ▐
+                 ▐ ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▟           ▐
+                 ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄      ▐
+                 ▐ ▐               ▐ Plan Enumeration ▐      ▐
+                 ▐ ▐               ▐                  ▐      ▐
+                 ▐ ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄▄▄▄▄▄▄    ▐      ▐
+                 ▐ ▐ ▐▌ Generate Logical Plans   █    ▐      ▐
+                 ▐ ▐ ▐▌   (Assign IndexTags)     █    ▐      ▐
+                 ▐ ▐ ▐▙▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█    ▐      ▐
+                 ▐ ▐               ▐                  ▐      ▐
+                 ▐ ▐               ▐                  ▐      ▐
+                 ▐ ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄▄▄▄▄▄▄    ▐      ▐
+                 ▐ ▐ ▐▌ Build Data Access Plans  █    ▐      ▐
+                 ▐ ▐ ▐▙▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█    ▐      ▐
+                 ▐ ▐               ▐                  ▐      ▐
+                 ▐ ▐               ▐                  ▐      ▐
+                 ▐ ▐    ▗▄▄▄▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄▄▄▄       ▐      ▐
+                 ▐ ▐    ▐▌ Coverage Analysis  █       ▐      ▐
+                 ▐ ▐    ▐▌  (Sort, Project)   █       ▐      ▐
+                 ▐ ▐    ▐▙▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█       ▐      ▐
+                 ▐ ▐               ▐                  ▐      ▐
+                 ▐ ▐               ▐                  ▐      ▐
+                 ▐ ▐      ▗▄▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄▄         ▐      ▐
+                 ▐ ▐      ▐ Candidate Plans ▐         ▐      ▐
+                 ▐ ▐      ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟         ▐      ▐
+                 ▐ ▐               ▐                  ▐      ▐
+                 ▐ ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟      ▐
+                 ▐                 ▐                         ▐
+                 ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                                   ▐
+                           ▗▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄
+                           ▐ MultiPlanner  ▐
+                           ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                                   ▐
+                                   ▐
+                           ▗▄▄▄▄▄▄▄█▙▄▄▄▄▄▄▄
+                           ▐ Winning Plan  ▐
+                           ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
 
 Drawn, LR, nested: an inner box and a node of the outer box
 ────────────────────────────────────────────────────────────────────────────────
@@ -1727,7 +1776,7 @@ Expected: X's edge crosses the outer left border and then the inner one, into A;
 B's edge to C crosses the inner right border. The outer title is centred under
 the outer top border, the inner one under the inner top border.
 
-image @1681,22 c=35 r=13 z=0 C=1 png=350x260
+image @1728,22 c=35 r=13 z=0 C=1 png=350x260
                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                             ▐           Outer           ▐
                             ▐                           ▐
@@ -1748,7 +1797,7 @@ Drawn, LR, nested: titles, both boxes starting on one rank
 Expected: the outer and inner titles each in the rows under their box's top
 border, and the columns of the two left borders two apart.
 
-image @1701,23 c=34 r=13 z=0 C=1 png=340x260
+image @1748,23 c=34 r=13 z=0 C=1 png=340x260
                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                              ▐    Outer Title     ▐
                              ▐                    ▐
@@ -1770,7 +1819,7 @@ Expected: Outer holds Middle, which holds Innermost, which holds A and B; C is
 in Outer only. X's edge crosses three left borders, B's edge to C two right
 borders and C's edge to Y one.
 
-image @1722,17 c=45 r=18 z=0 C=1 png=450x360
+image @1769,17 c=45 r=18 z=0 C=1 png=450x360
                        ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                        ▐            Outer             ▐
                        ▐                              ▐
@@ -1798,7 +1847,7 @@ the titles are under them as drawn: the outer title above C, the inner title
 above B. C is above the inner box, A and B are inside it, and X's edge comes
 from below the outer box.
 
-image @1749,28 c=23 r=26 z=0 C=1 png=230x520
+image @1796,28 c=23 r=26 z=0 C=1 png=230x520
                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                             ▐     Outer Title     ▐
                             ▐                     ▐
@@ -1834,7 +1883,7 @@ all and Y above. X's two edges split below the parent and cross its bottom
 border and that of each inner box; B's edge to Y crosses the top borders of the
 first inner box and of the parent.
 
-image @1784,28 c=24 r=25 z=0 C=1 png=240x500
+image @1831,28 c=24 r=25 z=0 C=1 png=240x500
                                 ▗▄▄▄▄
                                 ▐ Y ▐
                                 ▐▄▄▄▟
@@ -1867,7 +1916,7 @@ Drawn, RL, nested: titles
 Expected: the flow runs right to left; the titles are under the top borders and
 not mirrored.
 
-image @1816,22 c=35 r=13 z=0 C=1 png=350x260
+image @1863,22 c=35 r=13 z=0 C=1 png=350x260
                       ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                       ▐        Outer Title        ▐
                       ▐                           ▐
@@ -1888,7 +1937,7 @@ Drawn, RL, nested: a title wider than the box
 Expected: the outer title is wider than the outer box would be, so the box is as
 wide as the title with a blank column and the border on each side.
 
-image @1836,20 c=40 r=13 z=0 C=1 png=400x260
+image @1883,20 c=40 r=13 z=0 C=1 png=400x260
                           ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                           ▐ The outer subgraph title ▐
                           ▐                          ▐
@@ -1925,7 +1974,7 @@ Drawn: membership, a node named outside first
 
 C and F belong to S, A does not.
 
-image @1872,35 c=9 r=17 z=0 C=1 png=90x340
+image @1919,35 c=9 r=17 z=0 C=1 png=90x340
                                      ▗▄▄▄▄
                                      ▐ A ▐
                                      ▐▄▄▄▟
@@ -1949,7 +1998,7 @@ Drawn: membership, a node named in two siblings
 
 Y belongs to S1, which closes first.
 
-image @1895,35 c=10 r=21 z=0 C=1 png=100x420
+image @1942,35 c=10 r=21 z=0 C=1 png=100x420
                                    ▗▄▄▄▄▄▄▄▄
                                    ▐  S1   ▐
                                    ▐       ▐
@@ -1979,7 +2028,7 @@ A and B belong to Q, C and D to P. Expected: the box of Q holds A and B, one
 above the other, and the box of P holds it and C and D, one above the other, to
 its right.
 
-image @1924,30 c=20 r=18 z=0 C=1 png=200x360
+image @1971,30 c=20 r=18 z=0 C=1 png=200x360
                               ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                               ▐        P         ▐
                               ▐                  ▐
@@ -2006,7 +2055,7 @@ A stays in Q, C is in P. Expected: A and B are in the box of Q, C beside B in
 that of P only. A's edges to B and C split below A, inside the inner box; the
 one to C leaves the inner box through its right border.
 
-image @1950,29 c=21 r=19 z=0 C=1 png=210x380
+image @1997,29 c=21 r=19 z=0 C=1 png=210x380
                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                              ▐         P         ▐
                              ▐                   ▐
@@ -2034,7 +2083,7 @@ Expected: R holds A, Q holds R and B, T holds C, and P holds Q, T and D. E is
 outside every box: its edge to A crosses the left borders of P and Q and then
 the top border of R.
 
-image @1977,19 c=42 r=24 z=0 C=1 png=420x480
+image @2024,19 c=42 r=24 z=0 C=1 png=420x480
                           ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                           ▐                P                ▐
                           ▐                                 ▐
@@ -2068,7 +2117,7 @@ diagram. Expected: the outer box holds the boxes of Index Tagging (C, D) and
 Plan Enumeration (G, H) and no node; A is above it, and its edge to C crosses
 its top border, beside the title.
 
-image @2010,14 c=51 r=35 z=0 C=1 png=510x700
+image @2057,14 c=51 r=35 z=0 C=1 png=510x700
                               ▗▄▄▄▄
                               ▐ A ▐
                               ▐▄▄▄▟
@@ -2111,7 +2160,7 @@ Drawn: membership, style and class do not name a node
 C and D are outside S: only a node declaration or a link puts a node in a
 subgraph.
 
-image @2052,32 c=16 r=13 z=0 C=1 png=160x260
+image @2099,32 c=16 r=13 z=0 C=1 png=160x260
                                        ▗▄▄▄▄▄▄▄▄
                                        ▐   S   ▐
                                        ▐       ▐
@@ -2129,7 +2178,7 @@ image @2052,32 c=16 r=13 z=0 C=1 png=160x260
 Drawn: membership, &, ; and one line
 ────────────────────────────────────────────────────────────────────────────────
 
-image @2069,23 c=34 r=15 z=0 C=1 png=340x300
+image @2116,23 c=34 r=15 z=0 C=1 png=340x300
                        ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄
                        ▐      S       ▐  ▐   T   ▐
                        ▐              ▐  ▐       ▐
@@ -2149,7 +2198,7 @@ image @2069,23 c=34 r=15 z=0 C=1 png=340x300
 Drawn: ids that start with end or subgraph
 ────────────────────────────────────────────────────────────────────────────────
 
-image @2088,25 c=30 r=13 z=0 C=1 png=300x260
+image @2135,25 c=30 r=13 z=0 C=1 png=300x260
                          ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                          ▐             S              ▐
                          ▐                            ▐

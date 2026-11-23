@@ -1,23 +1,21 @@
-mdcat: mermaid-14-subgraphs.md:175: mermaid: fallback: label too wide: 36 > 24
 mdcat: mermaid-14-subgraphs.md:704: mermaid: fallback: subgraph layout: edge
-mdcat: mermaid-14-subgraphs.md:732: mermaid: fallback: label too wide: 30 > 24
-mdcat: mermaid-14-subgraphs.md:759: mermaid: fallback: subgraph layout: edge
-mdcat: mermaid-14-subgraphs.md:787: mermaid: fallback: label too wide: 36 > 24
-mdcat: mermaid-14-subgraphs.md:1169: mermaid: fallback: subgraph layout: depth
-mdcat: mermaid-14-subgraphs.md:1320: mermaid: fallback: unsupported syntax: direction in subgraph
-mdcat: mermaid-14-subgraphs.md:1330: mermaid: fallback: unsupported syntax: link to subgraph S
-mdcat: mermaid-14-subgraphs.md:1340: mermaid: fallback: unsupported syntax: link to subgraph S
-mdcat: mermaid-14-subgraphs.md:1350: mermaid: fallback: unsupported syntax: link to subgraph S
-mdcat: mermaid-14-subgraphs.md:1359: mermaid: fallback: unsupported syntax: subgraph S named as a node
-mdcat: mermaid-14-subgraphs.md:1369: mermaid: fallback: unsupported syntax: style on subgraph S
-mdcat: mermaid-14-subgraphs.md:1379: mermaid: fallback: unsupported syntax: style on subgraph S
-mdcat: mermaid-14-subgraphs.md:1389: mermaid: fallback: unsupported syntax: end
-mdcat: mermaid-14-subgraphs.md:1397: mermaid: fallback: unsupported syntax: subgraph S
-mdcat: mermaid-14-subgraphs.md:1405: mermaid: fallback: unsupported syntax: subgraph S
-mdcat: mermaid-14-subgraphs.md:1419: mermaid: fallback: unsupported syntax: empty subgraph S
-mdcat: mermaid-14-subgraphs.md:1428: mermaid: fallback: unsupported syntax: empty subgraph S2
-mdcat: mermaid-14-subgraphs.md:1440: mermaid: fallback: unsupported syntax: subgraph end
-mdcat: mermaid-14-subgraphs.md:1449: mermaid: fallback: unsupported syntax: subgraph id [Title] extra
-mdcat: mermaid-14-subgraphs.md:1458: mermaid: fallback: unsupported syntax: subgraph id[]
-mdcat: mermaid-14-subgraphs.md:1467: mermaid: fallback: unsupported label: Title (x)
-mdcat: mermaid-14-subgraphs.md:1476: mermaid: fallback: html in label
+mdcat: mermaid-14-subgraphs.md:733: mermaid: fallback: label too wide: 30 > 24
+mdcat: mermaid-14-subgraphs.md:760: mermaid: fallback: subgraph layout: edge
+mdcat: mermaid-14-subgraphs.md:1170: mermaid: fallback: subgraph layout: depth
+mdcat: mermaid-14-subgraphs.md:1321: mermaid: fallback: unsupported syntax: direction in subgraph
+mdcat: mermaid-14-subgraphs.md:1331: mermaid: fallback: unsupported syntax: link to subgraph S
+mdcat: mermaid-14-subgraphs.md:1341: mermaid: fallback: unsupported syntax: link to subgraph S
+mdcat: mermaid-14-subgraphs.md:1351: mermaid: fallback: unsupported syntax: link to subgraph S
+mdcat: mermaid-14-subgraphs.md:1360: mermaid: fallback: unsupported syntax: subgraph S named as a node
+mdcat: mermaid-14-subgraphs.md:1370: mermaid: fallback: unsupported syntax: style on subgraph S
+mdcat: mermaid-14-subgraphs.md:1380: mermaid: fallback: unsupported syntax: style on subgraph S
+mdcat: mermaid-14-subgraphs.md:1390: mermaid: fallback: unsupported syntax: end
+mdcat: mermaid-14-subgraphs.md:1398: mermaid: fallback: unsupported syntax: subgraph S
+mdcat: mermaid-14-subgraphs.md:1406: mermaid: fallback: unsupported syntax: subgraph S
+mdcat: mermaid-14-subgraphs.md:1420: mermaid: fallback: unsupported syntax: empty subgraph S
+mdcat: mermaid-14-subgraphs.md:1429: mermaid: fallback: unsupported syntax: empty subgraph S2
+mdcat: mermaid-14-subgraphs.md:1441: mermaid: fallback: unsupported syntax: subgraph end
+mdcat: mermaid-14-subgraphs.md:1450: mermaid: fallback: unsupported syntax: subgraph id [Title] extra
+mdcat: mermaid-14-subgraphs.md:1459: mermaid: fallback: unsupported syntax: subgraph id[]
+mdcat: mermaid-14-subgraphs.md:1468: mermaid: fallback: unsupported label: Title (x)
+mdcat: mermaid-14-subgraphs.md:1477: mermaid: fallback: html in label

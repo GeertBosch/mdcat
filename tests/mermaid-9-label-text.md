@@ -15,7 +15,8 @@ and so shown as source.
 Expected: the quotes are not shown, and the brackets, parentheses and pipe inside
 them are literal text instead of syntax. A quoted label on an edge is drawn on it,
 in both spellings (`-- "text" -->` and `-->|"text"|`), and a `-->` inside the quotes
-does not end the link.
+does not end the link. The first node's label is 36 columns wide, so it wraps after a
+space at 24, as every plain label with spaces does.
 
 ```mermaid
 graph TD

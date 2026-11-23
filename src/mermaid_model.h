@@ -150,9 +150,9 @@ constexpr int kSepLr = 1;  // rows between neighbouring footprints in a rank
 constexpr int kColsPerCrossing = 10;  // a diagram may have one edge crossing (bridge) per this many
                                       // columns of the available width, and no more
 constexpr int kColsPerBackEdge = 10;  // likewise for the edges that close a cycle
-constexpr int kMinGateCols = 72;  // a narrower terminal counts as this wide for those two limits
-constexpr int kMaxLabelWidth =
-    24;                           // columns an edge label may take, and a Markdown string wraps at
+constexpr int kMinGateCols = 72;    // a narrower terminal counts as this wide for those two limits
+constexpr int kMaxLabelWidth = 24;  // columns a label's lines are wrapped at (a single word may be
+                                    // wider; an edge label with one is declined)
 constexpr int kNoWrap = 4096;     // a wrap width that no label reaches, for markdownAutoWrap: false
 constexpr int kClusterPad = 2;    // columns a subgraph's box adds between its members and what lies
                                   // outside: its border's column and a blank one inside it
