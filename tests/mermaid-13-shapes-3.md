@@ -1,8 +1,8 @@
-# Mermaid node shapes III: divided, lined process, lined cylinder
+# Mermaid node shapes III: divided, lined process, lined cylinder, horizontal cylinder
 
-On a Kitty terminal, the built-in renderer draws three more shapes, named with
-`A@{ shape: name, label: "text" }`, each a familiar shape with one extra stroke inside
-its outline, as `mmdc` draws them:
+On a Kitty terminal, the built-in renderer draws four more shapes, named with
+`A@{ shape: name, label: "text" }`, the first three each a familiar shape with one extra
+stroke inside its outline, as `mmdc` draws them:
 
 - the **divided process** `div-rect` (aliases `div-proc`, `divided-process`,
   `divided-rectangle`): a box with a horizontal line across it, a row below its top
@@ -11,10 +11,16 @@ its outline, as `mmdc` draws them:
   `lined-rectangle`, `shaded-process`): a box with one vertical line half a cell inside
   its left side, 2 columns wider than a box, the label centred;
 - the **lined cylinder** `lin-cyl` (aliases `disk`, `lined-cylinder`): a cylinder with
-  a second front arc a row below the lid's, so it is two rows taller than a box.
+  a second front arc a row below the lid's, so it is two rows taller than a box;
+- the **horizontal cylinder** `h-cyl` (aliases `das`, `horizontal-cylinder`): a cylinder
+  on its side, straight along its top and bottom, with a cap a column deep at each end:
+  a half ellipse on the left, a full one on the right (its inner arc is the extra
+  stroke). It is 4 columns wider than a box, so that the label clears the inner arc, and the
+  label is centred.
 
 The extra line is part of the shape's interior: edges still meet the outer outline
-exactly (an arrowhead touches it, as with a box, a subroutine or a cylinder), a node's
+exactly (an arrowhead touches it, as with a box, a subroutine or a cylinder; into the
+horizontal cylinder's caps it touches the curve), a node's
 `stroke` colour colours the extra line too, and its `fill` fills the whole outline.
 Checked by `mermaid-kitty.sh` at width 80, with `--img kitty` and pinned cell sizes.
 
@@ -148,6 +154,101 @@ graph LR
 graph LR
     c0@{ shape: lin-cyl, label: "lin-cyl" } --> c1@{ shape: disk, label: "disk" }
     c1 --> c2@{ shape: lined-cylinder, label: "lined-cylinder" }
+```
+
+## The horizontal cylinder
+
+Expected: a box, then a cylinder on its side, top down. The arrow from the box ends on
+the straight top edge of the cylinder, in the middle; the arrow out of it leaves its
+straight bottom edge. The left end is a half ellipse (a curved side), the right end a
+full ellipse: its outline, and inside it the arc that closes the front of the cylinder.
+The label is centred between the caps.
+
+```mermaid
+graph TD
+    a[Box] --> b@{ shape: h-cyl, label: "Horizontal" }
+    b --> c[Box]
+```
+
+## The horizontal cylinder, left to right
+
+Expected: the arrows run through the caps: the one into the cylinder ends on the
+middle of the curved left end, the one out of it starts on the right end's outline, at
+the level of the label, past the front arc. The full ellipse is on the right.
+
+```mermaid
+graph LR
+    a[In] --> b@{ shape: h-cyl, label: "Queue" } --> c[Out]
+```
+
+## The horizontal cylinder, in `RL` and `BT`
+
+Expected: the full ellipse stays on the right in `RL`, where the flow runs from right
+to left: the arrow enters through the full end and leaves through the half one. In `BT`
+the cylinder is the same way up as top-down, full end on the right.
+
+```mermaid
+graph RL
+    a[In] --> b@{ shape: h-cyl, label: "Queue" } --> c[Out]
+```
+
+```mermaid
+graph BT
+    a[In] --> b@{ shape: h-cyl, label: "Queue" } --> c[Out]
+```
+
+## The horizontal cylinder, one line and three
+
+Expected: a one-line label and a label of three lines: the straight part grows by a
+row per line, the caps follow the height, and each line of the label is centred.
+
+```mermaid
+graph LR
+    a@{ shape: h-cyl, label: "One" } --> b@{ shape: h-cyl, label: "Three<br>lines<br>of text" }
+    b --> c@{ shape: h-cyl, label: "Two<br>lines" }
+```
+
+## The horizontal cylinder, several edges
+
+Expected: edges arrive and leave off the middle of a side and meet the curved ends on
+their outline, an arrowhead on the curve itself.
+
+```mermaid
+graph LR
+    a[A] --> q@{ shape: h-cyl, label: "Queue" }
+    b[B] --> q
+    q --> c[C]
+    q --> d[D]
+    q --> e[E]
+```
+
+```mermaid
+graph TD
+    a[A] --> q@{ shape: h-cyl, label: "Queue" }
+    b[B] --> q
+    q --> c[C]
+    q --> d[D]
+```
+
+## The horizontal cylinder, styled
+
+Expected: a pale fill under the whole outline, caps included, and a blue stroke that
+also colours the inner arc of the right cap.
+
+```mermaid
+graph LR
+    a[In] --> b@{ shape: h-cyl, label: "Queue" }
+    style b fill:#eef,stroke:#00c
+```
+
+## The horizontal cylinder, aliases
+
+Expected: three horizontal cylinders, each labelled with the name it was written with.
+
+```mermaid
+graph LR
+    h0@{ shape: h-cyl, label: "h-cyl" } --> h1@{ shape: das, label: "das" }
+    h1 --> h2@{ shape: horizontal-cylinder, label: "horizontal-cylinder" }
 ```
 
 ## Declined

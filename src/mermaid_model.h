@@ -28,9 +28,10 @@ enum class Shape {
     TrapB,
     TrapT,
     Odd,
-    DividedRect,   // a box with a line across it, a row below its top
-    LinedRect,     // a box with a vertical line near its left side
-    LinedCylinder  // a cylinder with a second arc under its lid
+    DividedRect,    // a box with a line across it, a row below its top
+    LinedRect,      // a box with a vertical line near its left side
+    LinedCylinder,  // a cylinder with a second arc under its lid
+    HCylinder       // a cylinder on its side: a full cap on the right, half of one on the left
 };
 enum class Line { Solid, Dotted, Thick, Invisible };
 enum class End { None, Arrow, Circle, Cross };

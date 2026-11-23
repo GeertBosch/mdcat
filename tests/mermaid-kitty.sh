@@ -276,6 +276,7 @@ check_touch 'b{{Hex}}' '10-11 50-111 150-151'
 check_touch 'b@{ shape: div-rect, label: "Div" }' '10-11 50-111 130-131 170-171'
 check_touch 'b@{ shape: lin-rect, label: "Lin" }' '10-11 50-111 150-151'
 check_touch 'b@{ shape: lin-cyl, label: "Lin" }' '10-11 50-111 130-131 150-151 190-191'
+check_touch 'b@{ shape: h-cyl, label: "Hor" }' '10-11 50-111 150-151'
 
 # Structure of every APC. (The previewer has already decoded every PNG: signature, CRC, zlib
 # stream, and size c*cellW x r*cellH.)

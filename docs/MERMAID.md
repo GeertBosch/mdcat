@@ -350,13 +350,14 @@ graph LR
 | `@{ shape: div-rect }` | divided process: a box with a line across it, a row below its top |
 | `@{ shape: lin-rect }` | lined process: a box with a line just inside its left side |
 | `@{ shape: lin-cyl }` | lined cylinder: a cylinder with a second arc a row under its lid |
+| `@{ shape: h-cyl }` | horizontal cylinder: on its side, a half ellipse at the left end and a full one at the right |
 
 Mermaid's newer form names a shape instead of drawing it, `a@{ shape: db, label:
 "Store" }`, and every short name or alias of the shapes above works: `rect`,
 `rounded`, `stadium`, `circle`, `dbl-circ`, `fr-rect`, `cyl`, `diam`, `hex`,
 `lean-r`, `lean-l`, `trap-b`, `trap-t`, `odd`, `div-rect`, `lin-rect`, `lin-cyl`,
-`decision`, `database`, `disk`, `shaded-process`, and more. The last three shapes in
-the table have no bracket form; they are written only this way.
+`h-cyl`, `decision`, `database`, `disk`, `shaded-process`, `das`, and more. The last
+four shapes in the table have no bracket form; they are written only this way.
 Other keys in the block, such as `icon:`, are ignored. A name for a shape that isn't
 drawn here sends the diagram to the fallback.
 
@@ -369,10 +370,12 @@ the label; a rhombus is four rows taller than its label and about twice as wide;
 circle is widened until the label's box fits inside; and the slanted shapes are two
 columns wider, with sides slanted by one column; a divided process is a row taller,
 with its label under the line, a lined process two columns wider, and a lined
-cylinder two rows taller than a box, its label under both arcs. Each draws what
-`mmdc` draws, and its extra line is interior: edges still meet the outer outline, a
-`stroke` colour from `style` also colours the extra line, and a `fill` fills the whole
-shape. Quoted and Markdown labels work in every shape.
+cylinder two rows taller than a box, its label under both arcs; a horizontal
+cylinder is four columns wider than a box, with caps a column deep, so that the label
+clears the inner arc of the full cap on the right (which stays on the right in `RL`).
+Each draws what `mmdc` draws, and its extra line is interior: edges still meet the
+outer outline, a `stroke` colour from `style` also colours the extra line, and a
+`fill` fills the whole shape. Quoted and Markdown labels work in every shape.
 
 ```mermaid
 graph TD

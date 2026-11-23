@@ -41,10 +41,12 @@ public:
           b(8L * (bottom - s / 2) + 4L * s),
           hw(4L * s),
           gap(16L * s),
-          cap(4L * ch) {
+          cap(4L * ch),
+          hcap(8L * cw) {
         const long w = r - l, h = b - t;
         rad = sh == Shape::Stadium ? h / 2 : std::min(4L * ch, std::min(w, h) / 2);
         cap = std::min(cap, h / 4);
+        hcap = std::min(hcap, std::min(h / 4, w / 4));
         point = std::min(8L * ch, w / 4);
         slant = std::min(8L * cw, w / 4);
     }
@@ -69,6 +71,10 @@ public:
             return (x >= l - g && x <= r + g && y >= t + cap && y <= b - cap) ||
                 ellipse(x, y, cx, t + cap, (r - l) / 2 + g, cap + g) ||
                 ellipse(x, y, cx, b - cap, (r - l) / 2 + g, cap + g);
+        case Shape::HCylinder:
+            return (x >= l + hcap && x <= r - hcap && y >= t - g && y <= b + g) ||
+                ellipse(x, y, l + hcap, cy, hcap + g, (b - t) / 2 + g) ||
+                ellipse(x, y, r - hcap, cy, hcap + g, (b - t) / 2 + g);
         case Shape::Odd: {
             // The box less a wedge that opens on its left side; the wedge is cut off far enough
             // to the left that it never ends inside the grown box.
@@ -106,6 +112,11 @@ public:
                     return true;
             }
             return false;
+        }
+        case Shape::HCylinder: {  // the inner edge of the right cap: its ellipse's left half
+            const long c = (b - t) / 2;
+            return x <= r - hcap && ellipse(x, y, r - hcap, cy, hcap + hw, c + hw) &&
+                !ellipse(x, y, r - hcap, cy, hcap - hw, c - hw);
         }
         default: return false;
         }
@@ -253,6 +264,7 @@ private:
     long hw;          // half a stroke
     long gap;         // between the two outlines of a double circle
     long cap;         // the vertical radius of a cylinder's lid
+    long hcap;        // the horizontal radius of the caps of a cylinder on its side
     long rad = 0;     // the corner radius of a rounded box
     long point = 0;   // how far a hexagon's points reach in
     long slant = 0;   // how far a slanted side or a notch reaches in: a column
@@ -291,6 +303,11 @@ inline Footprint footprint(
     case Shape::TrapB:
     case Shape::TrapT: f.cols += 2; break;
     case Shape::Odd: f.cols += 1; break;
+    case Shape::HCylinder:
+        // A cap is a column deep and the full one's inner arc reaches two in from the right, so
+        // two more columns than a stadium's keep the label a column clear of it.
+        f.cols += 4;
+        break;
     case Shape::LinedRect: f.cols += 2; break;  // room for the line, as a subroutine's
     case Shape::DividedRect:                    // a row for the part above the line
         f.rows += 1;

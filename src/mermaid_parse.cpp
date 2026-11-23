@@ -555,7 +555,10 @@ const std::map<std::string, Shape>& shapeNames() {
                                                         {"shaded-process", Shape::LinedRect},
                                                         {"lin-cyl", Shape::LinedCylinder},
                                                         {"disk", Shape::LinedCylinder},
-                                                        {"lined-cylinder", Shape::LinedCylinder}};
+                                                        {"lined-cylinder", Shape::LinedCylinder},
+                                                        {"h-cyl", Shape::HCylinder},
+                                                        {"das", Shape::HCylinder},
+                                                        {"horizontal-cylinder", Shape::HCylinder}};
     return kNames;
 }
 
