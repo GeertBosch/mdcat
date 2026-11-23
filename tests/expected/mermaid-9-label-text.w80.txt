@@ -95,6 +95,42 @@ image @83,15 c=50 r=9 z=0 C=1 png=500x180
                                                      ▐▄▟█ Last ▐
                                                         ▐▄▄▄▄▄▄▟
 
+A literal less-than sign
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: a < is a tag only when a letter, / or ! follows it; otherwise it is
+text, as > is. So c < 5, b >= 0 and 1 <= 2 are drawn as written, in a quoted
+node label, an unquoted one, a Markdown string, a quoted edge label and the text
+in the middle of a link. <br> still breaks a line.
+
+image @101,34 c=11 r=26 z=0 C=1 png=110x520
+                                   ▗▄▄▄▄▄▄▄▄
+                                   ▐ c < 5 ▐
+                                   ▐▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                    1 <= 2
+                                       ▐
+                                       ▐
+                                  ▗▄▄▄▄█▙▄▄▄▄
+                                  ▐ b >= 0  ▐
+                                  ▐▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                     x < y
+                                       ▐
+                                       ▐
+                                   ▗▄▄▄█▙▄▄▄
+                                   ▐ c < d ▐
+                                   ▐ next  ▐
+                                   ▐▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                       ▐
+                                   ▗▄▄▄█▙▄▄▄
+                                   ▐ p < q ▐
+                                   ▐▄▄▄▄▄▄▄▟
+
 Markdown strings
 ────────────────────────────────────────────────────────────────────────────────
 
@@ -103,7 +139,7 @@ markers are not shown. A newline inside the string is a hard break. An entity
 code becomes its character and is never read as Markdown: #42; is a literal
 star.
 
-image @101,30 c=19 r=19 z=0 C=1 png=190x380
+image @136,30 c=19 r=19 z=0 C=1 png=190x380
                               ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                               ▐ Bold and italic ▐
                               ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
@@ -129,7 +165,7 @@ A Markdown edge label
 
 Expected: the label on the edge is bold, and it is drawn like any other.
 
-image @126,24 c=32 r=7 z=0 C=1 png=320x140
+image @161,24 c=32 r=7 z=0 C=1 png=320x140
                                                ▗▄▄▄▄▄▄
                                             ▗▄▟█ End ▐
                         ▗▄▄▄▄▄▄▄▄ ▗▄▄▖yes▗▄▄▛  ▐▄▄▄▄▄▟
@@ -145,7 +181,7 @@ Expected: the string wraps at 24 columns, and the box grows to hold the lines. A
 word longer than 24 columns is cut. The style that is on where a line ends is
 closed there and reopened on the next line, which the .ansi.txt golden shows.
 
-image @141,25 c=29 r=16 z=0 C=1 png=290x320
+image @176,25 c=29 r=16 z=0 C=1 png=290x320
                                    ▗▄▄▄▄▄▄▄▄
                                    ▐ Start ▐
                                    ▐▄▄▄▄▄▄▄▟
@@ -170,7 +206,7 @@ Expected: front matter turns wrapping off, so the same string stays on one line,
 as wide as the diagram may be. (An edge label that wide is not drawn, so only a
 node shows it.)
 
-image @165,10 c=59 r=8 z=0 C=1 png=590x160
+image @200,10 c=59 r=8 z=0 C=1 png=590x160
                                    ▗▄▄▄▄▄▄▄▄
                                    ▐ Start ▐
                                    ▐▄▄▄▄▄▄▄▟
@@ -187,7 +223,7 @@ Expected: the asterisks in a*b*c and the underscores in x_y_z are drawn as they
 are, because only a Markdown string is interpreted. The quoted label is as
 literal.
 
-image @181,19 c=42 r=3 z=0 C=1 png=420x60
+image @216,19 c=42 r=3 z=0 C=1 png=420x60
                    ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                    ▐ a*b*c ▐▄▄▄▟█ x_y_z ▐▄▄▄▟█ **not bold** ▐
                    ▐▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
@@ -198,7 +234,7 @@ Wide characters
 Expected: CJK and emoji labels are measured in columns, so the boxes fit them,
 and nothing is split in the middle of a character.
 
-image @191,29 c=21 r=17 z=0 C=1 png=210x340
+image @226,29 c=21 r=17 z=0 C=1 png=210x340
                               ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                               ▐ 日本語のラベル  ▐
                               ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
@@ -225,7 +261,7 @@ line break there starts a new line. The first node is a bold title over a plain
 second line, the second a plain title with a second line, the third one line, a
 b.
 
-image @217,30 c=19 r=15 z=0 C=1 png=190x300
+image @252,30 c=19 r=15 z=0 C=1 png=190x300
                                ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                               ▐▘    engine     ▝▙
                               ▐▖ Chess Engine  ▗▛
@@ -247,7 +283,8 @@ Declined
 
 Expected: shown as source, as the .err golden says, in this order. HTML other
 than a line break; an entity code that is not known; a quote that never closes;
-a Markdown string with HTML in it; a label with a quote inside the quotes.
+a Markdown string with HTML in it; a label with a quote inside the quotes; a<b,
+where <b starts a tag.
 
   graph TD
       a["<b>bold</b>"] --> b[B]
@@ -263,4 +300,7 @@ a Markdown string with HTML in it; a label with a quote inside the quotes.
 
   graph TD
       a["say "hi""] --> b[B]
+
+  graph TD
+      a["a<b"] --> b[B]
 

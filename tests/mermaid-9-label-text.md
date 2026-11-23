@@ -55,6 +55,20 @@ graph LR
     b -->|"edge<br>label"| d[Last]
 ```
 
+## A literal less-than sign
+
+Expected: a `<` is a tag only when a letter, `/` or `!` follows it; otherwise it is
+text, as `>` is. So `c < 5`, `b >= 0` and `1 <= 2` are drawn as written, in a quoted
+node label, an unquoted one, a Markdown string, a quoted edge label and the text in
+the middle of a link. `<br>` still breaks a line.
+
+```mermaid
+graph TD
+    a["c < 5"] -->|"1 <= 2"| b["b >= 0"]
+    b -- x < y --> c[c < d<br>next]
+    c --> d["`p < q`"]
+```
+
 ## Markdown strings
 
 Expected: `**bold**`, `*italic*` and `` `code` `` are styled in the text layer, and
@@ -150,7 +164,8 @@ graph TD
 
 Expected: shown as source, as the `.err` golden says, in this order. HTML other than
 a line break; an entity code that is not known; a quote that never closes; a Markdown
-string with HTML in it; a label with a quote inside the quotes.
+string with HTML in it; a label with a quote inside the quotes; `a<b`, where `<b`
+starts a tag.
 
 ```mermaid
 graph TD
@@ -175,4 +190,9 @@ graph TD
 ```mermaid
 graph TD
     a["say "hi""] --> b[B]
+```
+
+```mermaid
+graph TD
+    a["a<b"] --> b[B]
 ```

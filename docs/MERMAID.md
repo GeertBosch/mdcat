@@ -93,7 +93,7 @@ The reasons, as `MDCAT_MERMAID_DEBUG=1` words them:
 | `unsupported shape: NAME` | `A@{ shape: doc }` and the other shapes that are not [drawn](#10-node-shapes) |
 | `unsupported label: …` | a label that is not valid where it stands, such as `"say "hi""` |
 | `unsupported entity: …` | `#nosuchentity;` |
-| `html in label` | HTML other than `<br>` |
+| `html in label` | an HTML tag other than `<br>`, such as `<b>` or `a<b`; a `<` before a space, digit or `=` is plain text |
 | `label too wide: N > 24` | an edge label over 24 columns |
 | `back edges: N > M`, `crossings: N > M` | too tangled to read, see [Limits](#limits) |
 | `too many nodes`, `too many ranks`, `too many ports` | more than 60 boxes or ranks, or an edge fan too wide to give every edge a port |
@@ -288,8 +288,17 @@ graph TD
     report -. later .-> ship
 ```
 
-A label may be up to 24 columns wide. Anything wider, a label with HTML other than
-`<br>`, and a label on an invisible link are [declined](#2-diagrams-that-are-not-drawn-here).
+The text in the middle of a link is everything up to the link's own end, so it may
+hold parentheses, brackets, braces and pipes without quotes: `a -- foo() --> b`,
+`a -- [5] --> b`, `a -- x|y --> b`. The space after `--`, `-.` or `==` may be left
+out when what follows cannot continue a link, as in `a --[7] --> b`, `a -.[x].-> b`
+and `a ==[y]==> b`. A `|text|` label after `-->` is stricter, as in Mermaid: it may
+not hold brackets or parentheses (Mermaid reports a parse error there, as it does for
+`a --x--> b`). Text that touches the end of its link (`a -- foo--> b`) is declined,
+since Mermaid reads the `o` as a marker and drops it.
+
+A label may be up to 24 columns wide. Anything wider, a label with an HTML tag other
+than `<br>`, and a label on an invisible link are [declined](#2-diagrams-that-are-not-drawn-here).
 
 ## 9. Label text
 
@@ -304,7 +313,9 @@ Labels follow Mermaid's rules for text.
   unknown name is declined.
 - **Line breaks**: `<br>`, `<br/>` or `<br />` starts a new line. A node with a
   label of *n* lines is *n* + 2 rows tall, and each line is centred. Other HTML is
-  declined.
+  declined. A `<` starts a tag only when a letter, `/` or `!` follows it, so
+  `a["c < 5"]`, `b >= 0` and `1 <= 2` are plain text, while `a<b` is a tag (Mermaid
+  drops its text) and is declined.
 - **Markdown strings**, ``a["`**bold** and *italic*`"]``, are the one kind of label
   that interprets Markdown: bold, italic, `` `code` `` and a newline as a hard
   break. They wrap at 24 columns. A plain label such as `a*b*c` is drawn exactly as

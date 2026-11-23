@@ -43,6 +43,41 @@ graph TD
     a6[six] <-- both --> b6[both]
 ```
 
+## Brackets and pipes in link text (top down)
+
+Expected: text in the middle of a link is everything up to the link's own end, so
+parentheses, brackets, braces and a pipe are plain text there (`foo()`, `[5]`, `{n}`,
+`a|b`), and the label is drawn on the edge as written. (After `-->` or `---`, a `|text|`
+label may not hold them: Mermaid rejects that, and see *Declined*.)
+
+```mermaid
+graph TD
+    a1[one] -- foo() --> b1[call]
+    a2[two] -- [5] --> b2[index]
+    a3[three] -- {n} --> b3[count]
+    a4[four] -- a|b --> b4[pipe]
+```
+
+## Link text without a space after the start (top down)
+
+Expected: `--[7] -->`, `-.[x].->` and `==[y]==>` are text links too, as in Mermaid,
+and so is `--[8]-->`, which needs no space at the end either. Each is drawn like its
+spaced form: solid, dashed or thick. Every other link, `-->`, `---`, `--o`, `-.->`
+and `==>`, reads as it always did.
+
+```mermaid
+graph TD
+    a1[one] --[7] --> b1[solid]
+    a2[two] --[8]--> b2[solid]
+    a3[three] -.[x].-> b3[dotted]
+    a4[four] ==[y]==> b4[thick]
+    a5[five] --> b5[plain]
+    a6[six] --- b6[open]
+    a7[seven] -.-> b7[dotted]
+    a8[eight] ==> b8[thick]
+    a9[nine] --o b9[circle]
+```
+
 ## A decision (top down)
 
 Expected: `Valid?` has two labelled branches, `yes` and `no`, both leaving it through
@@ -139,9 +174,13 @@ graph LR
 
 ## Declined
 
-Expected: shown as source, as the `.err` golden says. A label over 24 columns is too
-wide; a label with HTML other than a line break, or an invisible link with a label, is
-not drawn. (Quoted and Markdown labels are drawn: `mermaid-9-label-text.md`.)
+Expected: shown as source, as the `.err` golden says, in this order. A label over 24
+columns is too wide; a label with HTML other than a line break, or an invisible link
+with a label, is not drawn. A `|text|` label with parentheses or brackets is a parse
+error in Mermaid, and so is `--x-->`, where `--x` is a link end. Text that touches
+the end of its link (`-- foo--> `) is read by Mermaid as `fo` with the `o` taken as a
+marker, so it is declined rather than drawn as `foo`. (Quoted and Markdown labels are
+drawn: `mermaid-9-label-text.md`.)
 
 ```mermaid
 graph TD
@@ -156,4 +195,24 @@ graph TD
 ```mermaid
 graph TD
     a[A] ~~~|hidden| b[B]
+```
+
+```mermaid
+graph TD
+    a[A] -->|foo()| b[B]
+```
+
+```mermaid
+graph TD
+    a[A] -->|a[b]| b[B]
+```
+
+```mermaid
+graph TD
+    a[A] --x--> b[B]
+```
+
+```mermaid
+graph TD
+    a[A] -- foo--> b[B]
 ```

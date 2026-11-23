@@ -54,6 +54,48 @@ image @42,6 c=68 r=11 z=0 C=1 png=680x220
       ▐ thick ▐  ▐ thick ▐  ▐ dotted  ▐  ▐ circle  ▐  ▐ cross ▐  ▐ both  ▐
       ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟
 
+Brackets and pipes in link text (top down)
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: text in the middle of a link is everything up to the link's own end,
+so parentheses, brackets, braces and a pipe are plain text there (foo(), [5],
+{n}, a|b), and the label is drawn on the edge as written. (After --> or ---, a
+|text| label may not hold them: Mermaid rejects that, and see Declined.)
+
+image @62,19 c=42 r=11 z=0 C=1 png=420x220
+                    ▗▄▄▄▄▄▄    ▗▄▄▄▄▄▄   ▗▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄
+                    ▐ one ▐    ▐ two ▐   ▐ three ▐  ▐ four  ▐
+                    ▐▄▄▄▄▄▟    ▐▄▄▄▄▄▟   ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟
+                       ▐          ▐          ▐          ▐
+                       ▐          ▐          ▐          ▐
+                     foo()       [5]        {n}        a|b
+                       ▐          ▐          ▐          ▐
+                       ▐          ▐          ▐          ▐
+                   ▗▄▄▄█▙▄▄▄  ▗▄▄▄█▙▄▄▄  ▗▄▄▄█▙▄▄▄  ▗▄▄▄█▙▄▄▄
+                   ▐ call  ▐  ▐ index ▐  ▐ count ▐  ▐ pipe  ▐
+                   ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▟
+
+Link text without a space after the start (top down)
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: --[7] -->, -.[x].-> and ==[y]==> are text links too, as in Mermaid,
+and so is --[8]-->, which needs no space at the end either. Each is drawn like
+its spaced form: solid, dashed or thick. Every other link, -->, ---, --o, -.->
+and ==>, reads as it always did.
+
+image @82,1 c=77 r=11 z=0 C=1 png=770x220
+  ▗▄▄▄▄   ▗▄▄▄▄   ▗▄▄▄▄▄▄  ▗▄▄▄▄▄▄ ▗▄▄▄▄▄▄  ▗▄▄▄▄   ▗▄▄▄▄▄▄  ▗▄▄▄▄▄▄  ▗▄▄▄▄▄▄
+  ▐one▐   ▐two▐   ▐three▐  ▐four ▐ ▐five ▐  ▐six▐   ▐seven▐  ▐eight▐  ▐nine ▐
+  ▐▄▄▄▟   ▐▄▄▄▟   ▐▄▄▄▄▄▟  ▐▄▄▄▄▄▟ ▐▄▄▄▄▄▟  ▐▄▄▄▟   ▐▄▄▄▄▄▟  ▐▄▄▄▄▄▟  ▐▄▄▄▄▄▟
+    ▐       ▐        ▐        █       ▐       ▐        ▐        █        ▐
+    ▐       ▐        ▐        █       ▐       ▐        ▐        █        ▐
+   [7]     [8]      [x]      [y]      ▐       ▐        ▐        █        ▐
+    ▐       ▐        ▐        █       ▐       ▐        ▐        █        ▐
+    ▐       ▐        ▐       ▗█▖      ▐       ▐        ▐       ▗█▖       ▐
+ ▗▄▄█▙▄▄ ▗▄▄█▙▄▄ ▗▄▄▄█▙▄▄▄ ▗▄▄█▄▄▄ ▗▄▄█▙▄▄ ▗▄▄▟▄▄▄ ▗▄▄▄█▙▄▄▄ ▗▄▄█▄▄▄ ▗▄▄▄█▄▄▄▄
+ ▐solid▐ ▐solid▐ ▐dotted ▐ ▐thick▐ ▐plain▐ ▐open ▐ ▐dotted ▐ ▐thick▐ ▐circle ▐
+ ▐▄▄▄▄▄▟ ▐▄▄▄▄▄▟ ▐▄▄▄▄▄▄▄▟ ▐▄▄▄▄▄▟ ▐▄▄▄▄▄▟ ▐▄▄▄▄▄▟ ▐▄▄▄▄▄▄▄▟ ▐▄▄▄▄▄▟ ▐▄▄▄▄▄▄▄▟
+
 A decision (top down)
 ────────────────────────────────────────────────────────────────────────────────
 
@@ -61,7 +103,7 @@ Expected: Valid? has two labelled branches, yes and no, both leaving it through
 one port and carrying their labels in a rank of their own halfway down. Both
 branches then meet at Done.
 
-image @61,30 c=20 r=27 z=0 C=1 png=200x540
+image @101,30 c=20 r=27 z=0 C=1 png=200x540
                                   ▗▄▄▄▄▄▄▄▄
                                   ▐ Input ▐
                                   ▐▄▄▄▄▄▄▄▟
@@ -97,7 +139,7 @@ Expected: the same graph turned on its side. Each label sits on its edge in a
 column of its own between the boxes, and the edge is cut a little before it and
 a little after.
 
-image @96,10 c=60 r=7 z=0 C=1 png=600x140
+image @136,10 c=60 r=7 z=0 C=1 png=600x140
                                              ▗▄▄▄▄▄▄
                                           ▗▄▟█ Run ▐▄▄▄▄▄▄▄▄
           ▗▄▄▄▄▄▄▄▄     ▗▄▄▄▄▄▄▄▄▄ ▗▄▖yes▗▛  ▐▄▄▄▄▄▟       ▐  ▗▄▄▄▄▄▄▄
@@ -113,7 +155,7 @@ Expected: a -- skip ---> c is two steps long, so its label sits beside Middle,
 the box halfway down, and the edge runs straight past it. The edge a -->|one| d
 is one step long, so its label sits one step down, beside nothing.
 
-image @111,25 c=29 r=22 z=0 C=1 png=290x440
+image @151,25 c=29 r=22 z=0 C=1 png=290x440
                                     ▗▄▄▄▄▄▄▄▄
                                     ▐ Start ▐
                                     ▐▄▄▄▄▄▄▄▟
@@ -143,7 +185,7 @@ Other directions (bottom to top, right to left)
 Expected: labels are never mirrored, and the arrowheads still point the true
 way.
 
-image @140,34 c=11 r=19 z=0 C=1 png=110x380
+image @180,34 c=11 r=19 z=0 C=1 png=110x380
                                     ▗▄▄▄▄▄▄
                                     ▐ End ▐
                                     ▐▄▄▄▄▄▟
@@ -164,7 +206,7 @@ image @140,34 c=11 r=19 z=0 C=1 png=110x380
                                    ▐ Start ▐
                                    ▐▄▄▄▄▄▄▄▟
 
-image @160,15 c=50 r=3 z=0 C=1 png=500x60
+image @200,15 c=50 r=3 z=0 C=1 png=500x60
                ▗▄▄▄▄▄▄            ▗▄▄▄▄▄▄▄▄▄            ▗▄▄▄▄▄▄▄▄
                ▐ End ▐█▄▄▖more▗▄▄▄▟ Middle ▐█▄▄▖left▗▄▄▄▟ Start ▐
                ▐▄▄▄▄▄▟            ▐▄▄▄▄▄▄▄▄▟            ▐▄▄▄▄▄▄▄▟
@@ -175,7 +217,7 @@ Two labelled edges into one target (top down)
 Expected: the two labelled edges and the unlabelled one from C all arrive at
 Target through one port, on one bus, with one arrowhead.
 
-image @170,30 c=19 r=13 z=0 C=1 png=190x260
+image @210,30 c=19 r=13 z=0 C=1 png=190x260
                               ▗▄▄▄▄  ▗▄▄▄▄  ▗▄▄▄▄
                               ▐ A ▐  ▐ B ▐  ▐ C ▐
                               ▐▄▄▄▟  ▐▄▄▄▟  ▐▄▄▄▟
@@ -195,7 +237,7 @@ Two labelled edges into one target (left to right)
 
 Expected: as above, turned on its side.
 
-image @189,25 c=29 r=11 z=0 C=1 png=290x220
+image @229,25 c=29 r=11 z=0 C=1 png=290x220
                          ▗▄▄▄▄
                          ▐ A ▐▄▄▄▖first▗▄▄
                          ▐▄▄▄▟           ▐
@@ -214,7 +256,7 @@ Chains and groups
 Expected: a label belongs to the link it is written on, so in a chain only the
 second link has one, and & gives the same label to each edge.
 
-image @207,7 c=65 r=7 z=0 C=1 png=650x140
+image @247,7 c=65 r=7 z=0 C=1 png=650x140
                                                                  ▗▄▄▄▄▄▄
                                                               ▗▄▟█ One ▐
        ▗▄▄▄▄▄▄▄▄     ▗▄▄▄▄▄▄▄▄▄                ▗▄▄▄▄▄▄ ▗▄▖fan▗▛  ▐▄▄▄▄▄▟
@@ -226,10 +268,13 @@ image @207,7 c=65 r=7 z=0 C=1 png=650x140
 Declined
 ────────────────────────────────────────────────────────────────────────────────
 
-Expected: shown as source, as the .err golden says. A label over 24 columns is
-too wide; a label with HTML other than a line break, or an invisible link with a
-label, is not drawn. (Quoted and Markdown labels are drawn:
-mermaid-9-label-text.md.)
+Expected: shown as source, as the .err golden says, in this order. A label over
+24 columns is too wide; a label with HTML other than a line break, or an
+invisible link with a label, is not drawn. A |text| label with parentheses or
+brackets is a parse error in Mermaid, and so is --x-->, where --x is a link end.
+Text that touches the end of its link (-- foo--> ) is read by Mermaid as fo with
+the o taken as a marker, so it is declined rather than drawn as foo. (Quoted and
+Markdown labels are drawn: mermaid-9-label-text.md.)
 
   graph TD
       a[A] -->|this label is much too long for the edge| b[B]
@@ -239,4 +284,16 @@ mermaid-9-label-text.md.)
 
   graph TD
       a[A] ~~~|hidden| b[B]
+
+  graph TD
+      a[A] -->|foo()| b[B]
+
+  graph TD
+      a[A] -->|a[b]| b[B]
+
+  graph TD
+      a[A] --x--> b[B]
+
+  graph TD
+      a[A] -- foo--> b[B]
 

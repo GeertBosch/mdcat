@@ -68,6 +68,14 @@ bool plainLabelChar(char c) {
     }
 }
 
+// Whether the `<` at s[p] starts an HTML tag, as Mermaid reads it: only when a letter, `/` or `!`
+// follows. Any other `<` (`c < 5`, `1 <= 2`) is literal text, as `>` is.
+bool startsTag(const std::string& s, size_t p) {
+    if (p + 1 >= s.size()) return false;
+    const unsigned char n = static_cast<unsigned char>(s[p + 1]);
+    return std::isalpha(n) || n == '/' || n == '!';
+}
+
 // The length of the line break `<br>`, `<br/>` or `<br />` (in any case) at s[p], or 0.
 size_t lineBreakAt(const std::string& s, size_t p) {
     auto lower = [&](size_t i) {
@@ -140,8 +148,12 @@ size_t entityAt(const std::string& s, size_t p, unsigned& cp) {
 // The lines of a plain label, from `raw`, which is the text between the quotes of a quoted label or
 // the whole of an unquoted one. Whitespace collapses as HTML does, entity codes are decoded, and
 // `<br>` starts a new line; Mermaid shows everything else literally, so a `*` stays a `*`. Text
-// that is empty, or holds other HTML or (when unquoted) syntax characters, is declined.
-bool plainLabel(const std::string& raw, bool quoted, Label& label, std::string& reason) {
+// that is empty, or holds an HTML tag or (when unquoted) syntax characters, is declined. A `<` that
+// does not start a tag is literal. `edgeText` is the text in the middle of a link (`-- text -->`),
+// where brackets, parentheses, braces, pipes and `>` are plain text too, since only the link's own
+// stroke ends it.
+bool plainLabel(
+    const std::string& raw, bool quoted, Label& label, std::string& reason, bool edgeText = false) {
     std::vector<std::string> lines(1);
     auto trimmed = [](std::string& line) {
         while (!line.empty() && line.back() == ' ') line.pop_back();
@@ -153,9 +165,14 @@ bool plainLabel(const std::string& raw, bool quoted, Label& label, std::string& 
         const char c = raw[i];
         if (c == '<') {
             size_t len = lineBreakAt(raw, i);
-            if (len == 0) {
+            if (len == 0 && startsTag(raw, i)) {
                 reason = "html in label";
                 return false;
+            }
+            if (len == 0) {
+                lines.back() += c;
+                ++i;
+                continue;
             }
             trimmed(lines.back());
             lines.emplace_back();
@@ -177,7 +194,7 @@ bool plainLabel(const std::string& raw, bool quoted, Label& label, std::string& 
             if (!lines.back().empty() && lines.back().back() != ' ') lines.back() += ' ';
             ++i;
         } else if (static_cast<unsigned char>(c) < 0x20 || c == 0x7f ||
-                   !(quoted || plainLabelChar(c))) {
+                   !(quoted || plainLabelChar(c) || (edgeText && c != '"' && c != '`'))) {
             reason = "unsupported label";
             return false;
         } else {
@@ -207,9 +224,14 @@ bool markdownLabel(const std::string& raw, Label& label, std::string& reason) {
         const char c = raw[i];
         if (c == '<') {
             size_t len = lineBreakAt(raw, i);
-            if (len == 0) {
+            if (len == 0 && startsTag(raw, i)) {
                 reason = "html in label";
                 return false;
+            }
+            if (len == 0) {
+                md += "\\<";  // escaped, so the Markdown renderer never reads it as HTML
+                ++i;
+                continue;
             }
             md += "<br>";
             i += len;
@@ -276,7 +298,10 @@ bool quotedTail(const std::string& tail, std::string& out) {
 // string `"..."` (which may hold syntax characters), or a Markdown string `"`...`"`. Like Mermaid,
 // a quoted string may be followed by plain text, which joins it: a line break after the quote
 // starts a new line, as in `["`**engine**`"` then `Chess Engine` on the next line.
-bool parseLabelText(const std::string& raw, Label& label, std::string& reason) {
+bool parseLabelText(const std::string& raw,
+                    Label& label,
+                    std::string& reason,
+                    bool edgeText = false) {
     const std::string t = trim(raw);
     if (t.size() >= 2 && t.front() == '"') {
         const size_t close = t.find('"', 1);
@@ -295,12 +320,12 @@ bool parseLabelText(const std::string& raw, Label& label, std::string& reason) {
         return markdown ? markdownLabel(body, label, reason)
                         : plainLabel(body, /*quoted=*/true, label, reason);
     }
-    return plainLabel(t, /*quoted=*/false, label, reason);
+    return plainLabel(t, /*quoted=*/false, label, reason, edgeText);
 }
 
 // parseLabelText, with the label as written named in an "unsupported label" reason.
-bool parseLabel(const std::string& raw, Label& label, std::string& reason) {
-    if (parseLabelText(raw, label, reason)) return true;
+bool parseLabel(const std::string& raw, Label& label, std::string& reason, bool edgeText = false) {
+    if (parseLabelText(raw, label, reason, edgeText)) return true;
     if (reason.compare(0, 17, "unsupported label") == 0) {
         std::string shown;  // whitespace runs collapsed, so a multi-line label stays on one line
         for (char c : trim(raw)) {
@@ -812,8 +837,11 @@ struct Parser {
     // A link with its text in the middle, `-- text -->`, `-. text .->` or `== text ==>` at s[p], as
     // Mermaid reads it: a start (`--`, `-.` or `==`, after the same optional marker as parseLink
     // reads) and a space, then the text, then the end of a link of the same stroke. The end says
-    // the length and the marker on the right, so `-- No ---->` is 3 ranks long. `handled` says
-    // whether s[p] has that shape at all; if not, nothing is consumed.
+    // the length and the marker on the right, so `-- No ---->` is 3 ranks long. The space may be
+    // left out (`--[7] -->`) when the character after the start cannot continue a link, which is
+    // what tells `--[7]` from `-->`, `---`, `--o` and the like. The text is anything the link's
+    // stroke does not end, brackets and pipes included. `handled` says whether s[p] has that shape
+    // at all; if not, nothing is consumed.
     bool parseTextLink(const std::string& s, size_t& p, Edge& edge, bool& handled) {
         handled = false;
         auto at = [&](size_t i) { return i < s.size() ? s[i] : '\0'; };
@@ -826,11 +854,12 @@ struct Parser {
         }
         const bool dotted = at(q) == '-' && at(q + 1) == '.';
         const bool thick = at(q) == '=' && at(q + 1) == '=';
-        if (!(dotted || thick || (at(q) == '-' && at(q + 1) == '-')) ||
-            !std::isspace(static_cast<unsigned char>(at(q + 2))))
-            return true;
+        if (!(dotted || thick || (at(q) == '-' && at(q + 1) == '-'))) return true;
+        const char third = at(q + 2);
+        const bool spaced = std::isspace(static_cast<unsigned char>(third));
+        if (!spaced && (third == '\0' || std::strchr("-.=>oxX<~", third) != nullptr)) return true;
         handled = true;
-        const size_t textAt = q + 3;
+        const size_t textAt = spaced ? q + 3 : q + 2;
         const char stroke = dotted ? '.' : s[q];
         char right = '\0';
         size_t len = 0, end = std::string::npos, after = 0;
@@ -871,7 +900,12 @@ struct Parser {
             j += run;
         }
         if (end == std::string::npos) return fail(kUnsupportedSyntax);
-        if (!parseLabel(s.substr(textAt, end - textAt), edge.label, reason)) return false;
+        // Mermaid reads an `o`, `x` or `<` that touches the end of the link as that link's own
+        // start marker (`-- foo--> B` has the text `fo`), so the text would be misread: decline.
+        if (end > textAt && std::strchr("ox<", s[end - 1]) != nullptr)
+            return fail(kUnsupportedSyntax);
+        if (!parseLabel(s.substr(textAt, end - textAt), edge.label, reason, /*edgeText=*/true))
+            return false;
         if (left && !(left == right || (left == '<' && right == '>')))
             return fail(kUnsupportedSyntax);
         edge.line = dotted ? Line::Dotted : thick ? Line::Thick : Line::Solid;

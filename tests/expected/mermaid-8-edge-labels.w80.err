@@ -1,3 +1,7 @@
-mdcat: mermaid-8-edge-labels.md:146: mermaid: fallback: label too wide: 40 > 24
-mdcat: mermaid-8-edge-labels.md:151: mermaid: fallback: html in label
-mdcat: mermaid-8-edge-labels.md:156: mermaid: fallback: unsupported label: |hidden| b[B]
+mdcat: mermaid-8-edge-labels.md:185: mermaid: fallback: label too wide: 40 > 24
+mdcat: mermaid-8-edge-labels.md:190: mermaid: fallback: html in label
+mdcat: mermaid-8-edge-labels.md:195: mermaid: fallback: unsupported label: |hidden| b[B]
+mdcat: mermaid-8-edge-labels.md:200: mermaid: fallback: unsupported label: foo()
+mdcat: mermaid-8-edge-labels.md:205: mermaid: fallback: unsupported label: a[b]
+mdcat: mermaid-8-edge-labels.md:210: mermaid: fallback: unsupported syntax: a[A] --x--> b[B]
+mdcat: mermaid-8-edge-labels.md:215: mermaid: fallback: unsupported syntax: a[A] -- foo--> b[B]
