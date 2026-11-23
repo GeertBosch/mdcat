@@ -1187,31 +1187,30 @@ the box of N3, N4 and N5.
       N4 --> N6
       N5 --> N5
 
-Declined, LR: MongoDB query commands, as written
+Drawn, LR: MongoDB query commands, as written
 ────────────────────────────────────────────────────────────────────────────────
 
 The diagram exactly as MongoDB wrote it, except for the extract shape left out.
-Declined for its labels' words, parsed_find_command::parse() and the like, which
-are over 24 columns and cannot be wrapped, as it would be without the subgraph.
+Its edge labels are words such as parsed_find_command::parse() and
+MatchExpressionParser::parse() (up to 30 columns), which cannot be wrapped; an
+edge label may hold one up to 40 columns.
 
-  flowchart LR
-   subgraph s1[" "]
-          n1["Find"]
-          n2["Distinct"]
-          n3["Count"]
-    end
-      n1 --> n10["IDL Parsing"]
-      n2 --> n10
-      n3 --> n10
-      n10 --> n11["FindCommandRequest"] & n12["DistinctCommandRequest"]
-      n10 --> n21["CountCommandRequest"]
-      n13["ParsedFindCommand"] --> n17["CanonicalQuery"]
-      n19["ParsedDistinctCommand"] --> n17
-      n21 -- parseFromCount() --> n11
-      n11 -- "parsed_find_command::parse()<br>MatchExpressionParser::parse()" --> n13
-      n12 -- "parsed_distinct_command::parse()<br>MatchExpressionParser::parse()" --> n19
-
-      n17@{ shape: dbl-circ}
+image @1159,0 c=206 r=15 z=0 C=1 png=2060x300
+▗▄▄▄▄▄▄▄▄▄▄▄▄▄
+▐            ▐
+▐ ▗▄▄▄▄▄     ▐
+▐ ▐Find▐▄▄▄▄▄▟▄▄▄▄
+▐ ▐▄▄▄▄▟     ▐   ▐
+▐            ▐   ▐               ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+▐ ▗▄▄▄▄▄▄▄▄▄ ▐   ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄ ▐                                                                 ▐▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+▐ ▐Distinct▐▄▟▄▄▄█▟█IDL Parsing▐▄█▄▄▄▄ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄                                       ▝▜█FindCommandRequest▐▄▄▄▄▄  parsed_find_command::parse()    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+▐ ▐▄▄▄▄▄▄▄▄▟ ▐   ▐ ▐▄▄▄▄▄▄▄▄▄▄▄▟ ▐   ▐▟█CountCommandRequest▐▄▄▄▄▄▄▄▄▄▄▄▄▄▖parseFromCount()▗▄▄▄▄▄▄▄▄▛▀▜▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟    ▝▘MatchExpressionParser::parse()▝▜▟█ParsedFindCommand▐▄▄▄▄
+▐            ▐   ▐               ▐▄▄▄▄ ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟                                                                                                    ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟   ▐
+▐ ▗▄▄▄▄▄▄    ▐   ▐                   ▐                                                                                                                                                ▐   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▖
+▐ ▐Count▐▄▄▄▄▟▄▄▄▛                   ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄                                                                                                                       █▟██▛ CanonicalQuery ▜██
+▐ ▐▄▄▄▄▄▟    ▐                       ▐▟█DistinctCommandRequest▐▄▄ parsed_distinct_command::parse()   ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄                                                          ▐  ▝▀▀▀▀▀▀██████▛▀▀▀▀▀▘
+▐            ▐                         ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟ ▝▘ MatchExpressionParser::parse() ▝▜▟█ParsedDistinctCommand▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▛
+▐▄▄▄▄▄▄▄▄▄▄▄▄▟                                                                                       ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
 
 Declined: a box that an edge would have to cross
 ────────────────────────────────────────────────────────────────────────────────
@@ -1248,7 +1247,7 @@ The Mermaid source is the MongoDB diagram as written; its subgraphs have no
 titles of their own, so the id is the title. The 36-column edge label wraps at
 24 columns, as it would without subgraphs.
 
-image @1212,0 c=79 r=41 z=0 C=1 png=790x820
+image @1210,0 c=79 r=41 z=0 C=1 png=790x820
                                  ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄  at minimum and
                                  ▐Stable Probe ▐██ tickets not
                                  ▝▙▄▄▄▄▄▄▄▄▄▄▄▟▀▀▘  exhausted
@@ -1299,7 +1298,7 @@ each border and the next. X's and Y's edges merge above the outer box into one
 that crosses the outer border and then the inner one, into A. B's edge to C and
 D's merge below the inner box, inside the outer one.
 
-image @1262,30 c=20 r=26 z=0 C=1 png=200x520
+image @1260,30 c=20 r=26 z=0 C=1 png=200x520
                                ▗▄▄▄▄  ▗▄▄▄▄
                                ▐ X ▐  ▐ Y ▐
                                ▐▄▄▄▟  ▐▄▄▄▟
@@ -1334,7 +1333,7 @@ Expected: A and B in the inner box, C in the outer one beside it. B's edge to C
 leaves the inner box through its bottom border; the back edge from C to A runs
 up inside the outer box and enters the inner one through its right border.
 
-image @1296,31 c=17 r=22 z=0 C=1 png=170x440
+image @1294,31 c=17 r=22 z=0 C=1 png=170x440
                                ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                                ▐               ▐
                                ▐  ▗▄▄▄▄▄▄▄▄    ▐
@@ -1366,7 +1365,7 @@ loop on B and A's long edge to C. P's edge into A crosses the inner box's top
 border. P's long edge to R runs down the left of the inner box, and C's edge to
 R leaves it through its bottom border, both inside the outer one.
 
-image @1327,24 c=32 r=49 z=0 C=1 png=320x980
+image @1325,24 c=32 r=49 z=0 C=1 png=320x980
                         ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                         ▐                              ▐
                         ▐      ▗▄▄▄▄                   ▐
@@ -1425,7 +1424,7 @@ between the outer title and the inner border. X's edge to A runs through the
 outer title's row, so that title is moved left of the edge; the inner title is
 as well.
 
-image @1385,26 c=28 r=26 z=0 C=1 png=280x520
+image @1383,26 c=28 r=26 z=0 C=1 png=280x520
                                         ▗▄▄▄▄
                                         ▐ X ▐
                                         ▐▄▄▄▟
@@ -1460,7 +1459,7 @@ Expected: the outer box holds the inner one and C, which is below the inner box
 and so on a later rank. B's edge to C leaves the inner box through its bottom
 border.
 
-image @1419,30 c=19 r=26 z=0 C=1 png=190x520
+image @1417,30 c=19 r=26 z=0 C=1 png=190x520
                                         ▗▄▄▄▄
                                         ▐ X ▐
                                         ▐▄▄▄▟
@@ -1495,7 +1494,7 @@ Expected: both titles lie to the right of X's edge, so both boxes are wider than
 their members, on the right, to hold them; the outer box is wider than the inner
 one by a blank column and the borders.
 
-image @1453,10 c=59 r=22 z=0 C=1 png=590x440
+image @1451,10 c=59 r=22 z=0 C=1 png=590x440
               ▗▄▄▄▄
               ▐ X ▐
               ▐▄▄▄▟
@@ -1526,7 +1525,7 @@ Expected: P and Q above the inner box and R and S below it, all in the outer
 box. The inner box has its own title, "Inner", and the outer one "Outer". Q's
 edge to A crosses the inner top border, and B's edge to R the bottom one.
 
-image @1483,31 c=17 r=36 z=0 C=1 png=170x720
+image @1481,31 c=17 r=36 z=0 C=1 png=170x720
                                ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                                ▐     Outer     ▐
                                ▐               ▐
@@ -1572,7 +1571,7 @@ above the other. B's edge to C crosses both inner borders and none of the
 parent's. X's edge to C goes round the right of the parent and enters it through
 its right border.
 
-image @1528,30 c=20 r=37 z=0 C=1 png=200x740
+image @1526,30 c=20 r=37 z=0 C=1 png=200x740
                                         ▗▄▄▄▄
                                         ▐ X ▐
                                         ▐▄▄▄▟
@@ -1619,7 +1618,7 @@ E. X's two edges split above the outer box. B's edge to E leaves One through its
 bottom border and enters Two through its left border, where D's edge, from
 Three, joins it.
 
-image @1574,23 c=34 r=33 z=0 C=1 png=340x660
+image @1572,23 c=34 r=33 z=0 C=1 png=340x660
                                   ▗▄▄▄▄
                                   ▐ X ▐
                                   ▐▄▄▄▟
@@ -1660,7 +1659,7 @@ Drawn, nested: three levels
 Expected: P holds Q, which holds R, which holds A and B, with a blank column
 between each border and the next. X's edge crosses all three top borders.
 
-image @1614,31 c=17 r=27 z=0 C=1 png=170x540
+image @1612,31 c=17 r=27 z=0 C=1 png=170x540
                                      ▗▄▄▄▄
                                      ▐ X ▐
                                      ▐▄▄▄▟
@@ -1698,7 +1697,7 @@ renderer has. Expected: "QueryPlanner::plan()" holds no node of its own, only
 "Index Tagging" (C to F) and "Plan Enumeration" (G to J), one below the other.
 The title of the outer box is beside the edge from CanonicalQuery.
 
-image @1651,17 c=45 r=69 z=0 C=1 png=450x1380
+image @1649,17 c=45 r=69 z=0 C=1 png=450x1380
                           ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                         ▐█▛ CanonicalQuery  ▜██
                          ▝▀▀▀▀▀▀███████▀▀▀▀▀▀▘
@@ -1776,7 +1775,7 @@ Expected: X's edge crosses the outer left border and then the inner one, into A;
 B's edge to C crosses the inner right border. The outer title is centred under
 the outer top border, the inner one under the inner top border.
 
-image @1728,22 c=35 r=13 z=0 C=1 png=350x260
+image @1726,22 c=35 r=13 z=0 C=1 png=350x260
                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                             ▐           Outer           ▐
                             ▐                           ▐
@@ -1797,7 +1796,7 @@ Drawn, LR, nested: titles, both boxes starting on one rank
 Expected: the outer and inner titles each in the rows under their box's top
 border, and the columns of the two left borders two apart.
 
-image @1748,23 c=34 r=13 z=0 C=1 png=340x260
+image @1746,23 c=34 r=13 z=0 C=1 png=340x260
                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                              ▐    Outer Title     ▐
                              ▐                    ▐
@@ -1819,7 +1818,7 @@ Expected: Outer holds Middle, which holds Innermost, which holds A and B; C is
 in Outer only. X's edge crosses three left borders, B's edge to C two right
 borders and C's edge to Y one.
 
-image @1769,17 c=45 r=18 z=0 C=1 png=450x360
+image @1767,17 c=45 r=18 z=0 C=1 png=450x360
                        ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                        ▐            Outer             ▐
                        ▐                              ▐
@@ -1847,7 +1846,7 @@ the titles are under them as drawn: the outer title above C, the inner title
 above B. C is above the inner box, A and B are inside it, and X's edge comes
 from below the outer box.
 
-image @1796,28 c=23 r=26 z=0 C=1 png=230x520
+image @1794,28 c=23 r=26 z=0 C=1 png=230x520
                             ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                             ▐     Outer Title     ▐
                             ▐                     ▐
@@ -1883,7 +1882,7 @@ all and Y above. X's two edges split below the parent and cross its bottom
 border and that of each inner box; B's edge to Y crosses the top borders of the
 first inner box and of the parent.
 
-image @1831,28 c=24 r=25 z=0 C=1 png=240x500
+image @1829,28 c=24 r=25 z=0 C=1 png=240x500
                                 ▗▄▄▄▄
                                 ▐ Y ▐
                                 ▐▄▄▄▟
@@ -1916,7 +1915,7 @@ Drawn, RL, nested: titles
 Expected: the flow runs right to left; the titles are under the top borders and
 not mirrored.
 
-image @1863,22 c=35 r=13 z=0 C=1 png=350x260
+image @1861,22 c=35 r=13 z=0 C=1 png=350x260
                       ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                       ▐        Outer Title        ▐
                       ▐                           ▐
@@ -1937,7 +1936,7 @@ Drawn, RL, nested: a title wider than the box
 Expected: the outer title is wider than the outer box would be, so the box is as
 wide as the title with a blank column and the border on each side.
 
-image @1883,20 c=40 r=13 z=0 C=1 png=400x260
+image @1881,20 c=40 r=13 z=0 C=1 png=400x260
                           ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                           ▐ The outer subgraph title ▐
                           ▐                          ▐
@@ -1974,7 +1973,7 @@ Drawn: membership, a node named outside first
 
 C and F belong to S, A does not.
 
-image @1919,35 c=9 r=17 z=0 C=1 png=90x340
+image @1917,35 c=9 r=17 z=0 C=1 png=90x340
                                      ▗▄▄▄▄
                                      ▐ A ▐
                                      ▐▄▄▄▟
@@ -1998,7 +1997,7 @@ Drawn: membership, a node named in two siblings
 
 Y belongs to S1, which closes first.
 
-image @1942,35 c=10 r=21 z=0 C=1 png=100x420
+image @1940,35 c=10 r=21 z=0 C=1 png=100x420
                                    ▗▄▄▄▄▄▄▄▄
                                    ▐  S1   ▐
                                    ▐       ▐
@@ -2028,7 +2027,7 @@ A and B belong to Q, C and D to P. Expected: the box of Q holds A and B, one
 above the other, and the box of P holds it and C and D, one above the other, to
 its right.
 
-image @1971,30 c=20 r=18 z=0 C=1 png=200x360
+image @1969,30 c=20 r=18 z=0 C=1 png=200x360
                               ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                               ▐        P         ▐
                               ▐                  ▐
@@ -2055,7 +2054,7 @@ A stays in Q, C is in P. Expected: A and B are in the box of Q, C beside B in
 that of P only. A's edges to B and C split below A, inside the inner box; the
 one to C leaves the inner box through its right border.
 
-image @1997,29 c=21 r=19 z=0 C=1 png=210x380
+image @1995,29 c=21 r=19 z=0 C=1 png=210x380
                              ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                              ▐         P         ▐
                              ▐                   ▐
@@ -2083,7 +2082,7 @@ Expected: R holds A, Q holds R and B, T holds C, and P holds Q, T and D. E is
 outside every box: its edge to A crosses the left borders of P and Q and then
 the top border of R.
 
-image @2024,19 c=42 r=24 z=0 C=1 png=420x480
+image @2022,19 c=42 r=24 z=0 C=1 png=420x480
                           ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                           ▐                P                ▐
                           ▐                                 ▐
@@ -2117,7 +2116,7 @@ diagram. Expected: the outer box holds the boxes of Index Tagging (C, D) and
 Plan Enumeration (G, H) and no node; A is above it, and its edge to C crosses
 its top border, beside the title.
 
-image @2057,14 c=51 r=35 z=0 C=1 png=510x700
+image @2055,14 c=51 r=35 z=0 C=1 png=510x700
                               ▗▄▄▄▄
                               ▐ A ▐
                               ▐▄▄▄▟
@@ -2160,7 +2159,7 @@ Drawn: membership, style and class do not name a node
 C and D are outside S: only a node declaration or a link puts a node in a
 subgraph.
 
-image @2099,32 c=16 r=13 z=0 C=1 png=160x260
+image @2097,32 c=16 r=13 z=0 C=1 png=160x260
                                        ▗▄▄▄▄▄▄▄▄
                                        ▐   S   ▐
                                        ▐       ▐
@@ -2178,7 +2177,7 @@ image @2099,32 c=16 r=13 z=0 C=1 png=160x260
 Drawn: membership, &, ; and one line
 ────────────────────────────────────────────────────────────────────────────────
 
-image @2116,23 c=34 r=15 z=0 C=1 png=340x300
+image @2114,23 c=34 r=15 z=0 C=1 png=340x300
                        ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄
                        ▐      S       ▐  ▐   T   ▐
                        ▐              ▐  ▐       ▐
@@ -2198,7 +2197,7 @@ image @2116,23 c=34 r=15 z=0 C=1 png=340x300
 Drawn: ids that start with end or subgraph
 ────────────────────────────────────────────────────────────────────────────────
 
-image @2135,25 c=30 r=13 z=0 C=1 png=300x260
+image @2133,25 c=30 r=13 z=0 C=1 png=300x260
                          ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
                          ▐             S              ▐
                          ▐                            ▐

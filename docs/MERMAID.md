@@ -106,7 +106,7 @@ The reasons, as `MDCAT_MERMAID_DEBUG=1` words them:
 | `unsupported label: …` | a label that is not valid where it stands, such as `"say "hi""`, `a[""]`, or a blank edge label |
 | `unsupported entity: …` | `#nosuchentity;` |
 | `html in label` | an HTML tag other than `<br>`, such as `<b>` or `a<b`; a `<` before a space, digit or `=` is plain text |
-| `label too wide: N > 24` | an edge label with a single word over 24 columns (any other long label is wrapped) |
+| `label too wide: N > 40` | an edge label with a single word over 40 columns (any other long label is wrapped at 24) |
 | `back edges: N > M`, `crossings: N > M` | too tangled to read, see [Limits](#limits) |
 | `too many nodes`, `too many ranks`, `too many ports` | more than 60 boxes or ranks, or an edge fan too wide to give every edge a port |
 
@@ -310,9 +310,10 @@ not hold brackets or parentheses (Mermaid reports a parse error there, as it doe
 since Mermaid reads the `o` as a marker and drops it.
 
 A label over 24 columns wide is wrapped after spaces, so that no line is wider than 24
-(a `<br>` is a break of its own, and each line is wrapped in turn). It is declined only
-when a single word is wider than that, as are a label with an HTML tag other than
-`<br>` and a label on an invisible link
+(a `<br>` is a break of its own, and each line is wrapped in turn). A single word is
+never split, so an identifier such as `parsed_find_command::parse()` makes its label
+as wide as it is. An edge label is declined only when a word is over 40 columns, as are
+a label with an HTML tag other than `<br>` and a label on an invisible link
 (see [section 2](#2-diagrams-that-are-not-drawn-here)).
 
 ## 9. Label text
@@ -383,7 +384,9 @@ Mermaid's newer form names a shape instead of drawing it, `a@{ shape: db, label:
 `h-cyl`, `decision`, `database`, `disk`, `shaded-process`, `das`, and more. The last
 four shapes in the table have no bracket form; they are written only this way.
 Other keys in the block, such as `icon:`, are ignored. A name for a shape that isn't
-drawn here sends the diagram to the fallback.
+drawn here sends the diagram to the fallback; the ones that Mermaid has and this
+renderer lacks include `doc`, `lin-doc`, `docs`, `processes` (`procs`), `extract` and
+`tag-rect`.
 
 The curves and slants are drawn exactly, so an arrowhead touches the outline where
 the edge meets it, even off the middle of a side. Each shape takes the room its
@@ -606,7 +609,7 @@ graph LR
 | ----- | ----- | ------------ |
 | boxes | 60 | `too many nodes` |
 | ranks | 60 (long links add some) | `too many ranks` |
-| edge label word | 24 columns | `label too wide` |
+| edge label word | 40 columns | `label too wide` |
 | back edges | one per ten columns of the terminal's width | `back edges: N > M` |
 | crossings (bridges) | one per ten columns of the terminal's width | `crossings: N > M` |
 
@@ -614,7 +617,21 @@ For the last two, a terminal narrower than 72 columns counts as 72 wide, so an
 80-column terminal allows 8 of each. Beyond that, a diagram is too tangled to
 read: it is shown as source, and `mmdc` is not asked to redraw it.
 
-Not drawn at all: `subgraph` nested more than three deep (`subgraph layout: depth`), `direction` inside a graph, and the other diagram types
+Subgraphs have limits of their own, each declined with the reason shown:
+
+| Limit | Reason shown |
+| ----- | ------------ |
+| nesting deeper than three levels | `subgraph layout: depth` |
+| a box whose members lie on ranks far apart with other nodes between them, so that an edge would have to cross it (the box cannot be drawn with straight sides and no edge through it) | `subgraph layout: edge` |
+| two subgraphs whose members interleave on the ranks | `subgraph layout: sides` |
+| `direction` inside a subgraph, and an edge to or from a subgraph's id | `unsupported syntax: …` |
+
+Two MongoDB diagrams stop at `subgraph layout: edge` once their missing shapes are
+swapped for boxes: `src/mongo/db/matcher/README.md:341` (two subgraphs) and
+`src/mongo/db/exec/runtime_planners/classic_runtime_planner/README.md:157` (a box of
+three decisions). The layout does not reorder anything to get out of such a case.
+
+Not drawn at all: `direction` inside a graph, and the other diagram types
 (sequence, pie, class, state, Gantt, …). Colours, curves and other styling are read
-but have no effect. A flowchart that is declined goes to `mmdc` when it is
+but have no effect, except the node colours described in [Syntax](#6-syntax). A flowchart that is declined goes to `mmdc` when it is
 available.

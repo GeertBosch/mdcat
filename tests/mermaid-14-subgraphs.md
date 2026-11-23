@@ -724,11 +724,11 @@ graph LR
     N5 --> N5
 ```
 
-## Declined, LR: MongoDB query commands, as written
+## Drawn, LR: MongoDB query commands, as written
 
-The diagram exactly as MongoDB wrote it, except for the `extract` shape left out. Declined for its
-labels' words, `parsed_find_command::parse()` and the like, which are over 24 columns and cannot be
-wrapped, as it would be without the subgraph.
+The diagram exactly as MongoDB wrote it, except for the `extract` shape left out. Its edge labels are
+words such as `parsed_find_command::parse()` and `MatchExpressionParser::parse()` (up to 30 columns),
+which cannot be wrapped; an edge label may hold one up to 40 columns.
 
 ```mermaid
 flowchart LR

@@ -837,6 +837,22 @@
                                                                   MatchParser::parse()    ParsedDistinctCommand
 
 
+
+
+
+   Find
+
+
+
+   Distinct         IDL Parsing                                                                       FindCommandRequest        parsed_find_command::parse()
+                                        CountCommandRequest               parseFromCount()                                     MatchExpressionParser::parse()    ParsedFindCommand
+
+
+   Count                                                                                                                                                                                    CanonicalQuery
+                                        DistinctCommandRequest    parsed_distinct_command::parse()
+                                                                   MatchExpressionParser::parse()     ParsedDistinctCommand
+
+
                                                   at minimum and
                                   Stable Probe     tickets not
                                                     exhausted

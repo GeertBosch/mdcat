@@ -71,6 +71,8 @@ the fixtures and goldens, and parallel branches would conflict in them.
 
 ## Step 1 — Edge text and literal `<` in labels
 
+**Status:** done in `1a3af79`.
+
 **Assumes:** nothing.
 
 **Start from:** `Parser::parseTextLink`, `plainLabelChar`, `plainLabel`,
@@ -131,6 +133,8 @@ is fine as long as the report names it.
 
 ## Step 2 — Shapes III: divided, lined process, lined cylinder
 
+**Status:** done in `2d106d7`.
+
 **Assumes:** nothing.
 
 **Start from:** `shapeNames()` in `src/mermaid_parse.cpp`; `enum class Shape` in
@@ -175,6 +179,8 @@ the middle of `a --> <shape>`) to the new shapes.
 
 ## Step 3 — Shapes IV: horizontal cylinder (`das`)
 
+**Status:** done in `69eac70`.
+
 **Assumes:** Step 2.
 
 **Start from:** `Shape::Cylinder` everywhere it appears in
@@ -208,6 +214,8 @@ and a three-line label), and to the arrowhead pixel check.
 ---
 
 ## Step 4 — Subgraphs I: parsing and the model
+
+**Status:** done in `3c82366`.
 
 **Assumes:** nothing.
 
@@ -281,6 +289,8 @@ commit it.
 ---
 
 ## Step 5 — Subgraphs II: top-down layout and drawing, one level, no titles
+
+**Status:** done in `25efd58`.
 
 **Assumes:** Step 4.
 
@@ -370,6 +380,8 @@ says what is still declined.
 
 ## Step 6 — Subgraphs III: titles
 
+**Status:** done in `fd2b460`.
+
 **Assumes:** Step 5.
 
 **Lift the gate** for titled top-level clusters in `TB`/`TD`.
@@ -406,6 +418,8 @@ golden for the bold.
 
 ## Step 7 — Subgraphs IV: LR, RL and BT
 
+**Status:** done in `886e48c`.
+
 **Assumes:** Step 6.
 
 **Lift the gate** for top-level clusters in every direction.
@@ -434,6 +448,8 @@ at w80 (and w120 if the LR cases need it).
 ---
 
 ## Step 8 — Subgraphs V: nesting
+
+**Status:** done in `3f439d9`.
 
 **Assumes:** Step 7.
 
@@ -467,6 +483,8 @@ and `procs` shapes replaced by supported ones.
 ---
 
 ## Step 9 — MongoDB corpus, calibration, docs
+
+**Status:** done in the commit that adds this line. Follow-ups made before it: `c4f9962` (plain labels wrap at 24 columns instead of declining) and `e4cfb0e` (blank node labels, and `height:0` blank nodes as spacers).
 
 **Assumes:** all earlier steps.
 
@@ -506,3 +524,31 @@ and `procs` shapes replaced by supported ones.
 
 **Tests:** no new fixture; goldens touched by calibration are re-judged and listed
 in the final report.
+
+---
+
+## Outcome and remaining gaps
+
+Of the 38 diagrams, **10 are drawn** (5 before this plan), 17 are not flowcharts
+and stay with `mmdc`, and 11 are declined for a shape. Nothing is declined for a
+subgraph, a label or an edge text any more. Calibration changed no value of
+`kClusterPad`, `kClusterPadLr` or the two gates: the one newly drawn subgraph
+diagram (`src/mongo/db/admission/README.md:100`) is legible at 80 and 120 columns.
+One tunable was added: `kMaxLabelWidth` (24) only wraps, and `kMaxLabelWord` (40) is
+what a word that cannot be wrapped may take, since MongoDB's edge labels are
+identifiers such as `parsed_find_command::parse()` (up to 39 columns).
+
+The shapes still missing from the MongoDB corpus, and what drawing each (replaced by
+a box, as an experiment) would unblock:
+
+| Missing shape | Diagrams | What then happens |
+| ------------- | -------- | ----------------- |
+| `extract` (triangle) | `src/mongo/db/commands/query_cmd/README.md:121`, `:183`, `:221` | `:121` and `:221` draw; `:183` stops at `label too wide: 45 > 40`, because `&lt;` and `&gt;` in `"DocumentSource&lt;Stage&gt;::createFromBson()"` are not read as entities (only `#lt;` is) |
+| `procs`, `processes` | `src/mongo/db/query/plan_enumerator/README.md:12` and `:516`, `src/mongo/db/pipeline/README.md:173`, `src/mongo/db/exec/runtime_planners/classic_runtime_planner/README.md:157` | `plan_enumerator:12` and `pipeline:173` draw; `:516` also needs `tag-rect`; `classic_runtime_planner:157` stops at `subgraph layout: edge` |
+| `docs` | `src/mongo/db/query/README_QO.md:27`, `src/mongo/s/query/planner/README.md:50`, `src/mongo/db/matcher/README.md:341` | the first two draw; `matcher:341` stops at `subgraph layout: edge` |
+| `doc` | `src/mongo/db/query/README_explain.md:549` | draws |
+| `tag-rect` | `src/mongo/db/query/plan_enumerator/README.md:516` | needs `procs` as well |
+
+So the four shapes `extract`, `procs`/`processes`, `docs` and `doc` would draw seven
+more diagrams (17 of 38), and `tag-rect` one more (18); the two `subgraph layout: edge`
+diagrams (`matcher:341`, `classic_runtime_planner:157`) need layout work as well.

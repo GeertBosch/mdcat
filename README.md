@@ -220,6 +220,20 @@ graph LR
     style ship fill:#cec,stroke:#363,color:#000
 ```
 
+A `subgraph` is a titled box that its members and the edges between them stay
+inside (nested up to three deep, in every direction), and Mermaid's `@{ shape: … }`
+syntax adds more shapes, here a lined cylinder for the logs:
+
+```mermaid
+flowchart LR
+    push([Push]) --> lint
+    subgraph ci [Continuous integration]
+        lint[Lint] --> test[Test]
+    end
+    test -->|passed| ship[Ship it]
+    test -->|failed| logs@{ shape: lin-cyl, label: "Build logs" }
+```
+
 [docs/MERMAID.md](docs/MERMAID.md) documents all of it: the syntax that is drawn,
 how edges are routed, what is declined and why, and the limits. Node colours
 from `style`, `classDef` and `class` (`fill`, `stroke`, `color`) are drawn, as in

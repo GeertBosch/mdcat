@@ -640,9 +640,9 @@ bool layoutOnce(const Graph& original,
         if (e.label.lines.empty()) continue;
         // A self-loop's label sits beside the loop, not in a rank of its own.
         if (!selfLoop(k)) labelled = true;
-        if (labelWidth(e) > tune::kMaxLabelWidth) {
+        if (labelWidth(e) > tune::kMaxLabelWord) {
             reason = "label too wide: " + std::to_string(labelWidth(e)) + " > " +
-                std::to_string(tune::kMaxLabelWidth);
+                std::to_string(tune::kMaxLabelWord);
             return false;
         }
     }

@@ -1100,10 +1100,14 @@ goldens are empty). The `too wide` goldens of `mermaid-basic` (w30) and
   cells (TERMINAL-GRAPHICS §4), so it cannot keep labels as text.
 - **Every other diagram type**: sequence, class, state, ER, gantt, pie, mindmap,
   and the rest.
-- **`subgraph` and `direction`**: subgraphs are planned in
-  [plan-mermaid-subgraphs.md](plan-mermaid-subgraphs.md); `direction` inside a
-  subgraph stays out.
+- **`subgraph` and `direction`**: subgraphs are drawn since
+  [plan-mermaid-subgraphs.md](plan-mermaid-subgraphs.md) (up to three levels,
+  every direction); `direction` inside a subgraph stays out.
 - **v11.3 shapes without a classic equivalent**: document, bow-tie, hourglass,
-  icons, images, and the like.
+  icons, images, and the like. The follow-up plan added four of them that the
+  MongoDB corpus uses: the divided process (`div-rect`), the lined process
+  (`lin-rect`), the lined cylinder (`lin-cyl`) and the horizontal cylinder
+  (`h-cyl`, `das`). Still out: `doc`, `lin-doc`, `docs`, `processes` (`procs`),
+  `extract` and `tag-rect`.
 - **Raw HTML in labels**, other than `<br>`.
 - **FontAwesome `fa:` icons.**

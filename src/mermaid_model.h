@@ -153,12 +153,16 @@ constexpr int kColsPerCrossing = 10;  // a diagram may have one edge crossing (b
 constexpr int kColsPerBackEdge = 10;  // likewise for the edges that close a cycle
 constexpr int kMinGateCols = 72;    // a narrower terminal counts as this wide for those two limits
 constexpr int kMaxLabelWidth = 24;  // columns a label's lines are wrapped at (a single word may be
-                                    // wider; an edge label with one is declined)
-constexpr int kNoWrap = 4096;     // a wrap width that no label reaches, for markdownAutoWrap: false
-constexpr int kClusterPad = 2;    // columns a subgraph's box adds between its members and what lies
-                                  // outside: its border's column and a blank one inside it
-constexpr int kClusterPadLr = 2;  // rows a left-to-right subgraph's box adds between its members
-                                  // and what lies outside: its border's row and a blank one
+                                    // wider, see kMaxLabelWord)
+constexpr int kMaxLabelWord = 40;   // columns an edge label's widest line may take once wrapped: a
+                                    // word cannot be split. 24 declined MongoDB's `Class::method()`
+                                    // labels (up to 39 columns), which draw well when wide
+constexpr int kNoWrap = 4096;   // a wrap width that no label reaches, for markdownAutoWrap: false
+constexpr int kClusterPad = 2;  // columns a subgraph's box adds between its members and what lies
+                                // outside: its border's column and a blank one inside it.
+                                // Calibrated (MongoDB admission diagram, 80 and 120 columns): kept
+constexpr int kClusterPadLr = 2;     // rows a left-to-right subgraph's box adds between its members
+                                     // and what lies outside: its border's row and a blank one
 constexpr int kMaxClusterDepth = 3;  // subgraphs inside subgraphs this deep are drawn, no deeper
 constexpr int kMinCylinderLabel =
     8;  // columns a cylinder is at least as wide as its label ("database")

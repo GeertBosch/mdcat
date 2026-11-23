@@ -271,9 +271,10 @@ Long labels
 Expected: a label over 24 columns wraps after a space, so that no line is over
 24 columns, and is drawn on its edge with the rank made as wide as it needs. The
 same holds for a label with a <br> that is too long on one of its lines, and for
-a quoted label.
+a quoted label. A single word cannot be wrapped, so it makes the label as wide
+as it is, up to 40 columns (the last diagram).
 
-image @263,18 c=44 r=14 z=0 C=1 png=440x280
+image @264,18 c=44 r=14 z=0 C=1 png=440x280
                                       ▗▄▄▄▄
                                       ▐ A ▐
                                       ▐▄▄▄▟
@@ -289,11 +290,16 @@ image @263,18 c=44 r=14 z=0 C=1 png=440x280
                            ▐ B ▐                  ▐ C ▐
                            ▐▄▄▄▟                  ▐▄▄▄▟
 
+image @279,14 c=51 r=3 z=0 C=1 png=510x60
+              ▗▄▄▄▄                                         ▗▄▄▄▄
+              ▐ A ▐▄▄▄▖generateSinglePlanExecutionInfo()▗▄▄▟█ B ▐
+              ▐▄▄▄▟                                         ▐▄▄▄▟
+
 Declined
 ────────────────────────────────────────────────────────────────────────────────
 
 Expected: shown as source, as the .err golden says, in this order. A label with
-a single word over 24 columns is too wide, as that cannot be wrapped; a label
+a single word over 40 columns is too wide, as that cannot be wrapped; a label
 with HTML other than a line break, or an invisible link with a label, is not
 drawn. A |text| label with parentheses or brackets is a parse error in Mermaid,
 and so is --x-->, where --x is a link end. Text that touches the end of its link
