@@ -543,7 +543,19 @@ const std::map<std::string, Shape>& shapeNames() {
                                                         {"inv-trapezoid", Shape::TrapT},
                                                         {"manual", Shape::TrapT},
                                                         {"trapezoid-top", Shape::TrapT},
-                                                        {"odd", Shape::Odd}};
+                                                        {"odd", Shape::Odd},
+                                                        {"div-rect", Shape::DividedRect},
+                                                        {"div-proc", Shape::DividedRect},
+                                                        {"divided-process", Shape::DividedRect},
+                                                        {"divided-rectangle", Shape::DividedRect},
+                                                        {"lin-rect", Shape::LinedRect},
+                                                        {"lin-proc", Shape::LinedRect},
+                                                        {"lined-process", Shape::LinedRect},
+                                                        {"lined-rectangle", Shape::LinedRect},
+                                                        {"shaded-process", Shape::LinedRect},
+                                                        {"lin-cyl", Shape::LinedCylinder},
+                                                        {"disk", Shape::LinedCylinder},
+                                                        {"lined-cylinder", Shape::LinedCylinder}};
     return kNames;
 }
 

@@ -20,7 +20,13 @@ inline int strokeWidth(int cw) {
 // Whether the shape's outline is the border of its footprint, so that an edge meets it at the
 // footprint's edge and needs no geometry to find the point.
 inline bool isBox(Shape s) {
-    return s == Shape::Rect || s == Shape::Subroutine;
+    return s == Shape::Rect || s == Shape::Subroutine || s == Shape::DividedRect ||
+        s == Shape::LinedRect;
+}
+
+// Whether the shape is a cylinder, with a lid, of either kind.
+inline bool isCylinder(Shape s) {
+    return s == Shape::Cylinder || s == Shape::LinedCylinder;
 }
 
 class Geom {
@@ -51,12 +57,15 @@ public:
         const long cx = (l + r) / 2, cy = (t + b) / 2;
         switch (shape) {
         case Shape::Rect:
-        case Shape::Subroutine: return x >= l - g && x <= r + g && y >= t - g && y <= b + g;
+        case Shape::Subroutine:
+        case Shape::DividedRect:
+        case Shape::LinedRect: return x >= l - g && x <= r + g && y >= t - g && y <= b + g;
         case Shape::Round:
         case Shape::Stadium: return rounded(x, y, g);
         case Shape::Circle:
         case Shape::DoubleCircle: return ellipse(x, y, cx, cy, (r - l) / 2 + g, (b - t) / 2 + g);
         case Shape::Cylinder:
+        case Shape::LinedCylinder:
             return (x >= l - g && x <= r + g && y >= t + cap && y <= b - cap) ||
                 ellipse(x, y, cx, t + cap, (r - l) / 2 + g, cap + g) ||
                 ellipse(x, y, cx, b - cap, (r - l) / 2 + g, cap + g);
@@ -84,10 +93,19 @@ public:
             const long a = (r - l) / 2 - gap, c = (b - t) / 2 - gap;
             return ellipse(x, y, cx, cy, a + hw, c + hw) && !ellipse(x, y, cx, cy, a - hw, c - hw);
         }
-        case Shape::Cylinder: {  // the front edge of the lid
+        case Shape::Cylinder:
+        case Shape::LinedCylinder: {
+            // The front edge of the lid, and for a lined cylinder a second front edge, the lid's
+            // moved down a row (twice the lid's depth).
             const long a = (r - l) / 2;
-            return y >= t + cap && ellipse(x, y, cx, t + cap, a + hw, cap + hw) &&
-                !ellipse(x, y, cx, t + cap, a - hw, cap - hw);
+            const int arcs = shape == Shape::LinedCylinder ? 2 : 1;
+            for (int i = 0; i < arcs; ++i) {
+                const long c = t + cap + 2 * cap * i;
+                if (y >= c && ellipse(x, y, cx, c, a + hw, cap + hw) &&
+                    !ellipse(x, y, cx, c, a - hw, cap - hw))
+                    return true;
+            }
+            return false;
         }
         default: return false;
         }
@@ -273,13 +291,23 @@ inline Footprint footprint(
     case Shape::TrapB:
     case Shape::TrapT: f.cols += 2; break;
     case Shape::Odd: f.cols += 1; break;
+    case Shape::LinedRect: f.cols += 2; break;  // room for the line, as a subroutine's
+    case Shape::DividedRect:                    // a row for the part above the line
+        f.rows += 1;
+        f.labelRow = 2;
+        break;
     case Shape::Cylinder:
+    case Shape::LinedCylinder:
         // The lid is half a row tall whatever the width, so a narrow cylinder would get a lid
         // that looks far deeper than a wide one's. Give it at least the width of a middling label,
         // of the label's parity so that the label is exactly centred.
         f.cols = std::max(labelW, tune::kMinCylinderLabel + labelW % 2) + nodePad;
         f.rows += 1;
         f.labelRow = 2;
+        if (sh == Shape::LinedCylinder) {  // and one for the second arc
+            f.rows += 1;
+            f.labelRow = 3;
+        }
         break;
     case Shape::Rhombus:
         f.rows = lines + 4;
@@ -289,7 +317,7 @@ inline Footprint footprint(
     }
     // A cylinder's label is centred whatever its parity, even if that puts the footprint's center
     // half a column off the edges' line: its lid is flat enough there to hide it.
-    if (td && f.cols % 2 == 0 && sh != Shape::Cylinder) ++f.cols;
+    if (td && f.cols % 2 == 0 && !isCylinder(sh)) ++f.cols;
     if (sh == Shape::Circle || sh == Shape::DoubleCircle || sh == Shape::Rhombus)
         while (f.cols < 400 && !labelFits(sh, f, labelW, lines, cw, ch)) f.cols += td ? 2 : 1;
     return f;

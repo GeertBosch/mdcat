@@ -347,11 +347,16 @@ graph LR
 | `[/text/]`, `[\text\]` | parallelograms |
 | `[/text\]`, `[\text/]` | trapezoids |
 | `>text]` | flag, with a notch in its left side |
+| `@{ shape: div-rect }` | divided process: a box with a line across it, a row below its top |
+| `@{ shape: lin-rect }` | lined process: a box with a line just inside its left side |
+| `@{ shape: lin-cyl }` | lined cylinder: a cylinder with a second arc a row under its lid |
 
 Mermaid's newer form names a shape instead of drawing it, `a@{ shape: db, label:
 "Store" }`, and every short name or alias of the shapes above works: `rect`,
 `rounded`, `stadium`, `circle`, `dbl-circ`, `fr-rect`, `cyl`, `diam`, `hex`,
-`lean-r`, `lean-l`, `trap-b`, `trap-t`, `odd`, `decision`, `database`, and more.
+`lean-r`, `lean-l`, `trap-b`, `trap-t`, `odd`, `div-rect`, `lin-rect`, `lin-cyl`,
+`decision`, `database`, `disk`, `shaded-process`, and more. The last three shapes in
+the table have no bracket form; they are written only this way.
 Other keys in the block, such as `icon:`, are ignored. A name for a shape that isn't
 drawn here sends the diagram to the fallback.
 
@@ -362,8 +367,12 @@ wider than a box; a cylinder is a row taller, its label sits under the lid, and 
 is at least as wide as an 8-column label so that the lid is equally deep whatever
 the label; a rhombus is four rows taller than its label and about twice as wide; a
 circle is widened until the label's box fits inside; and the slanted shapes are two
-columns wider, with sides slanted by one column. Quoted and Markdown labels work in
-every shape.
+columns wider, with sides slanted by one column; a divided process is a row taller,
+with its label under the line, a lined process two columns wider, and a lined
+cylinder two rows taller than a box, its label under both arcs. Each draws what
+`mmdc` draws, and its extra line is interior: edges still meet the outer outline, a
+`stroke` colour from `style` also colours the extra line, and a `fill` fills the whole
+shape. Quoted and Markdown labels work in every shape.
 
 ```mermaid
 graph TD

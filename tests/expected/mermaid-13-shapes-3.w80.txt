@@ -1,0 +1,248 @@
+Mermaid node shapes III: divided, lined process, lined cylinder
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+On a Kitty terminal, the built-in renderer draws three more shapes, named with
+A@{ shape: name, label: "text" }, each a familiar shape with one extra stroke
+inside its outline, as mmdc draws them:
+
+  ●   the divided process div-rect (aliases div-proc, divided-process,
+      divided-rectangle): a box with a horizontal line across it, a row below
+      its top edge, so the box is a row taller and its label sits under the
+      line;
+  ●   the lined process lin-rect (aliases lin-proc, lined-process,
+      lined-rectangle, shaded-process): a box with one vertical line half a cell
+      inside its left side, 2 columns wider than a box, the label centred;
+  ●   the lined cylinder lin-cyl (aliases disk, lined-cylinder): a cylinder with
+      a second front arc a row below the lid's, so it is two rows taller than a
+      box.
+
+The extra line is part of the shape's interior: edges still meet the outer
+outline exactly (an arrowhead touches it, as with a box, a subroutine or a
+cylinder), a node's stroke colour colours the extra line too, and its fill fills
+the whole outline. Checked by mermaid-kitty.sh at width 80, with --img kitty and
+pinned cell sizes.
+
+Every new shape, top down
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: a box, then the three shapes in a column, joined by arrows that end
+exactly on each outline. The divided process has a line across it one row under
+its top edge, with its label below the line. The lined process has a vertical
+line just inside its left side, and its label is centred. The lined cylinder has
+its lid and, a row under it, a second arc of the same curve; its label is below
+both.
+
+image @34,34 c=12 r=21 z=0 C=1 png=120x420
+                                     ▗▄▄▄▄▄▄
+                                     ▐ Box ▐
+                                     ▐▄▄▄▄▄▟
+                                        ▐
+                                        ▐
+                                   ▗▄▄▄▄█▙▄▄▄▄
+                                   ▐▄▄▄▄▄▄▄▄▄▟
+                                   ▐ Divided ▐
+                                   ▐▄▄▄▄▄▄▄▄▄▟
+                                        ▐
+                                        ▐
+                                   ▗▄▄▄▄█▙▄▄▄▄
+                                   ▐▌ Lined  ▐
+                                   ▐▙▄▄▄▄▄▄▄▄▟
+                                        ▐
+                                        ▐
+                                  ▗▄▄▄▄▄█▙▄▄▄▄
+                                  ▐▀▀▜█▙▟█▛▀▀▜
+                                  ▐▀▀▜█▙▟█▛▀▀▜
+                                  ▐   Disk   ▐
+                                  ▝▀▀▜█▙▟█▛▀▀▀
+
+Every new shape, left to right
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the same three shapes in a row, an arrow into each side at the middle
+of the label's row. The line of the divided process stays horizontal, near its
+top; the line of the lined process is at its left side, and the arrow into it
+ends on the outer outline.
+
+image @64,14 c=52 r=5 z=0 C=1 png=520x100
+                                                      ▗▄▄▄▄▄▄▄▄▄▄▄
+                        ▗▄▄▄▄▄▄▄▄▄▄                   ▐▀▀▜█▙▟█▛▀▀▜
+              ▗▄▄▄▄▄    ▐▄▄▄▄▄▄▄▄▄▟    ▗▄▄▄▄▄▄▄▄▄▄    ▐▀▀▜█▙▟█▛▀▀▜
+              ▐ In ▐▄▄▄▟█ Divided ▐▄▄▄▟█▌ Lined  ▐▄▄▄▟█   Disk   ▐
+              ▐▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▄▟    ▐▙▄▄▄▄▄▄▄▄▟    ▝▀▀▜█▙▟█▛▀▀▀
+
+Several lines
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: a label of several lines grows each shape by a row for each line, the
+way it grows a box. The line of the divided process stays one row under its top,
+the label below it, and each line of the label is centred.
+
+image @77,33 c=13 r=20 z=0 C=1 png=130x400
+                                   ▗▄▄▄▄▄▄▄▄
+                                   ▐▄▄▄▄▄▄▄▟
+                                   ▐  Two  ▐
+                                   ▐ lines ▐
+                                   ▐▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                 ▗▄▄▄▄▄█▙▄▄▄▄▄
+                                 ▐▌  Three   ▐
+                                 ▐▌  lines   ▐
+                                 ▐▌ of text  ▐
+                                 ▐▙▄▄▄▄▄▄▄▄▄▄▟
+                                       ▐
+                                       ▐
+                                 ▗▄▄▄▄▄█▙▄▄▄▄
+                                 ▐▀▀▜█▙▟█▛▀▀▜
+                                 ▐▀▀▜█▙▟█▛▀▀▜
+                                 ▐  Stored  ▐
+                                 ▐   data   ▐
+                                 ▝▀▀▜█▙▟█▛▀▀▀
+
+Several edges at one node
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: edges arrive and leave off the middle of a side. Each arrowhead still
+touches the outer outline, also on the cylinder's lid, and each stroke that
+leaves a side starts on it. No edge ends on the extra line.
+
+image @105,26 c=27 r=21 z=0 C=1 png=270x420
+                          ▗▄▄▄▄▄▄▄▄▄▄▄
+                          ▐▀▀▜█▙▟█▛▀▀▜  ▗▄▄▄▄▄▄▄▄▄▄
+                          ▐▀▀▜█▙▟█▛▀▀▜  ▐▄▄▄▄▄▄▄▄▄▟
+                          ▐  Source  ▐  ▐ Config  ▐
+                          ▝▀▀▜█▙▟█▛▀▀▀  ▐▄▄▄▄▄▄▄▄▄▟
+                                ▐            ▐
+                                ▐▗▄▄▄▄▄▄▄▄▄▄▄█▄▄
+                               ▗█▟▄▄▄▄▄▄▄▄▄▄▄▄ ▐
+                               ▐ ▐           ▐ ▐
+                               ▐ ▐      ▗▄▄▄▄█▙█▙▄▄▄▄
+                           ▗▄▄▄█▙█▙▄▄▄  ▐▄▄▄▄▄▄▄▄▄▄▄▟
+                           ▐▌ Lexer  ▐  ▐ Document  ▐
+                           ▐▙▄▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▄▄▟
+                                ▐             ▐
+                                ▐▄▄▄▄▄▄█▄▄▄▄▄▄▛
+                                       ▐
+                                 ▗▄▄▄▄▄█▙▄▄▄▄
+                                 ▐▀▀▜█▙▟█▛▀▀▜
+                                 ▐▀▀▜█▙▟█▛▀▀▜
+                                 ▐  Output  ▐
+                                 ▝▀▀▜█▙▟█▛▀▀▀
+
+Left to right, with several edges
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: arrows into and out of the shapes meet them level with their labels,
+as they do for a cylinder: the divided process and the lined cylinder have their
+labels below the lid or the line, and the edges follow.
+
+image @134,20 c=40 r=8 z=0 C=1 png=400x160
+                                    ▗▄▄▄▄▄▄▄▄▄▄
+                    ▗▄▄▄▄▄▄▄▄▄▄▄    ▐▄▄▄▄▄▄▄▄▄▟
+                    ▐▀▀▜█▙▟█▛▀▀▜ ▗▄▟█ Divided ▐▄▄
+                    ▐▀▀▜█▙▟█▛▀▀▜ ▐  ▐▄▄▄▄▄▄▄▄▄▟ ▐  ▗▄▄▄▄▄▄▄▄
+                    ▐   Disk   ▐▄█              █▄▟█ Merge ▐
+                    ▝▀▀▜█▙▟█▛▀▀▀ ▐  ▗▄▄▄▄▄▄▄▄▄▄ ▐  ▐▄▄▄▄▄▄▄▟
+                                 ▐▄▟█▌ Lined  ▐▄▛
+                                    ▐▙▄▄▄▄▄▄▄▄▟
+
+Other directions
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: BT and RL keep every shape the right way up: the divided process's
+line stays near the top, and the lined cylinder's lid and second arc stay on
+top, with the label below them, in both. The lined process keeps its line at the
+left in RL.
+
+image @151,34 c=12 r=16 z=0 C=1 png=120x320
+                                   ▗▄▄▄▄▄▄▄▄▄▄
+                                   ▐▌ Lined  ▐
+                                   ▐▙▄▄▄▄▄▄▄▄▟
+                                        ▜▘
+                                        ▐
+                                   ▗▄▄▄▄▟▄▄▄▄▄
+                                   ▐▄▄▄▄▄▄▄▄▄▟
+                                   ▐ Divided ▐
+                                   ▐▄▄▄▄▄▄▄▄▄▟
+                                        ▜▘
+                                        ▐
+                                  ▗▄▄▄▄▄▟▄▄▄▄▄
+                                  ▐▀▀▜█▙▟█▛▀▀▜
+                                  ▐▀▀▜█▙▟█▛▀▀▜
+                                  ▐   Disk   ▐
+                                  ▝▀▀▜█▙▟█▛▀▀▀
+
+image @168,19 c=42 r=5 z=0 C=1 png=420x100
+                                                 ▗▄▄▄▄▄▄▄▄▄▄▄
+                                  ▗▄▄▄▄▄▄▄▄▄▄    ▐▀▀▜█▙▟█▛▀▀▜
+                   ▗▄▄▄▄▄▄▄▄▄▄    ▐▄▄▄▄▄▄▄▄▄▟    ▐▀▀▜█▙▟█▛▀▀▜
+                   ▐▌ Lined  ▐█▄▄▄▟ Divided ▐█▄▄▄▟   Disk   ▐
+                   ▐▙▄▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▄▟    ▝▀▀▜█▙▟█▛▀▀▀
+
+Styled
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: the three shapes with a pale fill under the whole outline and a
+coloured stroke, which also colours the line inside: the divided process's line
+and the lined process's line are red, the lined cylinder's second arc is blue,
+like its outline. (The previews show only the strokes; see the pixels in a Kitty
+terminal.)
+
+image @183,34 c=12 r=16 z=0 C=1 png=120x320
+                                   ▗▄▄▄▄▄▄▄▄▄▄
+                                   ▐██████████
+                                   ▐█Divided██
+                                   ▐██████████
+                                        ▐
+                                        ▐
+                                   ▗▄▄▄▄█▙▄▄▄▄
+                                   ▐██Lined███
+                                   ▐██████████
+                                        ▐
+                                        ▐
+                                  ▗▄▄▄▄▄█▙▄▄▄▄
+                                  ▐███████████
+                                  ▐███████████
+                                  ▐███Disk████
+                                  ▝▀▀▜████▛▀▀▀
+
+Aliases
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: every name draws the shape it is an alias of, each box labelled with
+its name: four divided processes (div-rect and three aliases), five lined
+processes (in two diagrams, to keep each within 80 columns) and three lined
+cylinders.
+
+image @208,2 c=76 r=4 z=0 C=1 png=760x80
+  ▗▄▄▄▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+  ▐▄▄▄▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+  ▐ div-rect ▐▄▄▄▟█ div-proc ▐▄▄▄▟█ divided-process ▐▄▄▄▟█ divided-rectangle ▐
+  ▐▄▄▄▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟    ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+image @213,12 c=55 r=3 z=0 C=1 png=550x60
+            ▗▄▄▄▄▄▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+            ▐▌ lin-rect  ▐▄▄▄▟█▌ lin-proc  ▐▄▄▄▟█▌ lined-process  ▐
+            ▐▙▄▄▄▄▄▄▄▄▄▄▄▟    ▐▙▄▄▄▄▄▄▄▄▄▄▄▟    ▐▙▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+image @217,17 c=45 r=3 z=0 C=1 png=450x60
+                 ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                 ▐▌ lined-rectangle  ▐▄▄▄▟█▌ shaded-process  ▐
+                 ▐▙▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟    ▐▙▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+image @221,14 c=51 r=5 z=0 C=1 png=510x100
+              ▗▄▄▄▄▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄▄▄    ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+              ▐▀▀▀██▄▟█▀▀▀▜    ▐▀▀▜█▙▟█▛▀▀▜    ▐▀▀▀▀▜██▄▄██▛▀▀▀▀▜
+              ▐▀▀▀██▄▟█▀▀▀▜    ▐▀▀▜█▙▟█▛▀▀▜    ▐▀▀▀▀▜██▄▄██▛▀▀▀▀▜
+              ▐  lin-cyl  ▐▄▄▄▟█   disk   ▐▄▄▄▟█ lined-cylinder ▐
+              ▝▀▀▀██▄▟█▀▀▀▀    ▝▀▀▜█▙▟█▛▀▀▀    ▝▀▀▀▀▜██▄▄██▛▀▀▀▀▀
+
+Declined
+────────────────────────────────────────────────────────────────────────────────
+
+Expected: shown as source, as the .err golden says. The document shapes are not
+drawn here, even beside shapes that are.
+
+  graph TD
+      a@{ shape: lin-rect, label: "Lined" } --> b@{ shape: lin-doc, label: "Lined document" }
+

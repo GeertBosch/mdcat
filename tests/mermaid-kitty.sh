@@ -7,8 +7,8 @@
 # Checked here, over the fixtures tests/mermaid-<N>-<name>.md, numbered from the basics to the
 # advanced: 1-basic (widths 80 and 30, where the LR chain is fitted by tighter spacing),
 # 2-fallback, 3-dag (80 and 44), 4-routing (80), 5-crossings (80), 6-syntax (80), 7-links (80),
-# 8-edge-labels (80 and 44), 9-label-text (80), 10-shapes (80), 11-cycles (80) and 12-fit (120, 80
-# and 50):
+# 8-edge-labels (80 and 44), 9-label-text (80), 10-shapes (80), 11-cycles (80), 12-fit (120, 80
+# and 50) and 13-shapes-3 (80):
 #   - tests/kitty-preview.py's rendering of the output of `mdcat --mermaid builtin` (text plus each
 #     image as quadrant blocks) equals tests/expected/<fixture>.w<N>.txt, and the
 #     MDCAT_MERMAID_DEBUG=1 stderr equals <fixture>.w<N>.err (UPDATE=1 rewrites both). The
@@ -131,6 +131,8 @@ golden_case mermaid-8-edge-labels 44
 golden_case mermaid-9-label-text 80 ansi
 golden_case mermaid-10-shapes 80
 golden_case mermaid-11-cycles 80
+golden_case mermaid-13-shapes-3 80
+# The checks after the goldens use the output of the last one, so 12-fit at 50 stays last.
 golden_case mermaid-12-fit 120
 golden_case mermaid-12-fit 80
 golden_case mermaid-12-fit 50
@@ -271,6 +273,9 @@ check_touch 'b[[Sub]]' '10-11 50-111 150-151'
 check_touch 'b[(Cyl)]' '10-11 50-111 130-131 170-171'
 check_touch 'b{Dec}' '10-11 50-112 189-191'
 check_touch 'b{{Hex}}' '10-11 50-111 150-151'
+check_touch 'b@{ shape: div-rect, label: "Div" }' '10-11 50-111 130-131 170-171'
+check_touch 'b@{ shape: lin-rect, label: "Lin" }' '10-11 50-111 150-151'
+check_touch 'b@{ shape: lin-cyl, label: "Lin" }' '10-11 50-111 130-131 150-151 190-191'
 
 # Structure of every APC. (The previewer has already decoded every PNG: signature, CRC, zlib
 # stream, and size c*cellW x r*cellH.)

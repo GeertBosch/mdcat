@@ -506,10 +506,14 @@ bool rasterize(const Graph& g,
             if (!shape::isBox(st.shape)) continue;
             int l = m.px(st.pts[0].first), t = m.py(st.pts[0].second);
             int r = m.px(st.pts[1].first), b = m.py(st.pts[1].second);
-            if (st.shape == Shape::Subroutine) {  // verticals half a cell inside the sides
+            // A subroutine has verticals half a cell inside both sides, a lined box one inside its
+            // left side, and a divided one a horizontal a row below its top.
+            if (st.shape == Shape::Subroutine || st.shape == Shape::LinedRect)
                 ras.rect(l + m.cw / 2 - hs, t - hs, l + m.cw / 2 - hs + s, b - hs + s);
+            if (st.shape == Shape::Subroutine)
                 ras.rect(r - m.cw / 2 - hs, t - hs, r - m.cw / 2 - hs + s, b - hs + s);
-            }
+            if (st.shape == Shape::DividedRect)
+                ras.rect(l - hs, t + m.ch - hs, r - hs + s, t + m.ch - hs + s);
             ras.rect(l - hs, t - hs, r - hs + s, t - hs + s);
             ras.rect(l - hs, b - hs, r - hs + s, b - hs + s);
             ras.rect(l - hs, t - hs, l - hs + s, b - hs + s);
