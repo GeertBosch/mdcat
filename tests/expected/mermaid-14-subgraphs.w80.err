@@ -1,0 +1,29 @@
+mdcat: mermaid-14-subgraphs.md:12: mermaid: fallback: subgraph layout
+mdcat: mermaid-14-subgraphs.md:23: mermaid: fallback: subgraph layout
+mdcat: mermaid-14-subgraphs.md:48: mermaid: fallback: subgraph layout
+mdcat: mermaid-14-subgraphs.md:86: mermaid: fallback: subgraph layout
+mdcat: mermaid-14-subgraphs.md:98: mermaid: fallback: subgraph layout
+mdcat: mermaid-14-subgraphs.md:112: mermaid: fallback: subgraph layout
+mdcat: mermaid-14-subgraphs.md:127: mermaid: fallback: subgraph layout
+mdcat: mermaid-14-subgraphs.md:139: mermaid: fallback: subgraph layout
+mdcat: mermaid-14-subgraphs.md:160: mermaid: fallback: subgraph layout
+mdcat: mermaid-14-subgraphs.md:178: mermaid: fallback: subgraph layout
+mdcat: mermaid-14-subgraphs.md:190: mermaid: fallback: subgraph layout
+mdcat: mermaid-14-subgraphs.md:201: mermaid: fallback: subgraph layout
+mdcat: mermaid-14-subgraphs.md:211: mermaid: fallback: unsupported syntax: direction in subgraph
+mdcat: mermaid-14-subgraphs.md:221: mermaid: fallback: unsupported syntax: link to subgraph S
+mdcat: mermaid-14-subgraphs.md:231: mermaid: fallback: unsupported syntax: link to subgraph S
+mdcat: mermaid-14-subgraphs.md:241: mermaid: fallback: unsupported syntax: link to subgraph S
+mdcat: mermaid-14-subgraphs.md:250: mermaid: fallback: unsupported syntax: subgraph S named as a node
+mdcat: mermaid-14-subgraphs.md:260: mermaid: fallback: unsupported syntax: style on subgraph S
+mdcat: mermaid-14-subgraphs.md:270: mermaid: fallback: unsupported syntax: style on subgraph S
+mdcat: mermaid-14-subgraphs.md:280: mermaid: fallback: unsupported syntax: end
+mdcat: mermaid-14-subgraphs.md:288: mermaid: fallback: unsupported syntax: subgraph S
+mdcat: mermaid-14-subgraphs.md:296: mermaid: fallback: unsupported syntax: subgraph S
+mdcat: mermaid-14-subgraphs.md:310: mermaid: fallback: unsupported syntax: empty subgraph S
+mdcat: mermaid-14-subgraphs.md:319: mermaid: fallback: unsupported syntax: empty subgraph S2
+mdcat: mermaid-14-subgraphs.md:331: mermaid: fallback: unsupported syntax: subgraph end
+mdcat: mermaid-14-subgraphs.md:340: mermaid: fallback: unsupported syntax: subgraph id [Title] extra
+mdcat: mermaid-14-subgraphs.md:349: mermaid: fallback: unsupported syntax: subgraph id[]
+mdcat: mermaid-14-subgraphs.md:358: mermaid: fallback: unsupported label: Title (x)
+mdcat: mermaid-14-subgraphs.md:367: mermaid: fallback: html in label

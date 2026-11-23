@@ -341,6 +341,12 @@ bool layoutGraph(const Graph& original,
                  std::string& reason,
                  Decline& why) {
     const size_t n = original.nodes.size();
+    // Steps 5-8 of docs/plan-mermaid-subgraphs.md lift this gate: the parser reads subgraphs, but
+    // nothing yet lays out or draws a cluster.
+    if (!original.clusters.empty()) {
+        reason = "subgraph layout";
+        return false;
+    }
     if (original.edges.empty()) {
         reason = "no edges";
         return false;

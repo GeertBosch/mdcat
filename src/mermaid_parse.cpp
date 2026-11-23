@@ -575,6 +575,21 @@ struct Parser {
     std::map<int, std::vector<std::string>> nodeClasses;
     std::map<int, Style> nodeStyles;
 
+    // A `subgraph` that is open: the nodes its statements name, in order, and the clusters that
+    // have closed directly inside it (given their parent when it closes).
+    struct Frame {
+        std::string statement;  // the line that opened it, for the reasons
+        std::string id;         // empty for a generated one, made when the subgraph closes
+        Label title;
+        std::vector<int> nodes;
+        std::set<int> named;
+        std::vector<int> children;
+    };
+    std::vector<Frame> open;
+    std::set<std::string> clusterIds;  // the ids of the subgraphs that have closed
+    std::set<std::string> styledIds;   // every id that a `style` or `class` statement names
+    std::string namedCluster;          // the first subgraph id that the statement being read names
+
     bool fail(const std::string& why) {
         reason = why;
         return false;
@@ -697,6 +712,11 @@ struct Parser {
         if (labelled) g.nodes[static_cast<size_t>(it->second)].label = label;
         if (shaped) g.nodes[static_cast<size_t>(it->second)].shape = shape;
         node = it->second;
+        // A node that a statement inside a subgraph names belongs to it, wherever it was first
+        // named. An id that is a subgraph's is that subgraph, not a node: see parseChain.
+        if (!open.empty() && open.back().named.insert(node).second)
+            open.back().nodes.push_back(node);
+        if (clusterIds.count(id) && namedCluster.empty()) namedCluster = id;
         if (!cls.empty()) nodeClasses[node].push_back(cls);
         return true;
     }
@@ -938,6 +958,8 @@ struct Parser {
     bool parseChain(const std::string& s) {
         size_t p = 0;
         std::vector<int> from, to;
+        bool linked = false;
+        namedCluster.clear();
         if (!parseGroup(s, p, from)) return false;
         while (p < s.size()) {
             size_t e = idEnd(s, p);
@@ -962,6 +984,7 @@ struct Parser {
                 }
             }
             if (!parseGroup(s, p, to)) return false;
+            linked = true;
             for (int a : from) {
                 for (int b : to) {
                     if (g.edges.size() >= static_cast<size_t>(tune::kMaxNodes * tune::kMaxNodes))
@@ -974,6 +997,10 @@ struct Parser {
             }
             from = to;
         }
+        if (!namedCluster.empty())
+            return fail(linked
+                            ? "unsupported syntax: link to subgraph " + namedCluster
+                            : "unsupported syntax: subgraph " + namedCluster + " named as a node");
         return true;
     }
 
@@ -1003,6 +1030,13 @@ struct Parser {
             at = comma + 1;
         }
         handled = true;
+        if (word != "classDef") {
+            for (const std::string& id : list) {
+                if (clusterIds.count(id))
+                    return fail("unsupported syntax: style on subgraph " + id);
+                styledIds.insert(id);
+            }
+        }
         if (word == "class") {
             if (idEnd(arg, 0) != arg.size()) return fail(kUnsupportedSyntax);
             for (const std::string& id : list) {
@@ -1057,7 +1091,99 @@ struct Parser {
         }
     }
 
+    // The title and id of the `subgraph` statement `s`, as Mermaid reads them: `id[Title]` (or `id
+    // [Title]`), where a blank title (`[" "]`) means none is drawn, or a lone text, which is both
+    // id and title, and which gets a generated id when it has spaces (`subgraph Index Tagging`).
+    // The text may be a quoted string (`subgraph "Q::plan()"`).
+    bool openSubgraph(const std::string& s) {
+        Frame f;
+        f.statement = s;
+        const std::string rest = trim(s.substr(8));
+        const size_t idLen = rest.empty() || rest[0] == '"' ? 0 : idEnd(rest, 0);
+        size_t q = idLen;
+        while (q < rest.size() && rest[q] == ' ') ++q;
+        if (idLen > 0 && q < rest.size() && rest[q] == '[') {
+            const size_t close = findOutsideQuotes(rest, q + 1, ']');
+            if (close != rest.size() - 1) return fail(kUnsupportedSyntax);
+            f.id = rest.substr(0, idLen);
+            const std::string text = rest.substr(q + 1, close - q - 1);
+            if (text.empty()) return fail(kUnsupportedSyntax);
+            const std::string t = trim(text);
+            const bool blank = (t.empty() ||
+                                (t.size() > 2 && t.front() == '"' && t.back() == '"' &&
+                                 trim(t.substr(1, t.size() - 2)).empty()));
+            if (!blank && !parseLabel(text, f.title, reason)) return false;
+        } else {
+            std::string text = rest;
+            if (!rest.empty() && rest[0] == '"') {
+                const size_t close = rest.find('"', 1);
+                if (close != rest.size() - 1) return fail(kUnsupportedSyntax);
+                text = rest.substr(1, close - 1);
+            }
+            if (text.empty()) return fail(kUnsupportedSyntax);
+            if (!parseLabel(rest, f.title, reason)) return false;
+            if (std::any_of(text.begin(), text.end(), [](char c) {
+                    return std::isspace(static_cast<unsigned char>(c));
+                }))
+                f.id.clear();  // generated at the close
+            else
+                f.id = text;
+        }
+        if (!f.id.empty() && rest[0] != '"' && reservedId(f.id)) return fail(kUnsupportedSyntax);
+        open.push_back(std::move(f));
+        return true;
+    }
+
+    // `end`: the innermost open subgraph closes. Its nodes are those it names that no subgraph
+    // that closed before it has claimed, which is also what makes a node that is named inside an
+    // inner subgraph, and again in the outer one, belong to the inner one.
+    bool closeSubgraph() {
+        if (open.empty()) return fail(kUnsupportedSyntax);
+        Frame f = std::move(open.back());
+        open.pop_back();
+        const int ci = static_cast<int>(g.clusters.size());
+        const std::string id = f.id.empty() ? "subGraph" + std::to_string(ci) : f.id;
+        const std::string why = "unsupported syntax: ";
+        if (clusterIds.count(id)) return fail(why + f.statement);
+        if (styledIds.count(id)) return fail(why + "style on subgraph " + id);
+        auto named = index.find(id);
+        if (named != index.end()) {
+            const int n = named->second;
+            const bool linked = std::any_of(g.edges.begin(), g.edges.end(), [n](const Edge& e) {
+                return e.from == n || e.to == n;
+            });
+            return fail(
+                why + (linked ? "link to subgraph " + id : "subgraph " + id + " named as a node"));
+        }
+        bool any = !f.children.empty();
+        for (int n : f.nodes) {
+            Node& node = g.nodes[static_cast<size_t>(n)];
+            if (node.cluster >= 0) continue;
+            node.cluster = ci;
+            any = true;
+        }
+        if (!any) return fail(why + "empty subgraph " + id);
+        Cluster c;
+        c.id = id;
+        c.title = std::move(f.title);
+        if (!open.empty()) open.back().children.push_back(ci);
+        for (int child : f.children) g.clusters[static_cast<size_t>(child)].parent = ci;
+        g.clusters.push_back(std::move(c));
+        clusterIds.insert(id);
+        return true;
+    }
+
+    static bool startsWord(const std::string& s, const char* word) {
+        const size_t n = std::strlen(word);
+        return s.compare(0, n, word) == 0 && s.size() > n &&
+            std::isspace(static_cast<unsigned char>(s[n]));
+    }
+
     bool parseStatement(const std::string& s) {
+        if (s == "end") return closeSubgraph();
+        if (startsWord(s, "subgraph")) return openSubgraph(s);
+        if (!open.empty() && startsWord(s, "direction"))
+            return fail("unsupported syntax: direction in subgraph");
         bool styling = false;
         if (!parseStyling(s, styling)) return false;
         if (styling) return true;
@@ -1116,6 +1242,10 @@ bool parseFlowchart(const std::vector<std::string>& body, Graph& g, std::string&
     }
     if (!sawHeader) {
         reason = "empty diagram";
+        return false;
+    }
+    if (!ps.open.empty()) {
+        reason = "unsupported syntax: " + ps.open.back().statement;
         return false;
     }
     ps.applyStyles();

@@ -19,25 +19,6 @@ pie title Pets
     "Cats" : 2
 ```
 
-## Subgraph
-
-```mermaid
-graph TD
-    subgraph one
-        A --> B
-    end
-```
-
-## Subgraph with a direction
-
-```mermaid
-graph TD
-    subgraph one
-        direction LR
-        A --> B
-    end
-```
-
 ## Direction statement
 
 ```mermaid

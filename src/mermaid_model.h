@@ -53,6 +53,7 @@ struct Node {
     Label label;
     Shape shape = Shape::Rect;
     Style style;
+    int cluster = -1;  // the innermost cluster that holds the node (an index into Graph::clusters)
 };
 
 struct Edge {
@@ -62,11 +63,25 @@ struct Edge {
     Label label;
 };
 
+// A `subgraph ... end`. It holds the nodes that were named inside it, unless a subgraph that closed
+// earlier claimed them, and the subgraphs written inside it. It is never empty.
+struct Cluster {
+    std::string id;  // the id as Mermaid has it; one is generated for a title with spaces
+    // The title, as for a node. No `lines` and no `markdown`: no title (`subgraph s1[" "]`). A
+    // Markdown string has its `markdown` set and gets its `lines` where node labels do, in
+    // render().
+    Label title;
+    int parent = -1;  // the enclosing cluster, or -1 at the top level
+};
+
 struct Graph {
     Dir dir = Dir::TB;
     std::string title;
     std::vector<Node> nodes;
     std::vector<Edge> edges;
+    // The subgraphs in the order they close, so a cluster comes after the clusters inside it, and a
+    // node that two subgraphs name belongs to the one that comes first.
+    std::vector<Cluster> clusters;
     bool markdownAutoWrap = true;
 };
 

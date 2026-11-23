@@ -54,7 +54,7 @@ flag wins over the variable.
 declines a diagram, giving the file, the line of the code block, and the reason:
 
 ```
-mdcat: README.md:212: mermaid: fallback: unsupported syntax: subgraph one
+mdcat: README.md:212: mermaid: fallback: subgraph layout
 ```
 
 A diagram taller than the terminal is not shrunk: `gmore` scrolls through it like
@@ -88,7 +88,14 @@ The reasons, as `MDCAT_MERMAID_DEBUG=1` words them:
 | Reason | Example |
 | ------ | ------- |
 | `not a flowchart` | `sequenceDiagram`, `pie`, `gantt`, `classDiagram`, … |
-| `unsupported syntax: …` | `subgraph … end`, `direction` inside a graph, `end` as an id, a link with mismatched ends such as `A o--> B`, an unclosed shape or quote |
+| `unsupported syntax: …` | `direction` inside a graph, `end` as an id, a link with mismatched ends such as `A o--> B`, an unclosed shape or quote |
+| `subgraph layout` | any `subgraph … end` that is read without error: subgraphs are parsed, but not drawn yet |
+| `unsupported syntax: direction in subgraph` | a `direction` statement inside a `subgraph` |
+| `unsupported syntax: link to subgraph S` | an edge that starts or ends at a subgraph's id (`A --> S`) |
+| `unsupported syntax: subgraph S named as a node` | a subgraph's id used as a node with no link (`S`, `S:::cls`) |
+| `unsupported syntax: style on subgraph S` | `style` or `class` naming a subgraph's id |
+| `unsupported syntax: empty subgraph S` | a subgraph with no node and no subgraph in it, or whose nodes an earlier-closing subgraph already holds (`mmdc` draws it as a plain box) |
+| `unsupported syntax: …` | also an `end` with no open `subgraph`, a `subgraph` never closed (the line that opened it is named), two subgraphs with one id, and a title that is empty (`id[]`) or has text after it |
 | `unsupported direction` | `graph XY` |
 | `unsupported shape: NAME` | `A@{ shape: doc }` and the other shapes that are not [drawn](#10-node-shapes) |
 | `unsupported label: …` | a label that is not valid where it stands, such as `"say "hi""` |
@@ -452,7 +459,7 @@ For the last two, a terminal narrower than 72 columns counts as 72 wide, so an
 80-column terminal allows 8 of each. Beyond that, a diagram is too tangled to
 read: it is shown as source, and `mmdc` is not asked to redraw it.
 
-Not drawn at all: `subgraph`, `direction` inside a graph, and the other diagram types
+Not drawn at all: `subgraph` (read, but declined as `subgraph layout` for now), `direction` inside a graph, and the other diagram types
 (sequence, pie, class, state, Gantt, …). Colours, curves and other styling are read
 but have no effect. A flowchart that is declined goes to `mmdc` when it is
 available.
