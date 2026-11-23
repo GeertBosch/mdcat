@@ -258,6 +258,15 @@ void mergeDotted(std::vector<Stroke>& strokes) {
     }
 }
 
+// A node with no label whose style gives it no height, as Mermaid users write `SPACER(" ")` with
+// `style SPACER height:0px;` to push neighbours apart. Mermaid keeps its room but draws nothing.
+bool spacer(const Node& n) {
+    if (!n.style.collapsed) return false;
+    for (const std::string& line : n.label.lines)
+        if (!line.empty()) return false;
+    return n.label.markdown.empty();
+}
+
 std::vector<Stroke> strokesOf(const Graph& g, const Layout& lay, const std::vector<Pt>& crossings) {
     std::vector<Stroke> strokes;
     // A subgraph's box is an outline under everything else. It has no fill: the text layer over
@@ -274,6 +283,7 @@ std::vector<Stroke> strokesOf(const Graph& g, const Layout& lay, const std::vect
     }
     for (size_t i = 0; i < lay.nodeFoot.size(); ++i) {
         const CellBox& f = lay.nodeFoot[i];
+        if (spacer(g.nodes[i])) continue;  // keeps its footprint, so that other things avoid it
         Stroke st;
         st.kind = Stroke::Outline;
         st.shape = g.nodes[i].shape;

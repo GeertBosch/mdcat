@@ -103,7 +103,7 @@ The reasons, as `MDCAT_MERMAID_DEBUG=1` words them:
 | `unsupported syntax: …` | also an `end` with no open `subgraph`, a `subgraph` never closed (the line that opened it is named), two subgraphs with one id, and a title that is empty (`id[]`) or has text after it |
 | `unsupported direction` | `graph XY` |
 | `unsupported shape: NAME` | `A@{ shape: doc }` and the other shapes that are not [drawn](#10-node-shapes) |
-| `unsupported label: …` | a label that is not valid where it stands, such as `"say "hi""` |
+| `unsupported label: …` | a label that is not valid where it stands, such as `"say "hi""`, `a[""]`, or a blank edge label |
 | `unsupported entity: …` | `#nosuchentity;` |
 | `html in label` | an HTML tag other than `<br>`, such as `<b>` or `a<b`; a `<` before a space, digit or `=` is plain text |
 | `label too wide: N > 24` | an edge label with a single word over 24 columns (any other long label is wrapped) |
@@ -337,6 +337,14 @@ Labels follow Mermaid's rules for text.
   never in the middle of a word). A plain label such as `a*b*c` is drawn exactly as
   written, and so is an entity such as `#35;` inside a Markdown string. Front matter
   `config: markdownAutoWrap: false` turns the wrapping off.
+- **Blank labels**: a quoted label of spaces only, `a(" ")`, is an empty label, and the
+  node is an empty box of the smallest size (Mermaid draws it the same way). A quoted
+  string of no characters at all, `a[""]`, is a parse error in Mermaid and is declined.
+  Mermaid users hide such a node, to hold its place in the layout, with `style a
+  height:0px;`: that node is a *spacer*, whose room is kept (edges go round it, ranks
+  count it) but which is not drawn. A `height:0` style on a node that has a label does not make it a
+  spacer. Edge labels and subgraph titles are not affected: a blank edge label is
+  declined, and a blank title means none.
 - **Wide characters** are measured by display width: CJK and emoji take two
   columns, and a box is as wide as the text needs.
 

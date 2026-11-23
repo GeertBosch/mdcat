@@ -161,12 +161,40 @@ graph TD
     move --> c["a" b]
 ```
 
+## Blank labels
+
+Expected: a node whose quoted label is only spaces is an empty box of the smallest
+size, whatever its shape: here a rounded box, a diamond and a circle. Mermaid draws
+them the same way.
+
+```mermaid
+graph TD
+    a[A] --> s(" ") --> b[B]
+    a --> c{" "}
+    c --> d((" "))
+```
+
+## Spacers
+
+Expected: a node with a blank label and `style ... height:0px` is a spacer. Mermaid
+keeps its room in the layout and draws nothing, so here the edge from `A` to `B`
+goes round the empty rank between them, and no box is drawn there. Without the style
+the same node is a box, as in the section above.
+
+```mermaid
+graph TD
+    a[A] --> b[B]
+    a ~~~ spacer(" ") ~~~ b
+    style spacer height:0px;
+```
+
 ## Declined
 
 Expected: shown as source, as the `.err` golden says, in this order. HTML other than
 a line break; an entity code that is not known; a quote that never closes; a Markdown
 string with HTML in it; a label with a quote inside the quotes; `a<b`, where `<b`
-starts a tag.
+starts a tag; and a quoted string of no characters at all, `b[""]`, which Mermaid
+reports as a parse error (a string of spaces is a blank label).
 
 ```mermaid
 graph TD
@@ -196,4 +224,9 @@ graph TD
 ```mermaid
 graph TD
     a["a<b"] --> b[B]
+```
+
+```mermaid
+graph TD
+    a[A] --> b[""]
 ```

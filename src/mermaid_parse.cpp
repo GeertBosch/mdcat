@@ -301,7 +301,8 @@ bool quotedTail(const std::string& tail, std::string& out) {
 bool parseLabelText(const std::string& raw,
                     Label& label,
                     std::string& reason,
-                    bool edgeText = false) {
+                    bool edgeText = false,
+                    bool allowBlank = false) {
     const std::string t = trim(raw);
     if (t.size() >= 2 && t.front() == '"') {
         const size_t close = t.find('"', 1);
@@ -310,6 +311,14 @@ bool parseLabelText(const std::string& raw,
             return false;
         }
         std::string body = t.substr(1, close - 1);
+        // A quoted string of spaces only (`SPACER(" ")`) is an empty label, which a node may have:
+        // it is drawn as a minimal box. Mermaid rejects a string of no characters at all (`[""]`).
+        if (allowBlank && !body.empty() && trim(body).empty() &&
+            trim(t.substr(close + 1)).empty()) {
+            label.lines.assign(1, std::string());
+            label.markdown.clear();
+            return true;
+        }
         const bool markdown = body.size() >= 2 && body.front() == '`' && body.back() == '`';
         if (markdown) body = body.substr(1, body.size() - 2);
         const std::string tail = t.substr(close + 1);
@@ -324,8 +333,12 @@ bool parseLabelText(const std::string& raw,
 }
 
 // parseLabelText, with the label as written named in an "unsupported label" reason.
-bool parseLabel(const std::string& raw, Label& label, std::string& reason, bool edgeText = false) {
-    if (parseLabelText(raw, label, reason, edgeText)) return true;
+bool parseLabel(const std::string& raw,
+                Label& label,
+                std::string& reason,
+                bool edgeText = false,
+                bool allowBlank = false) {
+    if (parseLabelText(raw, label, reason, edgeText, allowBlank)) return true;
     if (reason.compare(0, 17, "unsupported label") == 0) {
         std::string shown;  // whitespace runs collapsed, so a multi-line label stays on one line
         for (char c : trim(raw)) {
@@ -335,6 +348,17 @@ bool parseLabel(const std::string& raw, Label& label, std::string& reason, bool 
         reason += ": " + shown;
     }
     return false;
+}
+
+// A CSS length of zero, as in `height:0px !important;`.
+bool zeroLength(const std::string& value) {
+    size_t i = 0;
+    while (i < value.size() && value[i] == '0') ++i;
+    if (i == 0) return false;
+    while (i < value.size() && std::isalpha(static_cast<unsigned char>(value[i]))) ++i;
+    while (i < value.size() && value[i] == ' ') ++i;
+    const std::string rest = value.substr(i);
+    return rest.empty() || rest == ";" || rest.compare(0, 10, "!important") == 0;
 }
 
 // A CSS colour `#rgb` or `#rrggbb` as 0xRRGGBB, or -1 for anything else.
@@ -619,7 +643,7 @@ struct Parser {
                     shape = it->second;
                     shaped = true;
                 } else if (key == "label") {
-                    if (!parseLabel(value, label, reason)) return false;
+                    if (!parseLabel(value, label, reason, false, true)) return false;
                     labelled = true;
                 }
             }
@@ -659,7 +683,8 @@ struct Parser {
             const bool open = s[p + 1] == '/', end = s[close - 1] == '/';
             shape =
                 open ? (end ? Shape::LeanR : Shape::TrapB) : (end ? Shape::TrapT : Shape::LeanL);
-            if (!parseLabel(s.substr(p + 2, close - 1 - (p + 2)), label, reason)) return false;
+            if (!parseLabel(s.substr(p + 2, close - 1 - (p + 2)), label, reason, false, true))
+                return false;
             labelled = shaped = true;
             p = close + 1;
         } else if (p < s.size()) {
@@ -684,7 +709,8 @@ struct Parser {
                        s.compare(close, std::strlen(k.close), k.close))
                     close = findOutsideQuotes(s, close + 1, k.close[0]);
                 if (close == std::string::npos) return fail(kUnsupportedSyntax);
-                if (!parseLabel(s.substr(p + openLen, close - p - openLen), label, reason))
+                if (!parseLabel(
+                        s.substr(p + openLen, close - p - openLen), label, reason, false, true))
                     return false;
                 labelled = shaped = true;
                 shape = k.shape;
@@ -1054,7 +1080,9 @@ struct Parser {
             const size_t colon = item.find(':');
             if (colon == std::string::npos) continue;
             const std::string key = trim(item.substr(0, colon));
-            const int c = parseColor(trim(item.substr(colon + 1)));
+            const std::string value = trim(item.substr(colon + 1));
+            const int c = parseColor(value);
+            if (key == "height" && zeroLength(value)) st.collapsed = true;
             if (key == "fill")
                 st.fill = c;
             else if (key == "stroke")
@@ -1079,6 +1107,7 @@ struct Parser {
             if (from.fill >= 0) to.fill = from.fill;
             if (from.stroke >= 0) to.stroke = from.stroke;
             if (from.color >= 0) to.color = from.color;
+            if (from.collapsed) to.collapsed = true;
         };
         for (size_t i = 0; i < g.nodes.size(); ++i) {
             const int id = static_cast<int>(i);

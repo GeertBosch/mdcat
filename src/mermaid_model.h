@@ -46,6 +46,7 @@ struct Label {
 // The colours a `style` or `classDef` gives a node, as 0xRRGGBB, or -1 where it gives none.
 struct Style {
     int fill = -1, stroke = -1, color = -1;  // the box's fill, its outline, and its label text
+    bool collapsed = false;  // `height:0`: a node with no label is then a spacer, drawn as nothing
 };
 
 struct Node {
