@@ -93,15 +93,6 @@ sequenceDiagram
     accTitle: not drawn
 ```
 
-## Not drawn yet
-
-```mermaid
-sequenceDiagram
-    loop every minute
-        A->>B: ping
-    end
-```
-
 ## Not supported
 
 ```mermaid

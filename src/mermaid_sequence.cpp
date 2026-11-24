@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <functional>
 #include <map>
 
 namespace mermaid {
@@ -145,6 +146,7 @@ private:
     std::vector<int> active;  // per participant: the activations open so far
     std::vector<SeqEvent::Block> open;
     std::vector<std::string> openStatement;
+    std::vector<int> contents;  // per open block: the messages, notes and blocks in it so far
 
     bool fail(const std::string& r) {
         reason = "sequence: " + r;
@@ -251,6 +253,9 @@ private:
         }
         if (keyword(st, "end", rest)) {
             if (open.empty() || !rest.empty()) return unsupported(st);
+            // Mermaid cannot draw a block with nothing in it (its frame has no size)
+            if (contents.back() == 0) return fail("unsupported syntax: empty block");
+            contents.pop_back();
             SeqEvent e;
             e.kind = SeqEvent::Kind::BlockClose;
             e.block = open.back();
@@ -323,7 +328,13 @@ private:
             return false;
         if (!text(rest.substr(colon + 1), false, e.label, st)) return false;
         seq.events.push_back(e);
+        counted();
         return true;
+    }
+
+    // A message, note or block is in the block that is open, if any.
+    void counted() {
+        if (!contents.empty()) ++contents.back();
     }
 
     bool block(SeqEvent::Kind kind,
@@ -335,8 +346,10 @@ private:
         e.block = which;
         if (!text(rest, true, e.label, st)) return false;
         if (kind == SeqEvent::Kind::BlockOpen) {
+            counted();
             open.push_back(which);
             openStatement.push_back(st);
+            contents.push_back(0);
         }
         seq.events.push_back(e);
         return true;
@@ -380,6 +393,7 @@ private:
         if (e.activate && !activation(e.to, true, st)) return false;
         if (e.deactivate && !activation(e.from, false, st)) return false;
         seq.events.push_back(e);
+        counted();
         return true;
     }
 };
@@ -421,6 +435,12 @@ int labelWidth(const Label& l, const Env& env) {
     return w;
 }
 
+int labelWidthOf(const std::vector<std::string>& lines, const Env& env) {
+    int w = 0;
+    for (const std::string& line : lines) w = std::max(w, env.width(line));
+    return w;
+}
+
 // An activation is a box on a participant's lifeline, two half-cells wide (one cell), with each
 // level of nesting shifted right by half its width. In half-cell units relative to the lifeline's
 // column c (whose centre is 2c + 1), the box of level L spans 2c + L to 2c + L + 2. With d boxes
@@ -449,18 +469,77 @@ int noteText(const Env& env) {
     return env.darkTheme ? 0xf0e9c8 : 0x333333;
 }
 
+// The word in a block's tab.
+const char* blockWord(SeqEvent::Block b) {
+    switch (b) {
+    case SeqEvent::Block::Loop: return "loop";
+    case SeqEvent::Block::Alt: return "alt";
+    case SeqEvent::Block::Opt: return "opt";
+    case SeqEvent::Block::Par: return "par";
+    case SeqEvent::Block::Critical: return "critical";
+    case SeqEvent::Block::Break: return "break";
+    }
+    return "";
+}
+
+// `line` broken at its spaces into lines of at most `limit` columns (a word wider than that stands
+// alone on its line).
+std::vector<std::string> wrapWords(const std::string& line, int limit, const Env& env) {
+    std::vector<std::string> out;
+    std::string cur;
+    size_t at = 0;
+    while (at < line.size()) {
+        size_t sp = line.find(' ', at);
+        if (sp == std::string::npos) sp = line.size();
+        const std::string word = line.substr(at, sp - at);
+        at = sp + 1;
+        if (word.empty()) continue;
+        if (!cur.empty() && env.width(cur) + 1 + env.width(word) > limit) {
+            out.push_back(cur);
+            cur.clear();
+        }
+        cur += (cur.empty() ? "" : " ") + word;
+    }
+    if (!cur.empty() || out.empty()) out.push_back(cur);
+    return out;
+}
+
+// The text of a block's header or of a divider, in brackets, in lines of at most `limit` columns.
+// No text gives no lines.
+std::vector<std::string> frameText(const Label& l, int limit, const Env& env) {
+    std::vector<std::string> out;
+    for (const std::string& line : l.lines)
+        for (const std::string& w : wrapWords(line, std::max(1, limit - 2), env)) out.push_back(w);
+    if (out.empty()) return out;
+    out.front() = "[" + out.front();
+    out.back() += "]";
+    return out;
+}
+
+// A block is a frame around its events, as wide as the lifelines they touch and a margin, with a
+// tab holding the keyword in its top left corner and its text beside it, and a dotted line and
+// the text of the section across it at each divider.
+struct Frame {
+    SeqEvent::Block kind = SeqEvent::Block::Loop;
+    int parent = -1;
+    size_t open = 0;               // the event that opens it
+    std::vector<size_t> dividers;  // the events that start a new section
+    std::vector<size_t> direct;    // the messages and notes in it, not in a block inside it
+    std::vector<int> kids;         // the frames directly inside it
+    int lo = 1 << 20, hi = -1;     // the participants its events touch, blocks inside included
+    int minW = 0;                  // columns its header and divider text need
+    int tabW = 0;                  // columns of its tab
+    int row0 = 0, rowEnd = 0;      // the rows of its top and bottom borders
+    int headRows = 0;              // rows from its top border to its first event
+    std::vector<int> dividerRow;   // the row of each divider's line
+};
+
+// The columns a frame's header text needs at most before it wraps.
+constexpr int kFrameText = tune::kMaxLabelWidth + 2;
+
 }  // namespace
 
 bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string& reason) {
-    // What is not drawn yet, the first of it in source order.
-    for (const SeqEvent& e : seq.events) {
-        if (e.kind == SeqEvent::Kind::BlockOpen || e.kind == SeqEvent::Kind::BlockDivider ||
-            e.kind == SeqEvent::Kind::BlockClose) {
-            reason = "sequence: not yet: block";
-            return false;
-        }
-    }
-
     const int n = static_cast<int>(seq.participants.size());
 
     // Activations. How many are open on the sender when a message starts, and on the receiver
@@ -471,6 +550,7 @@ bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string
         int from = 0, to = 0;
     };
     std::vector<Depth> depth(seq.events.size());
+    std::vector<int> deep(static_cast<size_t>(n), 0);  // the most boxes a participant has open
     {
         std::vector<int> open(static_cast<size_t>(n), 0);
         for (size_t i = 0; i < seq.events.size(); ++i) {
@@ -492,6 +572,55 @@ bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string
                 }
             } else if (e.kind == SeqEvent::Kind::Deactivate) {
                 from = std::max(0, from - 1);
+            }
+            deep[static_cast<size_t>(e.from)] = std::max(deep[static_cast<size_t>(e.from)], from);
+            deep[static_cast<size_t>(e.to)] = std::max(deep[static_cast<size_t>(e.to)], to);
+        }
+    }
+
+    // Blocks. Which events each holds, and which participants those touch.
+    std::vector<Frame> frames;
+    std::vector<int> frameAt(seq.events.size(), -1);  // the frame an opening, divider or close is
+    {
+        std::vector<int> stack;
+        for (size_t i = 0; i < seq.events.size(); ++i) {
+            const SeqEvent& e = seq.events[i];
+            if (e.kind == SeqEvent::Kind::BlockOpen) {
+                Frame f;
+                f.kind = e.block;
+                f.open = i;
+                f.parent = stack.empty() ? -1 : stack.back();
+                if (f.parent >= 0)
+                    frames[static_cast<size_t>(f.parent)].kids.push_back(
+                        static_cast<int>(frames.size()));
+                f.tabW = static_cast<int>(std::strlen(blockWord(e.block))) + tune::kNodePad;
+                f.minW = f.tabW + 3;
+                const int head = labelWidthOf(frameText(e.label, kFrameText, env), env);
+                if (head > 0) f.minW = f.tabW + head + 3;
+                frameAt[i] = static_cast<int>(frames.size());
+                stack.push_back(static_cast<int>(frames.size()));
+                frames.push_back(f);
+            } else if (e.kind == SeqEvent::Kind::BlockDivider) {
+                Frame& f = frames[static_cast<size_t>(stack.back())];
+                f.dividers.push_back(i);
+                f.minW =
+                    std::max(f.minW, labelWidthOf(frameText(e.label, kFrameText, env), env) + 4);
+                frameAt[i] = stack.back();
+            } else if (e.kind == SeqEvent::Kind::BlockClose) {
+                Frame& f = frames[static_cast<size_t>(stack.back())];
+                frameAt[i] = stack.back();
+                stack.pop_back();
+                if (!stack.empty()) {
+                    Frame& up = frames[static_cast<size_t>(stack.back())];
+                    up.lo = std::min(up.lo, f.lo);
+                    up.hi = std::max(up.hi, f.hi);
+                }
+            } else if (e.kind == SeqEvent::Kind::Message || e.kind == SeqEvent::Kind::Note) {
+                if (stack.empty()) continue;
+                Frame& f = frames[static_cast<size_t>(stack.back())];
+                f.direct.push_back(i);
+                f.lo = std::min({f.lo, e.from, e.to});
+                f.hi = std::max({f.hi, e.from, e.to});
             }
         }
     }
@@ -555,10 +684,13 @@ bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string
             gap[static_cast<size_t>(nd.lo + k)] += deficit / span + (k < deficit % span ? 1 : 0);
     }
     std::vector<int> centre(static_cast<size_t>(n));
-    for (int i = 0; i < n; ++i) {
-        const size_t k = static_cast<size_t>(i);
-        centre[k] = i == 0 ? half[0] : centre[k - 1] + gap[k - 1];
-    }
+    const auto place = [&]() {
+        for (int i = 0; i < n; ++i) {
+            const size_t k = static_cast<size_t>(i);
+            centre[k] = i == 0 ? half[0] : centre[k - 1] + gap[k - 1];
+        }
+    };
+    place();
     const auto ctr = [&](int p) { return centre[static_cast<size_t>(p)]; };
 
     // A note is a box of `w` columns from `col`, whose text has one column of padding on either
@@ -576,6 +708,77 @@ bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string
         const int w = tw % 2 ? tw : tw + 1;
         return Foot{ctr(lo) - (w - 1) / 2, w};
     };
+    // The columns of frame `f`, its borders included, from `L` to `R`: two columns beyond what
+    // its own events reach (the lifelines, a note, a self-message and its text), and one beyond a
+    // frame inside it; at least as wide as its header needs, unless `natural`.
+    std::function<void(int, int&, int&, bool)> frameCols =
+        [&](int f, int& L, int& R, bool natural) {
+            const Frame& fr = frames[static_cast<size_t>(f)];
+            int start = 1 << 20, end = -(1 << 20);
+            for (size_t i : fr.direct) {
+                const SeqEvent& e = seq.events[i];
+                const int lo = std::min(e.from, e.to), hi = std::max(e.from, e.to);
+                int s0, s1;
+                if (e.kind == SeqEvent::Kind::Note) {
+                    const Foot ft = footOf(e);
+                    s0 = ft.col;
+                    s1 = ft.col + ft.w;
+                } else if (lo != hi) {
+                    s0 = ctr(lo);
+                    s1 = ctr(hi) + 1 + deep[static_cast<size_t>(hi)] / 2;
+                } else {
+                    s0 = ctr(lo);
+                    s1 = ctr(lo) + loopColumns(depth[i].from) +
+                        std::max(1, labelWidth(e.label, env));
+                }
+                start = std::min(start, s0);
+                end = std::max(end, s1);
+            }
+            L = start - 2;
+            R = end + 1;
+            for (int k : fr.kids) {
+                int kl, kr;
+                frameCols(k, kl, kr, false);
+                L = std::min(L, kl - 1);
+                R = std::max(R, kr + 1);
+            }
+            if (!natural) R = std::max(R, L + fr.minW - 1);
+        };
+    // Make room for the frames. A header that is wider than the lifelines it spans pushes them
+    // apart, and the lifelines outside a frame must be clear of its borders. Each fix moves the
+    // lifelines, so the frames are measured again.
+    for (int round = 0, again = 1; again && round < 1000; ++round) {
+        again = 0;
+        for (size_t f = 0; f < frames.size() && !again; ++f) {
+            const Frame& fr = frames[f];
+            int L, R;
+            frameCols(static_cast<int>(f), L, R, true);
+            if (fr.lo < fr.hi && R - L + 1 < fr.minW) {
+                const int deficit = fr.minW - (R - L + 1), span = fr.hi - fr.lo;
+                for (int k = 0; k < span; ++k)
+                    gap[static_cast<size_t>(fr.lo + k)] +=
+                        deficit / span + (k < deficit % span ? 1 : 0);
+                again = 1;
+            }
+            if (again) break;
+            frameCols(static_cast<int>(f), L, R, false);
+            for (int p = 0; p < fr.lo && !again; ++p) {
+                const int deficit = ctr(p) + 3 + deep[static_cast<size_t>(p)] / 2 - L;
+                if (deficit > 0) {
+                    gap[static_cast<size_t>(fr.lo - 1)] += deficit;
+                    again = 1;
+                }
+            }
+            for (int p = fr.hi + 1; p < n && !again; ++p) {
+                const int deficit = R + 3 - ctr(p);
+                if (deficit > 0) {
+                    gap[static_cast<size_t>(fr.hi)] += deficit;
+                    again = 1;
+                }
+            }
+        }
+        if (again) place();
+    }
     // The columns the picture spans, from the first any box, note or loop reaches to the one
     // after the last. The loop and text of a self-message sit right of its lifeline.
     const auto extent = [&](int& first, int& end) {
@@ -596,6 +799,12 @@ bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string
                                ctr(e.from) + loopColumns(depth[i].from) +
                                    std::max(1, labelWidth(e.label, env)));
             }
+        }
+        for (size_t f = 0; f < frames.size(); ++f) {
+            int L, R;
+            frameCols(static_cast<int>(f), L, R, false);
+            first = std::min(first, L);
+            end = std::max(end, R + 1);
         }
     };
     int first = 0, cols = 0;
@@ -648,6 +857,7 @@ bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string
     };
     int row = topRow + boxH + 1;
     int anchorTop = row, anchorBottom = row;  // the rows of the event before, for `activate`
+    bool bare = false;  // a block or section was opened, and nothing has been put in it yet
     for (size_t i = 0; i < seq.events.size(); ++i) {
         const SeqEvent& e = seq.events[i];
         const int lines = static_cast<int>(e.label.lines.size());
@@ -662,6 +872,7 @@ bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string
             anchorTop = arrow;
             anchorBottom = self ? arrow + 1 : arrow;
             row = arrow + (self ? 3 : 2);
+            bare = false;
             break;
         }
         case SeqEvent::Kind::Note:
@@ -669,10 +880,38 @@ bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string
             anchorTop = row;
             anchorBottom = row + lines + tune::kNodeFrame - 1;
             row += lines + tune::kNodeFrame + 1;
+            bare = false;
             break;
+        case SeqEvent::Kind::BlockOpen: {
+            Frame& fr = frames[static_cast<size_t>(frameAt[i])];
+            int L, R;
+            frameCols(frameAt[i], L, R, false);
+            fr.row0 = row;
+            fr.headRows = std::max(
+                3, static_cast<int>(frameText(e.label, R - L - fr.tabW - 2, env).size()) + 2);
+            row += fr.headRows;
+            bare = true;
+            break;
+        }
+        case SeqEvent::Kind::BlockDivider: {
+            Frame& fr = frames[static_cast<size_t>(frameAt[i])];
+            int L, R;
+            frameCols(frameAt[i], L, R, false);
+            const size_t lines = frameText(e.label, R - L - 3, env).size();
+            fr.dividerRow.push_back(row);
+            row += 2 + static_cast<int>(lines);  // the line, its text, a row of air
+            bare = true;
+            break;
+        }
+        case SeqEvent::Kind::BlockClose: {
+            if (bare) ++row;  // an empty section keeps a row between its header and the border
+            frames[static_cast<size_t>(frameAt[i])].rowEnd = row;
+            row += 2;
+            bare = false;
+            break;
+        }
         case SeqEvent::Kind::Activate: open(e.from, 2 * anchorTop); break;
         case SeqEvent::Kind::Deactivate: close(e.from, 2 * anchorBottom + 2); break;
-        default: break;
         }
     }
     const int bottomRow = row;
@@ -734,11 +973,58 @@ bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string
     }
     // What a note covers of the half-cells from `x0` to `x1` is the rows (in half-cells) from its
     // top border to its bottom border: a lifeline or a box stops there.
+    struct Cover {
+        int col, w, row, rows;
+    };
+    std::vector<Cover> covers;
+    for (const NoteAt& nt : notes) covers.push_back({nt.foot.col, nt.foot.w, nt.row, nt.rows});
+    // The text of a block's header or of a divider, which the lifelines behind it stop short of.
+    struct Hold {
+        int col, w, row, rows;
+    };
+    std::vector<Hold> holds;
+    for (size_t f = 0; f < frames.size(); ++f) {
+        const Frame& fr = frames[f];
+        const SeqEvent& open = seq.events[fr.open];
+        int L, R;
+        frameCols(static_cast<int>(f), L, R, false);
+        const int w = R - L + 1;
+        outline(L, fr.row0, w, fr.rowEnd - fr.row0 + 1, -1);
+        // The tab: a box on the corner, sharing the frame's top and left sides.
+        covers.push_back({L, fr.tabW, fr.row0, 3});
+        const int right = 2 * (L + fr.tabW) - 1, base = 2 * (fr.row0 + 2) + 1;
+        segment(right, 2 * fr.row0 + 1, right, base, Line::Solid);
+        segment(2 * L + 1, base, right, base, Line::Solid);
+        const char* word = blockWord(fr.kind);
+        Scene::Text kw;
+        kw.box = {L + 2, fr.row0 + 1, static_cast<int>(std::strlen(word)), 1};
+        kw.lines = {word};
+        kw.bold = true;
+        kw.align = Scene::Align::Left;
+        scene.texts.push_back(std::move(kw));
+        const auto put = [&](int col, int r, std::vector<std::string> lines) {
+            if (lines.empty()) return;
+            Scene::Text t;
+            t.box = {col, r, labelWidthOf(lines, env), static_cast<int>(lines.size())};
+            holds.push_back({t.box.col, t.box.cols, r, t.box.rows});
+            t.lines = std::move(lines);
+            t.align = Scene::Align::Left;
+            scene.texts.push_back(std::move(t));
+        };
+        put(L + fr.tabW + 1, fr.row0 + 1, frameText(open.label, R - L - fr.tabW - 2, env));
+        for (size_t d = 0; d < fr.dividers.size(); ++d) {
+            const int y = 2 * fr.dividerRow[d] + 1;
+            segment(2 * L + 1, y, 2 * R + 1, y, Line::Dotted);
+            put(L + 2,
+                fr.dividerRow[d] + 1,
+                frameText(seq.events[fr.dividers[d]].label, R - L - 3, env));
+        }
+    }
     const auto coveredBy = [&](int x0, int x1) {
         std::vector<std::pair<int, int>> r;
-        for (const NoteAt& nt : notes)
-            if (x1 >= 2 * nt.foot.col + 1 && x0 <= 2 * (nt.foot.col + nt.foot.w) - 1)
-                r.push_back({2 * nt.row + 1, 2 * (nt.row + nt.rows - 1) + 1});
+        for (const Cover& c : covers)
+            if (x1 >= 2 * c.col + 1 && x0 <= 2 * (c.col + c.w) - 1)
+                r.push_back({2 * c.row + 1, 2 * (c.row + c.rows - 1) + 1});
         return r;
     };
     // The activation boxes, each stopping at the notes over it. A box is drawn over the one under
@@ -796,6 +1082,9 @@ bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string
                 cuts.push_back({2 * (m.labelRow - 1) + 1, 2 * m.arrowRow + 1, true});
         }
         for (const auto& r : coveredBy(x, x)) cuts.push_back({r.first, r.second, false});
+        for (const Hold& h : holds)
+            if (ctr(i) >= h.col && ctr(i) < h.col + h.w)
+                cuts.push_back({2 * (h.row - 1) + 1, 2 * (h.row + h.rows) + 1, true});
         for (const Act& a : acts)
             if (a.who == i && a.level == 0 && a.bottom > a.top)
                 cuts.push_back({a.top, a.bottom, false});

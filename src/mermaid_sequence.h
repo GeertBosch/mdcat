@@ -53,8 +53,8 @@ bool parseSequence(const std::vector<std::string>& body,
                    std::string& reason,
                    Decline* why);
 
-// Lay a sequence diagram out and draw it. Declines (false) what it does not draw yet, with a
-// reason that starts with `sequence: not yet:`.
+// Lay a sequence diagram out and draw it. Declines (false) what it cannot lay out without text
+// and strokes sharing a cell, with a reason that starts with `sequence:`.
 bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string& reason);
 
 // parseSequence, then drawSequence.

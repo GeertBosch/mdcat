@@ -356,6 +356,8 @@ Its declined part has one case per decline reason added in this step.
 
 ## Step 4 — Sequence III: loop, alt, opt, par, critical, break
 
+**Status:** done in the commit that adds this line.
+
 **Assumes:** Step 3.
 
 **Mermaid's rules** *(verified with the corpus diagrams; check `alt`/`else`
@@ -399,13 +401,13 @@ with mmdc)*:
 
 **Success criteria:**
 
-- [ ] `make check` passes, and the goldens are judged.
-- [ ] The sweep reports **21 OK**: all 11 sequence diagrams draw. **No reason
+- [x] `make check` passes, and the goldens are judged.
+- [x] The sweep reports **21 OK**: all 11 sequence diagrams draw. **No reason
       starting with `sequence: not yet` remains** in the code (check with grep).
-- [ ] `README_migrations.md:9` and `README_ddl_operations.md:13` show their
+- [x] `README_migrations.md:9` and `README_ddl_operations.md:13` show their
       nested frames with distinct borders in the pixel preview. Attach the
       flattened PNGs to the report.
-- [ ] MERMAID.md *Sequence diagrams* shows a nested block, and the fallback
+- [x] MERMAID.md *Sequence diagrams* shows a nested block, and the fallback
       table no longer lists the `not yet` reasons.
 
 ---

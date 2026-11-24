@@ -8,7 +8,7 @@
 # advanced: 1-basic (widths 80 and 30, where the LR chain is fitted by tighter spacing),
 # 2-fallback, 3-dag (80 and 44), 4-routing (80), 5-crossings (80), 6-syntax (80), 7-links (80),
 # 8-edge-labels (80 and 44), 9-label-text (80), 10-shapes (80), 11-cycles (80), 12-fit (120, 80
-# and 50), 13-shapes-3 (80), 14-subgraphs (80), 15-sequence (80) and 16-sequence-notes (80):
+# and 50), 13-shapes-3 (80), 14-subgraphs (80), 15-sequence (80), 16-sequence-notes (80) and 17-sequence-blocks (80):
 #   - tests/kitty-preview.py's rendering of the output of `mdcat --mermaid builtin` (text plus each
 #     image as quadrant blocks) equals tests/expected/<fixture>.w<N>.txt, and the
 #     MDCAT_MERMAID_DEBUG=1 stderr equals <fixture>.w<N>.err (UPDATE=1 rewrites both). The
@@ -136,6 +136,7 @@ golden_case mermaid-13-shapes-3 80
 golden_case mermaid-14-subgraphs 80 ansi
 golden_case mermaid-15-sequence 80
 golden_case mermaid-16-sequence-notes 80 ansi
+golden_case mermaid-17-sequence-blocks 80
 # The checks after the goldens use the output of the last one, so 12-fit at 50 stays last.
 golden_case mermaid-12-fit 120
 golden_case mermaid-12-fit 80

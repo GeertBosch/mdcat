@@ -102,10 +102,9 @@ The reasons, as `MDCAT_MERMAID_DEBUG=1` words them:
 | `unsupported syntax: style on subgraph S` | `style` or `class` naming a subgraph's id |
 | `unsupported syntax: empty subgraph S` | a subgraph with no node and no subgraph in it, or whose nodes an earlier-closing subgraph already holds (`mmdc` draws it as a plain box) |
 | `unsupported syntax: …` | also an `end` with no open `subgraph`, a `subgraph` never closed (the line that opened it is named), two subgraphs with one id, and a title that is empty (`id[]`) or has text after it |
-| `sequence: not yet: block` | a sequence diagram with `loop`, `alt`, `opt`, `par`, `critical` or `break` |
 | `sequence: unsupported syntax: KEYWORD` | `actor`, `box`, `create`, `destroy`, `autonumber`, `rect`, `link`, `links`, `properties`, `details`; or `<<->>` (two-headed arrows) |
-| `sequence: unsupported syntax: STATEMENT` | a statement that is not understood: a message with no `:`, an arrow that is not one of the eight in §14, `activate` of an unknown participant, a `-` after an arrow or a `deactivate` with no activation open (Mermaid rejects both), an `else`, `and` or `option` outside its block, an `end` with no block open, a block never closed, a header with other text, `participant X@{ … }` |
-| `sequence: overlap` | a message whose text would pass in front of an activation box, or other text and strokes that would share a cell (a check that catches a layout bug) |
+| `sequence: unsupported syntax: STATEMENT` | a statement that is not understood: a message with no `:`, an arrow that is not one of the eight in §14, `activate` of an unknown participant, a `-` after an arrow or a `deactivate` with no activation open (Mermaid rejects both), an `else`, `and` or `option` outside its block, an `end` with no block open, a block never closed, a block with nothing in it (Mermaid gives its frame no size either), a header with other text, `participant X@{ … }` |
+| `sequence: overlap` | a message or block text that would pass in front of an activation box, or other text and strokes that would share a cell (a check that catches a layout bug) |
 | `sequence: html in label`, `sequence: unsupported label: …`, `sequence: unsupported entity: …` | as for flowchart labels (§9), in a participant name, a message, a note or a block's text |
 | `sequence: unsupported front matter` | front matter that is not understood |
 | `sequence: empty diagram` | no participant at all |
@@ -619,8 +618,8 @@ Each participant is a box at the top and, mirrored, at the bottom, with a dotted
 lifeline between them. Each message is a horizontal stroke from one lifeline to the
 other, with its text centred on the rows above it, then a blank row. A message to
 oneself is a loop to the right of the lifeline; a note is a filled box; an activation is
-a narrow box on a lifeline. `loop`/`alt`/… blocks are
-[declined](#2-diagrams-that-are-not-drawn-here) with `sequence: not yet: block`.
+a narrow box on a lifeline; `loop`, `alt`, `opt`, `par`, `critical` and `break` are frames
+around the events they hold.
 
 ```mermaid
 sequenceDiagram
@@ -645,6 +644,23 @@ sequenceDiagram
     R->>R: insert / update (majority)
     Note right of R: the new value is<br/>durable here
     R-->>-D: status
+```
+
+Blocks nest, here a `loop` inside a `par`:
+
+```mermaid
+sequenceDiagram
+    participant D as Donor
+    participant R as Recipient
+    par Transfer data
+        loop Cloning phase
+            R->>D: Get batch
+            D->>R: Batch
+        end
+    and Wait for the clone
+        D->>R: Status?
+    end
+    D->>R: Commit
 ```
 
 What is read, as Mermaid reads it:
@@ -683,6 +699,18 @@ What is read, as Mermaid reads it:
   message opens begins below its loop). A box still open at the end closes after the
   last event. An `activate` followed at once by `deactivate` is one row tall; a box that
   would have no height at all (the `+` of a self-message that is never closed) is not drawn.
+- A block is `loop`, `opt` or `break` with text, or `alt` with `else`, `par` with `and`
+  or `critical` with `option` sections, closed by `end`. Its frame is an outline around
+  its events, two columns beyond the leftmost and rightmost lifelines they touch (or the
+  note or self-message text that reaches further), so lifelines outside it pass clear of
+  it. In the top left corner is a tab with the keyword in bold, and the block's text in
+  brackets beside it, `[retry]`. Each section after the first starts with a dotted line
+  across the frame and its text, in brackets, on the row below. A text that is wider than
+  the frame wraps at its spaces (the frame is made wider only up to 24 columns of text).
+  Frames nest: an inner frame is one column inside the outer one on both sides, and a
+  row below its header. A lifeline stops short of header and divider text, and at the
+  tab; the frame's borders are drawn across lifelines and activation boxes. A block with
+  no text shows only its tab. A block with nothing in it is declined.
 - Keywords ignore case. A box is as wide as its widest line plus four columns, made
   odd so that the lifeline runs down the middle of a column.
 - The text of a message has a blank column on each side between the lifelines it joins.
@@ -718,8 +746,8 @@ swapped for boxes: `src/mongo/db/matcher/README.md:341` (two subgraphs) and
 three decisions). The layout does not reorder anything to get out of such a case.
 
 Not drawn at all: `direction` inside a graph, and the other diagram types
-(pie, class, state, Gantt, …). A sequence diagram with a message whose text would pass in front of an
-activation box (`sequence: overlap`), `actor`, `box`, `create`,
+(pie, class, state, Gantt, …). A sequence diagram with a message or block text that would pass in front of an
+activation box (`sequence: overlap`), a block with nothing in it, `actor`, `box`, `create`,
 `destroy`, `autonumber`, `rect`, `link`, `links`, `properties`, `details` or `<<->>`
 is declined too. The async arrows `-)` and `--)` are drawn as ordinary arrowheads. Colours, curves and other styling are read
 but have no effect, except the node colours described in [Syntax](#6-syntax). A flowchart that is declined goes to `mmdc` when it is
