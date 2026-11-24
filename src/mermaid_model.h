@@ -121,7 +121,11 @@ struct Stroke {  // what the rasterizer consumes, in hu
     // vertical leg and one on its horizontal leg (only their sides of the bend matter).
     std::vector<Pt> pts;
     int node = -1;     // Outline: the node it outlines, or -1 for a cluster
-    int cluster = -1;  // Outline: the cluster it outlines, or -1 for a node
+    int cluster = -1;  // Outline: the cluster it outlines, or -1 for a node. With both -1 the
+                       // outline is a free-standing box
+    // Outline: the colour of its strokes and the fill under them, as 0xRRGGBB, or -1 for the
+    // theme's stroke colour and no fill. The painter reads these, not the node's style.
+    int colour = -1, fill = -1;
     // Segment: bit 0 (bit 1) is set when the end at pts[0] (pts[1]) is a rounded Corner, so the
     // straight piece stops short of the bend.
     unsigned char round = 0;
@@ -132,6 +136,32 @@ struct Stroke {  // what the rasterizer consumes, in hu
     // Segment, horizontal only: the x of each vertical stroke that crosses it, where the stroke
     // breaks to form a bridge.
     std::vector<int> breaks;
+};
+
+// Everything the painter needs to draw a diagram, whatever kind it is: its strokes in half-cell
+// units, and fills and text in cells. paintScene turns it into the PNG and the text layer.
+struct Scene {
+    enum class Align { Centre, Left };
+    // A box of whole cells painted in a colour, under the strokes. Text drawn over it needs a
+    // SceneText whose style has the same fill, which cuts the cells out of the image.
+    struct Fill {
+        CellBox box;
+        int rgb = 0;  // 0xRRGGBB
+    };
+    // Lines of text in a box of cells, one line per row from the top. A style with a fill writes
+    // the whole box, in that colour as background.
+    struct Text {
+        CellBox box;
+        std::vector<std::string> lines;  // styled; width via Env::width
+        Style style;                     // `color` and `fill` are used
+        bool bold = false;
+        Align align = Align::Centre;  // each line within the box's width
+    };
+    int cols = 0, rows = 0;
+    std::string title;  // drawn bold and centred on the first row, if not empty
+    std::vector<Stroke> strokes;
+    std::vector<Fill> fills;
+    std::vector<Text> texts;
 };
 
 // What a character cell of the diagram holds, for the drawer and the validator.
@@ -199,6 +229,12 @@ std::vector<Pt> crossingPoints(const Layout& lay);
 // column of a left or right one, that reaches to within two cells of the border's length. Edges
 // cross a border at right angles, so a crossing is never level with it.
 bool alignedWithBorder(const Layout& lay, size_t c);
+
+// Paint a scene: rasterize its strokes and fills into a PNG, with the label cells of any filled
+// text left transparent, and build the text layer, `rows` strings of `cols` columns. Declines
+// with a reason when a stroke cannot be drawn (a segment too short for its corner or marker, or an
+// edge that misses its outline).
+bool paintScene(const Scene& scene, const Env& env, Diagram& out, std::string& reason);
 
 // Turn a layout into strokes, a text layer and a PNG, validating it on the way.
 bool drawDiagram(

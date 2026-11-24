@@ -33,7 +33,7 @@ $(B)/highlight.o: $(S)/highlight.cpp $(S)/highlight.h | $(B)
 $(B)/png_write.o: $(S)/png_write.cpp $(S)/png_write.h | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
 
-MERMAID_OBJS = $(B)/mermaid.o $(B)/mermaid_parse.o $(B)/mermaid_layout.o $(B)/mermaid_draw.o
+MERMAID_OBJS = $(B)/mermaid.o $(B)/mermaid_parse.o $(B)/mermaid_layout.o $(B)/mermaid_draw.o $(B)/mermaid_paint.o
 
 $(MERMAID_OBJS): $(B)/%.o: $(S)/%.cpp $(S)/mermaid.h $(S)/mermaid_model.h $(S)/mermaid_shape.h $(S)/png_write.h | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
@@ -108,6 +108,7 @@ FMT_SRCS := \
 	$(S)/mermaid_draw.cpp \
 	$(S)/mermaid_layout.cpp \
 	$(S)/mermaid_model.h \
+	$(S)/mermaid_paint.cpp \
 	$(S)/mermaid_parse.cpp \
 	$(S)/mermaid_shape.h \
 	$(S)/png_write.cpp \
@@ -199,6 +200,7 @@ SRCS := \
 	$(S)/mermaid.cpp \
 	$(S)/mermaid_draw.cpp \
 	$(S)/mermaid_layout.cpp \
+	$(S)/mermaid_paint.cpp \
 	$(S)/mermaid_parse.cpp \
 	$(S)/png_write.cpp \
 	$(S)/mdcat.cpp \

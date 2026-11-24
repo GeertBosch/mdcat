@@ -149,6 +149,8 @@ starting the next one. Each step ends with one commit, per `CLAUDE.md`.
 
 ## Step 1 — Shared painter: strokes and text to a `Diagram`
 
+**Status:** done in the commit that adds this line.
+
 **Assumes:** nothing.
 
 **Why:** a sequence diagram is drawn with what flowcharts already have: boxes
@@ -176,12 +178,12 @@ out a painter that needs neither.
 
 **Success criteria:**
 
-- [ ] `make check` passes, and **every existing golden is byte-identical**
+- [x] `make check` passes, and **every existing golden is byte-identical**
       (`git status tests/` shows no change after `UPDATE=1 tests/mermaid-kitty.sh`).
-- [ ] `paintScene` and `rasterize` do not use `Graph` or `Layout` (check with
+- [x] `paintScene` and `rasterize` do not use `Graph` or `Layout` (check with
       grep).
-- [ ] `tools/mermaid-sweep.sh` still reports exactly 10 OK.
-- [ ] No new fixture and no doc change, since behaviour is unchanged.
+- [x] `tools/mermaid-sweep.sh` still reports exactly 10 OK.
+- [x] No new fixture and no doc change, since behaviour is unchanged.
 
 ---
 
