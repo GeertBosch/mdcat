@@ -293,6 +293,8 @@ Its declined part has one case per decline reason added in this step.
 
 ## Step 3 — Sequence II: self-messages, notes, activations
 
+**Status:** done in the commit that adds this line.
+
 **Assumes:** Step 2.
 
 **Mermaid's rules** (syntax verified with mmdc; check the drawing details there too):
@@ -338,17 +340,17 @@ Its declined part has one case per decline reason added in this step.
 
 **Success criteria:**
 
-- [ ] `make check` passes, and the goldens are judged.
-- [ ] The sweep reports **16 OK**. The newly drawn are `idl.md:904`,
+- [x] `make check` passes, and the goldens are judged.
+- [x] The sweep reports **16 OK**. The newly drawn are `idl.md:904`,
       `packaging.md:3`, `server_parameters.md:420` and
       `README_versioning_protocols.md:19`. The remaining five sequence diagrams
       decline only with `sequence: not yet: block`.
-- [ ] `packaging.md:3` (7 participants, self-messages) is laid out with no
+- [x] `packaging.md:3` (7 participants, self-messages) is laid out with no
       overlap at `--width 120`. Report its width at 80 and 120 columns. Fitting
       it into 80 is Step 5's job.
-- [ ] In the pixel preview, no lifeline is visible through a note or an
+- [x] In the pixel preview, no lifeline is visible through a note or an
       activation box.
-- [ ] MERMAID.md *Sequence diagrams* shows a note and an activation.
+- [x] MERMAID.md *Sequence diagrams* shows a note and an activation.
 
 ---
 

@@ -1,24 +1,22 @@
-mdcat: mermaid-15-sequence.md:98: mermaid: fallback: sequence: not yet: note
-mdcat: mermaid-15-sequence.md:104: mermaid: fallback: sequence: not yet: block
-mdcat: mermaid-15-sequence.md:111: mermaid: fallback: sequence: not yet: self-message
-mdcat: mermaid-15-sequence.md:119: mermaid: fallback: sequence: unsupported syntax: actor
-mdcat: mermaid-15-sequence.md:125: mermaid: fallback: sequence: unsupported syntax: box
-mdcat: mermaid-15-sequence.md:133: mermaid: fallback: sequence: unsupported syntax: create
-mdcat: mermaid-15-sequence.md:140: mermaid: fallback: sequence: unsupported syntax: destroy
-mdcat: mermaid-15-sequence.md:146: mermaid: fallback: sequence: unsupported syntax: autonumber
-mdcat: mermaid-15-sequence.md:152: mermaid: fallback: sequence: unsupported syntax: rect
-mdcat: mermaid-15-sequence.md:159: mermaid: fallback: sequence: unsupported syntax: link
-mdcat: mermaid-15-sequence.md:165: mermaid: fallback: sequence: unsupported syntax: links
-mdcat: mermaid-15-sequence.md:171: mermaid: fallback: sequence: unsupported syntax: properties
-mdcat: mermaid-15-sequence.md:177: mermaid: fallback: sequence: unsupported syntax: details
-mdcat: mermaid-15-sequence.md:183: mermaid: fallback: sequence: unsupported syntax: <<->>
-mdcat: mermaid-15-sequence.md:188: mermaid: fallback: sequence: unsupported syntax: A->>B
-mdcat: mermaid-15-sequence.md:193: mermaid: fallback: sequence: unsupported syntax: A--|\B: half arrow
-mdcat: mermaid-15-sequence.md:199: mermaid: fallback: sequence: unsupported syntax: activate C
-mdcat: mermaid-15-sequence.md:205: mermaid: fallback: sequence: unsupported syntax: else nothing to else
-mdcat: mermaid-15-sequence.md:211: mermaid: fallback: sequence: unsupported syntax: end
-mdcat: mermaid-15-sequence.md:217: mermaid: fallback: sequence: unsupported syntax: loop never closed
-mdcat: mermaid-15-sequence.md:223: mermaid: fallback: sequence: html in label
-mdcat: mermaid-15-sequence.md:228: mermaid: fallback: sequence: empty diagram
-mdcat: mermaid-15-sequence.md:237: mermaid: fallback: sequence: too large
-mdcat: mermaid-15-sequence.md:255: mermaid: fallback: sequence: too large
+mdcat: mermaid-15-sequence.md:98: mermaid: fallback: sequence: not yet: block
+mdcat: mermaid-15-sequence.md:107: mermaid: fallback: sequence: unsupported syntax: actor
+mdcat: mermaid-15-sequence.md:113: mermaid: fallback: sequence: unsupported syntax: box
+mdcat: mermaid-15-sequence.md:121: mermaid: fallback: sequence: unsupported syntax: create
+mdcat: mermaid-15-sequence.md:128: mermaid: fallback: sequence: unsupported syntax: destroy
+mdcat: mermaid-15-sequence.md:134: mermaid: fallback: sequence: unsupported syntax: autonumber
+mdcat: mermaid-15-sequence.md:140: mermaid: fallback: sequence: unsupported syntax: rect
+mdcat: mermaid-15-sequence.md:147: mermaid: fallback: sequence: unsupported syntax: link
+mdcat: mermaid-15-sequence.md:153: mermaid: fallback: sequence: unsupported syntax: links
+mdcat: mermaid-15-sequence.md:159: mermaid: fallback: sequence: unsupported syntax: properties
+mdcat: mermaid-15-sequence.md:165: mermaid: fallback: sequence: unsupported syntax: details
+mdcat: mermaid-15-sequence.md:171: mermaid: fallback: sequence: unsupported syntax: <<->>
+mdcat: mermaid-15-sequence.md:176: mermaid: fallback: sequence: unsupported syntax: A->>B
+mdcat: mermaid-15-sequence.md:181: mermaid: fallback: sequence: unsupported syntax: A--|\B: half arrow
+mdcat: mermaid-15-sequence.md:187: mermaid: fallback: sequence: unsupported syntax: activate C
+mdcat: mermaid-15-sequence.md:193: mermaid: fallback: sequence: unsupported syntax: else nothing to else
+mdcat: mermaid-15-sequence.md:199: mermaid: fallback: sequence: unsupported syntax: end
+mdcat: mermaid-15-sequence.md:205: mermaid: fallback: sequence: unsupported syntax: loop never closed
+mdcat: mermaid-15-sequence.md:211: mermaid: fallback: sequence: html in label
+mdcat: mermaid-15-sequence.md:216: mermaid: fallback: sequence: empty diagram
+mdcat: mermaid-15-sequence.md:225: mermaid: fallback: sequence: too large
+mdcat: mermaid-15-sequence.md:243: mermaid: fallback: sequence: too large

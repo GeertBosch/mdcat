@@ -75,8 +75,8 @@ sequenceDiagram
 ## Syntax that is read
 
 `;` and newlines separate statements, `%%` lines and `#` comments are dropped, `#35;`
-is an entity, `+` and `-` after an arrow and `activate` / `deactivate` are read and
-not drawn yet, and the keywords ignore case.
+is an entity, `+` and `-` after an arrow and `activate` / `deactivate` are activations
+(see `mermaid-16-sequence-notes.md`), and the keywords ignore case.
 
 ```mermaid
 ---
@@ -97,21 +97,9 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-    A->>B: before
-    Note over A,B: a note
-```
-
-```mermaid
-sequenceDiagram
     loop every minute
         A->>B: ping
     end
-```
-
-```mermaid
-sequenceDiagram
-    A->>B: before
-    A->>A: think
 ```
 
 ## Not supported

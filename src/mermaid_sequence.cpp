@@ -142,6 +142,7 @@ public:
 
 private:
     std::map<std::string, int> index;
+    std::vector<int> active;  // per participant: the activations open so far
     std::vector<SeqEvent::Block> open;
     std::vector<std::string> openStatement;
 
@@ -153,6 +154,20 @@ private:
     bool tooLarge() {
         why = Decline::TooComplex;
         return fail("too large");
+    }
+
+    // An activation of participant `idx` opens, or (`open` false) closes. Mermaid rejects a
+    // diagram that closes one that is not open, so it is not read.
+    bool activation(int idx, bool opens, const std::string& st) {
+        active.resize(seq.participants.size(), 0);
+        int& n = active[static_cast<size_t>(idx)];
+        if (opens) {
+            ++n;
+            return true;
+        }
+        if (n == 0) return unsupported(st);
+        --n;
+        return true;
     }
 
     // The index of the participant called `name`, which a first mention adds on the right.
@@ -251,6 +266,7 @@ private:
             SeqEvent e;
             e.kind = act ? SeqEvent::Kind::Activate : SeqEvent::Kind::Deactivate;
             e.from = e.to = it->second;
+            if (!activation(e.from, act, st)) return false;
             seq.events.push_back(e);
             return true;
         }
@@ -361,6 +377,8 @@ private:
         }
         if (!participantIndex(from, e.from) || !participantIndex(to, e.to)) return false;
         if (!text(st.substr(colon + 1), true, e.label, st)) return false;
+        if (e.activate && !activation(e.to, true, st)) return false;
+        if (e.deactivate && !activation(e.from, false, st)) return false;
         seq.events.push_back(e);
         return true;
     }
@@ -403,31 +421,86 @@ int labelWidth(const Label& l, const Env& env) {
     return w;
 }
 
+// An activation is a box on a participant's lifeline, two half-cells wide (one cell), with each
+// level of nesting shifted right by half its width. In half-cell units relative to the lifeline's
+// column c (whose centre is 2c + 1), the box of level L spans 2c + L to 2c + L + 2. With d boxes
+// open, an arrow meets the stack at its right side at 2c + 1 + d and at its left side at 2c; with
+// none open it meets the lifeline itself, at 2c + 1.
+int stackRight(int c, int d) {
+    return 2 * c + 1 + d;
+}
+int stackLeft(int c, int d) {
+    return d > 0 ? 2 * c : 2 * c + 1;
+}
+
+// How many columns right of the lifeline a self-message turns, with d boxes open: its loop runs
+// from the stack's right side to a vertical on a cell centre at least four half-cells further, as
+// far as it runs from a bare lifeline.
+int loopColumns(int d) {
+    return 2 + (d + 1) / 2;
+}
+
+// The fill of a note and its text, as 0xRRGGBB: Mermaid's pale yellow on a light theme, and a muted
+// olive that keeps the light text well above 4.5:1 contrast on a dark one.
+int noteFill(const Env& env) {
+    return env.darkTheme ? 0x4d4724 : 0xfff5ad;
+}
+int noteText(const Env& env) {
+    return env.darkTheme ? 0xf0e9c8 : 0x333333;
+}
+
 }  // namespace
 
 bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string& reason) {
     // What is not drawn yet, the first of it in source order.
     for (const SeqEvent& e : seq.events) {
-        switch (e.kind) {
-        case SeqEvent::Kind::Note: reason = "sequence: not yet: note"; return false;
-        case SeqEvent::Kind::BlockOpen:
-        case SeqEvent::Kind::BlockDivider:
-        case SeqEvent::Kind::BlockClose: reason = "sequence: not yet: block"; return false;
-        case SeqEvent::Kind::Message:
-            if (e.from == e.to) {
-                reason = "sequence: not yet: self-message";
-                return false;
-            }
-            break;
-        default: break;  // activations are read and not drawn yet
+        if (e.kind == SeqEvent::Kind::BlockOpen || e.kind == SeqEvent::Kind::BlockDivider ||
+            e.kind == SeqEvent::Kind::BlockClose) {
+            reason = "sequence: not yet: block";
+            return false;
         }
     }
 
     const int n = static_cast<int>(seq.participants.size());
 
+    // Activations. How many are open on the sender when a message starts, and on the receiver
+    // once it has taken effect (a `+` opens one): these decide where its arrow meets the stack.
+    // A standalone `activate` that follows a message opens its box on that message's row, so the
+    // message's arrow meets it too.
+    struct Depth {
+        int from = 0, to = 0;
+    };
+    std::vector<Depth> depth(seq.events.size());
+    {
+        std::vector<int> open(static_cast<size_t>(n), 0);
+        for (size_t i = 0; i < seq.events.size(); ++i) {
+            const SeqEvent& e = seq.events[i];
+            int& from = open[static_cast<size_t>(e.from)];
+            int& to = open[static_cast<size_t>(e.to)];
+            if (e.kind == SeqEvent::Kind::Message) {
+                depth[i].from = from;
+                if (e.from == e.to) depth[i].to = from;
+                if (e.activate) ++to;
+                if (e.deactivate) from = std::max(0, from - 1);
+                if (e.from != e.to) depth[i].to = to;
+            } else if (e.kind == SeqEvent::Kind::Activate) {
+                ++from;
+                if (i > 0 && seq.events[i - 1].kind == SeqEvent::Kind::Message) {
+                    const SeqEvent& m = seq.events[i - 1];
+                    if (m.from != m.to && m.to == e.from) depth[i - 1].to = from;
+                    if (m.from != m.to && m.from == e.from) depth[i - 1].from = from;
+                }
+            } else if (e.kind == SeqEvent::Kind::Deactivate) {
+                from = std::max(0, from - 1);
+            }
+        }
+    }
+
     // Columns. A box is its widest line plus the padding, made odd so that its lifeline, in the
-    // middle, runs down the centre of a cell. Neighbouring boxes are kSepTd columns apart, and a
-    // message needs room between its lifelines for its text and a column on either side. Each
+    // middle, runs down the centre of a cell. Neighbouring boxes are kSepTd columns apart. A
+    // message needs room between its lifelines for its text and a blank column on either side, a
+    // self-message for its loop and text before the next lifeline, a note over two lifelines for
+    // its text between them, and a note beside a lifeline for its box before the next. Each
     // constraint asks for a distance between two lifelines; the gaps between neighbouring
     // lifelines are widened to meet them, the constraints that span fewest gaps first, and a
     // deficit over several gaps is shared among them.
@@ -449,10 +522,25 @@ bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string
         int lo, hi, dist;
     };
     std::vector<Need> needs;
-    for (const SeqEvent& e : seq.events) {
-        if (e.kind != SeqEvent::Kind::Message || e.label.lines.empty()) continue;
-        needs.push_back(
-            {std::min(e.from, e.to), std::max(e.from, e.to), labelWidth(e.label, env) + 2});
+    for (size_t i = 0; i < seq.events.size(); ++i) {
+        const SeqEvent& e = seq.events[i];
+        if (e.label.lines.empty()) continue;
+        const int w = labelWidth(e.label, env);
+        const int lo = std::min(e.from, e.to), hi = std::max(e.from, e.to);
+        if (e.kind == SeqEvent::Kind::Message) {
+            if (lo != hi)
+                needs.push_back({lo, hi, w + 3});
+            else if (lo + 1 < n)
+                needs.push_back({lo, lo + 1, loopColumns(depth[i].from) + w + 1});
+        } else if (e.kind == SeqEvent::Kind::Note) {
+            if (e.side == SeqEvent::Side::Over) {
+                if (lo != hi) needs.push_back({lo, hi, w - 1});
+            } else if (e.side == SeqEvent::Side::LeftOf) {
+                if (lo > 0) needs.push_back({lo - 1, lo, w + tune::kNodePad + 3});
+            } else if (lo + 1 < n) {
+                needs.push_back({lo, lo + 1, w + tune::kNodePad + 3});
+            }
+        }
     }
     std::stable_sort(needs.begin(), needs.end(), [](const Need& a, const Need& b) {
         return a.hi - a.lo < b.hi - b.lo;
@@ -467,12 +555,54 @@ bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string
             gap[static_cast<size_t>(nd.lo + k)] += deficit / span + (k < deficit % span ? 1 : 0);
     }
     std::vector<int> centre(static_cast<size_t>(n));
-    int cols = 0;
     for (int i = 0; i < n; ++i) {
         const size_t k = static_cast<size_t>(i);
         centre[k] = i == 0 ? half[0] : centre[k - 1] + gap[k - 1];
-        cols = std::max(cols, centre[k] + half[k] + 1);
     }
+    const auto ctr = [&](int p) { return centre[static_cast<size_t>(p)]; };
+
+    // A note is a box of `w` columns from `col`, whose text has one column of padding on either
+    // side (the same kNodePad as a participant). Over one lifeline it is centred on it, over two it
+    // reaches two columns past each, and beside one it stands two columns away.
+    struct Foot {
+        int col, w;
+    };
+    const auto footOf = [&](const SeqEvent& e) {
+        const int tw = labelWidth(e.label, env) + tune::kNodePad;
+        const int lo = std::min(e.from, e.to), hi = std::max(e.from, e.to);
+        if (e.side == SeqEvent::Side::LeftOf) return Foot{ctr(lo) - tw - 1, tw};
+        if (e.side == SeqEvent::Side::RightOf) return Foot{ctr(lo) + 2, tw};
+        if (lo != hi) return Foot{ctr(lo) - 2, ctr(hi) - ctr(lo) + 5};
+        const int w = tw % 2 ? tw : tw + 1;
+        return Foot{ctr(lo) - (w - 1) / 2, w};
+    };
+    // The columns the picture spans, from the first any box, note or loop reaches to the one
+    // after the last. The loop and text of a self-message sit right of its lifeline.
+    const auto extent = [&](int& first, int& end) {
+        first = 0;
+        end = 0;
+        for (int i = 0; i < n; ++i) {
+            first = std::min(first, ctr(i) - half[static_cast<size_t>(i)]);
+            end = std::max(end, ctr(i) + half[static_cast<size_t>(i)] + 1);
+        }
+        for (size_t i = 0; i < seq.events.size(); ++i) {
+            const SeqEvent& e = seq.events[i];
+            if (e.kind == SeqEvent::Kind::Note) {
+                const Foot f = footOf(e);
+                first = std::min(first, f.col);
+                end = std::max(end, f.col + f.w);
+            } else if (e.kind == SeqEvent::Kind::Message && e.from == e.to) {
+                end = std::max(end,
+                               ctr(e.from) + loopColumns(depth[i].from) +
+                                   std::max(1, labelWidth(e.label, env)));
+            }
+        }
+    };
+    int first = 0, cols = 0;
+    extent(first, cols);
+    if (first < 0)  // a note left of the first lifeline reaches past the edge
+        for (int& c : centre) c -= first;
+    extent(first, cols);
     // A title wider than the diagram widens it, and the diagram is centred under it.
     const int titleRows = seq.title.empty() ? 0 : 2;
     if (titleRows) {
@@ -481,33 +611,85 @@ bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string
         cols = std::max(cols, env.width(seq.title));
     }
 
-    // Rows: the title, the boxes, a blank row, each message (its text, its arrow, a blank row),
-    // and the mirrored boxes.
+    // Rows: the title, the boxes, a blank row, then each event followed by a blank row (a
+    // message: its text, its arrow; a self-message: its text and the two rows of its loop; a
+    // note: its box), and the mirrored boxes. Activations open and close as the events pass: an
+    // activation's box is in half-cell units, from the top of the row its message's arrow is on,
+    // to the bottom of the row the closing one is on.
     const int boxH = boxLines + tune::kNodeFrame;
     const int topRow = titleRows;
-    int row = topRow + boxH + 1;
-    struct Placed {
+    struct Msg {
         const SeqEvent* event;
-        int labelRow, arrowRow;
+        Depth depth;
+        int labelRow, arrowRow;  // a self-message's loop is on arrowRow and the row below
     };
-    std::vector<Placed> messages;
-    for (const SeqEvent& e : seq.events) {
-        if (e.kind != SeqEvent::Kind::Message) continue;
-        messages.push_back({&e, row, row + static_cast<int>(e.label.lines.size())});
-        row = messages.back().arrowRow + 2;
+    struct NoteAt {
+        const SeqEvent* event;
+        Foot foot;
+        int row, rows;
+    };
+    struct Act {
+        int who, level, top, bottom;  // in half-cell units; bottom is -1 until it closes
+    };
+    std::vector<Msg> messages;
+    std::vector<NoteAt> notes;
+    std::vector<Act> acts;
+    std::vector<std::vector<size_t>> stack(static_cast<size_t>(n));
+    const auto open = [&](int who, int top) {
+        std::vector<size_t>& s = stack[static_cast<size_t>(who)];
+        acts.push_back({who, static_cast<int>(s.size()), top, -1});
+        s.push_back(acts.size() - 1);
+    };
+    const auto close = [&](int who, int bottom) {
+        std::vector<size_t>& s = stack[static_cast<size_t>(who)];
+        if (s.empty()) return;
+        acts[s.back()].bottom = bottom;
+        s.pop_back();
+    };
+    int row = topRow + boxH + 1;
+    int anchorTop = row, anchorBottom = row;  // the rows of the event before, for `activate`
+    for (size_t i = 0; i < seq.events.size(); ++i) {
+        const SeqEvent& e = seq.events[i];
+        const int lines = static_cast<int>(e.label.lines.size());
+        switch (e.kind) {
+        case SeqEvent::Kind::Message: {
+            const bool self = e.from == e.to;
+            const int arrow = row + lines;
+            messages.push_back({&e, depth[i], row, arrow});
+            // A box opened by a self-message starts below its loop, as Mermaid draws it.
+            if (e.activate) open(e.to, self ? 2 * (arrow + 2) : 2 * arrow);
+            if (e.deactivate) close(e.from, self ? 2 * (arrow + 1) + 2 : 2 * arrow + 2);
+            anchorTop = arrow;
+            anchorBottom = self ? arrow + 1 : arrow;
+            row = arrow + (self ? 3 : 2);
+            break;
+        }
+        case SeqEvent::Kind::Note:
+            notes.push_back({&e, footOf(e), row, lines + tune::kNodeFrame});
+            anchorTop = row;
+            anchorBottom = row + lines + tune::kNodeFrame - 1;
+            row += lines + tune::kNodeFrame + 1;
+            break;
+        case SeqEvent::Kind::Activate: open(e.from, 2 * anchorTop); break;
+        case SeqEvent::Kind::Deactivate: close(e.from, 2 * anchorBottom + 2); break;
+        default: break;
+        }
     }
     const int bottomRow = row;
     const int rows = bottomRow + boxH;
+    for (Act& a : acts)  // one still open at the end closes after the last event
+        if (a.bottom < 0) a.bottom = 2 * (row - 1);
 
     Scene scene;
     scene.cols = cols;
     scene.rows = rows;
     scene.title = seq.title;
-    auto outline = [&](int col, int r, int w, int h) {
+    auto outline = [&](int col, int r, int w, int h, int fill) {
         Stroke st;
         st.kind = Stroke::Outline;
         st.shape = Shape::Rect;
         st.pts = {{2 * col + 1, 2 * r + 1}, {2 * (col + w) - 1, 2 * (r + h) - 1}};
+        st.fill = fill;
         scene.strokes.push_back(st);
     };
     auto addText = [&](const CellBox& box, const std::vector<std::string>& lines) {
@@ -516,6 +698,14 @@ bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string
         t.lines = lines;
         scene.texts.push_back(std::move(t));
     };
+    auto segment = [&](int x0, int y0, int x1, int y1, Line line, unsigned char reach = 0) {
+        Stroke st;
+        st.kind = Stroke::Segment;
+        st.line = line;
+        st.pts = {{x0, y0}, {x1, y1}};
+        st.reach = reach;
+        scene.strokes.push_back(st);
+    };
     // The boxes: an outline, and the name in the middle, with the same name on both bands.
     for (int i = 0; i < n; ++i) {
         const size_t k = static_cast<size_t>(i);
@@ -523,58 +713,139 @@ bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string
         const int col = centre[k] - half[k];
         const int off = (boxH - tune::kNodeFrame - static_cast<int>(lines.size())) / 2;
         for (int band : {topRow, bottomRow}) {
-            outline(col, band, boxW[k], boxH);
+            outline(col, band, boxW[k], boxH, -1);
             addText(
                 {col + 2, band + 1 + off, boxW[k] - tune::kNodePad, static_cast<int>(lines.size())},
                 lines);
         }
     }
-    // The lifelines, each broken where the text of a message that passes it is.
+    // The notes: a filled box with its text, which a note over lifelines hides them behind.
+    for (const NoteAt& nt : notes) {
+        outline(nt.foot.col, nt.row, nt.foot.w, nt.rows, noteFill(env));
+        Scene::Text t;
+        t.box = {nt.foot.col + 2,
+                 nt.row + 1,
+                 nt.foot.w - tune::kNodePad,
+                 static_cast<int>(nt.event->label.lines.size())};
+        t.lines = nt.event->label.lines;
+        t.style.fill = noteFill(env);
+        t.style.color = noteText(env);
+        scene.texts.push_back(std::move(t));
+    }
+    // What a note covers of the half-cells from `x0` to `x1` is the rows (in half-cells) from its
+    // top border to its bottom border: a lifeline or a box stops there.
+    const auto coveredBy = [&](int x0, int x1) {
+        std::vector<std::pair<int, int>> r;
+        for (const NoteAt& nt : notes)
+            if (x1 >= 2 * nt.foot.col + 1 && x0 <= 2 * (nt.foot.col + nt.foot.w) - 1)
+                r.push_back({2 * nt.row + 1, 2 * (nt.row + nt.rows - 1) + 1});
+        return r;
+    };
+    // The activation boxes, each stopping at the notes over it. A box is drawn over the one under
+    // it, so that one has no right side where the other stands.
+    for (const Act& a : acts) {
+        if (a.bottom <= a.top) continue;
+        const int x0 = 2 * ctr(a.who) + a.level, x1 = x0 + 2;
+        std::vector<std::pair<int, int>> pieces{{a.top, a.bottom}};
+        for (const auto& cut : coveredBy(x0, x1)) {
+            std::vector<std::pair<int, int>> kept;
+            for (const auto& p : pieces) {
+                if (cut.first > p.first) kept.push_back({p.first, std::min(p.second, cut.first)});
+                if (cut.second < p.second)
+                    kept.push_back({std::max(p.first, cut.second), p.second});
+            }
+            pieces = kept;
+        }
+        std::vector<std::pair<int, int>> inner;  // where a box one level in is
+        for (const Act& b : acts)
+            if (b.who == a.who && b.level == a.level + 1 && b.bottom > b.top)
+                inner.push_back({b.top, b.bottom});
+        std::sort(inner.begin(), inner.end());
+        for (const auto& p : pieces) {
+            if (p.second <= p.first) continue;
+            segment(x0, p.first, x1, p.first, Line::Solid);
+            segment(x0, p.second, x1, p.second, Line::Solid);
+            segment(x0, p.first, x0, p.second, Line::Solid);
+            int from = p.first;
+            for (const auto& in : inner) {
+                if (in.second <= from || in.first >= p.second) continue;
+                if (in.first > from) segment(x1, from, x1, in.first, Line::Solid);
+                from = std::max(from, in.second);
+            }
+            if (p.second > from) segment(x1, from, x1, p.second, Line::Solid);
+        }
+    }
+    // The lifelines, each broken where the text of a message that passes it is, where a note is
+    // over it, and where its first activation box is.
     for (int i = 0; i < n; ++i) {
-        const int x = 2 * centre[static_cast<size_t>(i)] + 1;
-        std::vector<std::pair<int, int>> gaps;  // rows, from and to
-        for (const Placed& m : messages) {
-            const int lines = static_cast<int>(m.event->label.lines.size());
-            if (lines == 0) continue;
-            const int w = labelWidth(m.event->label, env);
-            const int lo = std::min(centre[static_cast<size_t>(m.event->from)],
-                                    centre[static_cast<size_t>(m.event->to)]);
-            const int hi = std::max(centre[static_cast<size_t>(m.event->from)],
-                                    centre[static_cast<size_t>(m.event->to)]);
-            const int start = lo + 1 + (hi - lo - 1 - w) / 2;
-            const int c = centre[static_cast<size_t>(i)];
-            if (c >= start && c < start + w) gaps.push_back({m.labelRow, m.arrowRow});
-        }
-        std::sort(gaps.begin(), gaps.end());
-        int from = 2 * (topRow + boxH - 1) + 1;
-        unsigned char reachFrom = 0;
-        auto piece = [&](int to, unsigned char reachTo) {
-            Stroke st;
-            st.kind = Stroke::Segment;
-            st.line = Line::Dotted;
-            st.pts = {{x, from}, {x, to}};
-            st.reach = static_cast<unsigned char>((reachFrom ? 1 : 0) | (reachTo ? 2 : 0));
-            scene.strokes.push_back(st);
+        const int x = 2 * ctr(i) + 1;
+        struct Cut {
+            int from, to;
+            bool reach;  // the ends are the gap before a text, not a box or a note
         };
-        for (const auto& g : gaps) {
-            piece(2 * (g.first - 1) + 1, 1);
-            from = 2 * g.second + 1;
-            reachFrom = 1;
+        std::vector<Cut> cuts;
+        for (const Msg& m : messages) {
+            const int lines = static_cast<int>(m.event->label.lines.size());
+            if (lines == 0 || m.event->from == m.event->to) continue;
+            const int w = labelWidth(m.event->label, env);
+            const int lo = std::min(ctr(m.event->from), ctr(m.event->to));
+            const int hi = std::max(ctr(m.event->from), ctr(m.event->to));
+            const int start = lo + 1 + (hi - lo - 1 - w) / 2;
+            const int c = ctr(i);
+            if (c >= start && c < start + w)
+                cuts.push_back({2 * (m.labelRow - 1) + 1, 2 * m.arrowRow + 1, true});
         }
-        piece(2 * bottomRow + 1, 0);
+        for (const auto& r : coveredBy(x, x)) cuts.push_back({r.first, r.second, false});
+        for (const Act& a : acts)
+            if (a.who == i && a.level == 0 && a.bottom > a.top)
+                cuts.push_back({a.top, a.bottom, false});
+        std::sort(
+            cuts.begin(), cuts.end(), [](const Cut& a, const Cut& b) { return a.from < b.from; });
+        int from = 2 * (topRow + boxH - 1) + 1;
+        bool reachFrom = false;
+        for (const Cut& c : cuts) {
+            if (c.from > from)
+                segment(x, from, x, c.from, Line::Dotted, (reachFrom ? 1 : 0) | (c.reach ? 2 : 0));
+            if (c.to > from) {
+                from = c.to;
+                reachFrom = c.reach;
+            }
+        }
+        segment(x, from, x, 2 * bottomRow + 1, Line::Dotted, reachFrom ? 1 : 0);
     }
     // The messages: a stroke from one lifeline to the other, ended by a marker, and the text
-    // centred between the lifelines.
-    for (const Placed& m : messages) {
+    // centred between the lifelines. A self-message is a loop to the right that comes back to the
+    // lifeline, with its text above it.
+    for (const Msg& m : messages) {
         const SeqEvent& e = *m.event;
-        const int xa = 2 * centre[static_cast<size_t>(e.from)] + 1;
-        const int xb = 2 * centre[static_cast<size_t>(e.to)] + 1;
         const int y = 2 * m.arrowRow + 1;
-        Stroke line;
-        line.kind = Stroke::Segment;
-        line.line = e.line;
-        line.pts = {{xa, y}, {xb, y}};
-        scene.strokes.push_back(line);
+        if (e.from == e.to) {
+            const int c = ctr(e.from);
+            const int edge = stackRight(c, m.depth.from);
+            const int loop = 2 * (c + loopColumns(m.depth.from)) + 1;
+            segment(edge, y, loop, y, e.line);
+            segment(loop, y, loop, y + 2, e.line);
+            segment(loop, y + 2, edge, y + 2, e.line);
+            if (e.head != End::None) {
+                Stroke head;
+                head.kind = e.head == End::Cross ? Stroke::CrossEnd : Stroke::Arrowhead;
+                head.line = e.line;
+                head.pts = {{edge, y + 2}, {loop, y + 2}};
+                scene.strokes.push_back(head);
+            }
+            if (!e.label.lines.empty())
+                addText({c + loopColumns(m.depth.from),
+                         m.labelRow,
+                         labelWidth(e.label, env),
+                         static_cast<int>(e.label.lines.size())},
+                        e.label.lines);
+            continue;
+        }
+        const bool right = e.to > e.from;
+        const int xa =
+            right ? stackRight(ctr(e.from), m.depth.from) : stackLeft(ctr(e.from), m.depth.from);
+        const int xb = right ? stackLeft(ctr(e.to), m.depth.to) : stackRight(ctr(e.to), m.depth.to);
+        segment(xa, y, xb, y, e.line);
         if (e.head != End::None) {
             Stroke head;
             head.kind = e.head == End::Cross ? Stroke::CrossEnd : Stroke::Arrowhead;
@@ -584,10 +855,7 @@ bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string
         }
         if (e.label.lines.empty()) continue;
         const int w = labelWidth(e.label, env);
-        const int lo =
-            std::min(centre[static_cast<size_t>(e.from)], centre[static_cast<size_t>(e.to)]);
-        const int hi =
-            std::max(centre[static_cast<size_t>(e.from)], centre[static_cast<size_t>(e.to)]);
+        const int lo = std::min(ctr(e.from), ctr(e.to)), hi = std::max(ctr(e.from), ctr(e.to));
         addText(
             {lo + 1 + (hi - lo - 1 - w) / 2, m.labelRow, w, static_cast<int>(e.label.lines.size())},
             e.label.lines);
@@ -605,7 +873,7 @@ bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string
         for (int r = t.box.row; r < t.box.row + t.box.rows; ++r) {
             for (int c = t.box.col; c < t.box.col + t.box.cols; ++c) {
                 if (c < 0 || c >= cols || r < 0 || r >= rows || cell(c, r)) {
-                    reason = "overlap";
+                    reason = "sequence: overlap";
                     return false;
                 }
                 cell(c, r) = 1;
@@ -624,7 +892,7 @@ bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string
                         std::min(st.pts[0].second, st.pts[1].second) / 2,
                         std::max(st.pts[0].first, st.pts[1].first) / 2,
                         std::max(st.pts[0].second, st.pts[1].second) / 2)) {
-                reason = "overlap";
+                reason = "sequence: overlap";
                 return false;
             }
         } else if (st.kind == Stroke::Outline) {
@@ -632,7 +900,7 @@ bool drawSequence(const Sequence& seq, const Env& env, Diagram& out, std::string
             const int c1 = st.pts[1].first / 2, r1 = st.pts[1].second / 2;
             if (touches(c0, r0, c1, r0) || touches(c0, r1, c1, r1) || touches(c0, r0, c0, r1) ||
                 touches(c1, r0, c1, r1)) {
-                reason = "overlap";
+                reason = "sequence: overlap";
                 return false;
             }
         }

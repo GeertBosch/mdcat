@@ -1,0 +1,276 @@
+Built-in Mermaid sequence diagrams: self-messages, notes, activations
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Step 3 of docs/plan-mermaid-sequence.md. Checked by mermaid-kitty.sh at width
+80.
+
+Self-messages
+────────────────────────────────────────────────────────────────────────────────
+
+A loop to the right that comes back to the lifeline, with its text above it, in
+every arrow style. The text makes room before the next lifeline, and the last
+participant's widens the picture.
+
+image @13,16 c=47 r=50 z=0 C=1 png=470x1000
+                ▗▄▄▄▄                 ▗▄▄▄▄
+                ▐ A ▐                 ▐ B ▐
+                ▐▄▄▄▟                 ▐▄▄▄▟
+                  ▐                     ▐
+                  ▐ solid, arrowhead    ▐
+                  ▐▄▄                   ▐
+                  ▐█▟                   ▐
+                  ▐                     ▐
+                  ▐ dotted, arrowhead   ▐
+                  ▐▄▄                   ▐
+                  ▐█▟                   ▐
+                  ▐                     ▐
+                  ▐ solid, no head      ▐
+                  ▐▄▄                   ▐
+                  ▐▄▟                   ▐
+                  ▐                     ▐
+                  ▐ dotted, no head     ▐
+                  ▐▄▄                   ▐
+                  ▐▄▟                   ▐
+                  ▐                     ▐
+                  ▐ solid, cross        ▐
+                  ▐▄▄                   ▐
+                  ▐▙▟                   ▐
+                  ▐                     ▐
+                  ▐ dotted, cross       ▐
+                  ▐▄▄                   ▐
+                  ▐▙▟                   ▐
+                  ▐                     ▐
+                  ▐ solid, async        ▐
+                  ▐▄▄                   ▐
+                  ▐█▟                   ▐
+                  ▐                     ▐
+                  ▐ dotted, async       ▐
+                  ▐▄▄                   ▐
+                  ▐█▟                   ▐
+                  ▐                     ▐
+                  ▐                     ▐ the last participant
+                  ▐                     ▐ has two lines of text
+                  ▐                     ▐▄▄
+                  ▐                     ▐█▟
+                  ▐                     ▐
+                  ▐                     ▐▄▄
+                  ▐                     ▐█▟
+                  ▐                     ▐
+                  ▐ an ordinary message ▐
+                  ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟█
+                  ▐                     ▐
+                ▗▄▟▄▄                 ▗▄▟▄▄
+                ▐ A ▐                 ▐ B ▐
+                ▐▄▄▄▟                 ▐▄▄▄▟
+
+Notes
+────────────────────────────────────────────────────────────────────────────────
+
+All four placements. over one lifeline is centred on it, over two it reaches
+past both, and over three the lifeline between breaks at its border. left of the
+first lifeline widens the picture to the left, and a long multi-line note right
+of the last widens it to the right.
+
+image @72,5 c=69 r=49 z=0 C=1 png=690x980
+                      ▗▄▄▄▄            ▗▄▄▄▄           ▗▄▄▄▄
+                      ▐ A ▐            ▐ B ▐           ▐ C ▐
+                      ▐▄▄▄▟            ▐▄▄▄▟           ▐▄▄▄▟
+                        ▐                ▐               ▐
+                        ▐     before     ▐               ▐
+                        ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟█               ▐
+                        ▐                ▐               ▐
+                        ▐          ▗▄▄▄▄▄▟▄▄▄▄▄▄         ▐
+                        ▐          ▐█over one ██         ▐
+                        ▐          ▐████████████         ▐
+                        ▐                ▐               ▐
+                      ▗▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄             ▐
+                      ▐█     over two     ██             ▐
+                      ▐█████████████████████             ▐
+                        ▐                ▐               ▐
+                      ▗▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄
+                      ▐█        over three, past B        ██
+                      ▐█████████████████████████████████████
+                        ▐                ▐               ▐
+                      ▗▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄
+                      ▐█           other order            ██
+                      ▐█████████████████████████████████████
+                        ▐                ▐               ▐
+     ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ ▐                ▐               ▐
+     ▐█ left of the  ██ ▐                ▐               ▐
+     ▐█first lifeline██ ▐                ▐               ▐
+     ▐█████████████████ ▐                ▐               ▐
+                        ▐                ▐               ▐
+                        ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄ ▐               ▐
+                        ▐ ▐█right of A██ ▐               ▐
+                        ▐ ▐█████████████ ▐               ▐
+                        ▐                ▐               ▐
+                        ▐                ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄ ▐
+                        ▐                ▐ ▐█left of C██ ▐
+                        ▐                ▐ ▐████████████ ▐
+                        ▐                ▐               ▐
+                        ▐                ▐               ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+                        ▐                ▐               ▐ ▐█a long note██
+                        ▐                ▐               ▐ ▐█   with    ██
+                        ▐                ▐               ▐ ▐█   four    ██
+                        ▐                ▐               ▐ ▐█   lines   ██
+                        ▐                ▐               ▐ ▐██████████████
+                        ▐                ▐               ▐
+                        ▐             after              ▐
+                        ▐█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                        ▐                ▐               ▐
+                      ▗▄▟▄▄            ▗▄▟▄▄           ▗▄▟▄▄
+                      ▐ A ▐            ▐ B ▐           ▐ C ▐
+                      ▐▄▄▄▟            ▐▄▄▄▟           ▐▄▄▄▟
+
+A note beside a lifeline makes room between it and its neighbour:
+
+image @124,18 c=44 r=27 z=0 C=1 png=440x540
+                  ▗▄▄▄▄▄▄▄▄▄▄                        ▗▄▄▄▄▄▄▄▄
+                  ▐ Router  ▐                        ▐ CSRS  ▐
+                  ▐▄▄▄▄▄▄▄▄▄▟                        ▐▄▄▄▄▄▄▄▟
+                       ▐                                 ▐
+                     ▗▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄
+                     ▐█       Initial routing info        ██
+                     ▐██████████████████████████████████████
+                       ▐                                 ▐
+                       ▐    getCollectionRoutingInfo     ▐
+                       ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟█
+                       ▐                                 ▐
+                       ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄  ▐
+                       ▐ ▐█The routing info tells the██  ▐
+                       ▐ ▐█  router what to contact  ██  ▐
+                       ▐ ▐█████████████████████████████  ▐
+                       ▐                                 ▐
+                       ▐             Shard 1             ▐
+                       ▐█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                       ▐                                 ▐
+                       ▐ ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄ ▐
+                       ▐ ▐█Since the shard has a newer██ ▐
+                       ▐ ▐█    version, it says so    ██ ▐
+                       ▐ ▐██████████████████████████████ ▐
+                       ▐                                 ▐
+                  ▗▄▄▄▄▟▄▄▄▄▄                        ▗▄▄▄▟▄▄▄▄
+                  ▐ Router  ▐                        ▐ CSRS  ▐
+                  ▐▄▄▄▄▄▄▄▄▄▟                        ▐▄▄▄▄▄▄▄▟
+
+Activations
+────────────────────────────────────────────────────────────────────────────────
+
++ after the arrow activates the receiver, - deactivates the sender. A box is a
+cell wide on the lifeline, a nested one is shifted half a box to the right, and
+an arrow meets the box, not the lifeline. A self-message leaves from the side of
+the stack.
+
+image @160,28 c=23 r=25 z=0 C=1 png=230x500
+                            ▗▄▄▄▄        ▗▄▄▄▄
+                            ▐ A ▐        ▐ B ▐
+                            ▐▄▄▄▟        ▐▄▄▄▟
+                              ▐            ▐
+                              ▐ self think ▐
+                              ▐▄▄          ▐
+                              ▐█▟          ▐
+                              ▐            ▐
+                              ▐    call    ▐
+                              ▐▄▄▄▄▄▄▄▄▄▄▄█▛▌
+                              ▐            ▌▌
+                              ▐            ▌▌ inner
+                              ▐            ▌▙▄▄
+                              ▐            ▌█▙▟
+                              ▐            █▜
+                              ▐            █▐ back
+                              ▐            █▐▄▄
+                              ▐            █▐█▟
+                              ▐            ▛▛
+                              ▐    ret     ▌▌
+                              ▐█▄▄▄▄▄▄▄▄▄▄▄▌▌
+                              ▐            ▜▘
+                            ▗▄▟▄▄        ▗▄▟▄▄
+                            ▐ A ▐        ▐ B ▐
+                            ▐▄▄▄▟        ▐▄▄▄▟
+
+Three levels, and arrows from both sides into a box:
+
+image @188,23 c=34 r=30 z=0 C=1 png=340x600
+                       ▗▄▄▄▄  ▗▄▄▄▄                 ▗▄▄▄▄
+                       ▐ A ▐  ▐ B ▐                 ▐ C ▐
+                       ▐▄▄▄▟  ▐▄▄▄▟                 ▐▄▄▄▟
+                         ▐      ▐                     ▐
+                         ▐ one  ▐                     ▐
+                         ▐▄▄▄▄▄█▛▌                    ▐
+                         ▐      ▌▌                    ▐
+                         ▐      ▌▌two, from the right ▐
+                         ▐      █▜█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                         ▐      █▐                    ▐
+                         ▐      █▐ three              ▐
+                         ▐      █▐▄▄                  ▐
+                         ▐      █▐█▟                  ▐
+                         ▐      █▛▌                   ▐
+                         ▐      █▌▌   back right      ▐
+                         ▐      █▌▙▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟█
+                         ▐      █▜▘                   ▐
+                         ▐      █▐ back               ▐
+                         ▐      █▐▄▄                  ▐
+                         ▐      █▐█▟                  ▐
+                         ▐      ▛▛                    ▐
+                         ▐ out  ▌▌                    ▐
+                         ▐█▄▄▄▄▄▌▌                    ▐
+                         ▐      ▜▘                    ▐
+                         ▐     past B, no box now     ▐
+                         ▐█▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                         ▐      ▐                     ▐
+                       ▗▄▟▄▄  ▗▄▟▄▄                 ▗▄▟▄▄
+                       ▐ A ▐  ▐ B ▐                 ▐ C ▐
+                       ▐▄▄▄▟  ▐▄▄▄▟                 ▐▄▄▄▟
+
+Standalone activate and deactivate act on the row of the message before. A box
+still open at the end closes there, a note over a box stops it at the note's
+border, and an activate followed at once by deactivate is one row tall.
+
+image @223,24 c=32 r=27 z=0 C=1 png=320x540
+                        ▗▄▄▄▄           ▗▄▄▄▄
+                        ▐ A ▐           ▐ B ▐
+                        ▐▄▄▄▟           ▐▄▄▄▟
+                          ▐               ▐
+                          ▐      one      ▐
+                          ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄█▛▌
+                          ▐               ▌▌
+                          ▐      two      ▌▌
+                          ▐█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▌▌
+                          ▐               ▌▌
+                        ▗▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▙▙▄
+                        ▐█A note over a box██
+                        ▐████████████████████
+                          ▐               ▌▌
+                          ▐     three     ▌▌
+                          ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄█▌▌
+                          ▐               ▜▘
+                          ▐     four      ▐
+                          ▛▙▄▄▄▄▄▄▄▄▄▄▄▄▄▟█
+                          ▜▘              ▐
+                          ▐               ▐ never closed
+                          ▐               ▐▄▄
+                          ▐               ▐█▟
+                          ▐               ▐
+                        ▗▄▟▄▄           ▗▄▟▄▄
+                        ▐ A ▐           ▐ B ▐
+                        ▐▄▄▄▟           ▐▄▄▄▟
+
+Falls back
+────────────────────────────────────────────────────────────────────────────────
+
+A - with nothing to close, deactivate with nothing open, and a message whose
+text passes in front of an activated lifeline are not drawn.
+
+  sequenceDiagram
+      A->>B: hello
+      B-->>-A: nothing to close
+
+  sequenceDiagram
+      A->>B: hello
+      deactivate B
+
+  sequenceDiagram
+      A->>+B: hello
+      C->>A: a message that passes in front of B
+      B-->>-A: bye
+

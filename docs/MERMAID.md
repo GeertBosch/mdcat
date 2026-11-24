@@ -83,8 +83,8 @@ cells apart. A diagram too wide for the terminal is [fitted](#13-fitting-the-wid
 
 ## 2. Diagrams that are not drawn here
 
-The built-in renderer draws flowcharts and, since §14, the start of sequence
-diagrams, and declines anything it does not draw exactly. A declined diagram is never drawn wrongly; it goes to `mmdc` or to source.
+The built-in renderer draws flowcharts and, since §14, sequence diagrams without
+blocks, and declines anything it does not draw exactly. A declined diagram is never drawn wrongly; it goes to `mmdc` or to source.
 The reasons, as `MDCAT_MERMAID_DEBUG=1` words them:
 
 | Reason | Example |
@@ -102,11 +102,10 @@ The reasons, as `MDCAT_MERMAID_DEBUG=1` words them:
 | `unsupported syntax: style on subgraph S` | `style` or `class` naming a subgraph's id |
 | `unsupported syntax: empty subgraph S` | a subgraph with no node and no subgraph in it, or whose nodes an earlier-closing subgraph already holds (`mmdc` draws it as a plain box) |
 | `unsupported syntax: …` | also an `end` with no open `subgraph`, a `subgraph` never closed (the line that opened it is named), two subgraphs with one id, and a title that is empty (`id[]`) or has text after it |
-| `sequence: not yet: note` | a sequence diagram with a `note` (the first of the not-yet-drawn things in the source is named) |
 | `sequence: not yet: block` | a sequence diagram with `loop`, `alt`, `opt`, `par`, `critical` or `break` |
-| `sequence: not yet: self-message` | a message from a participant to itself (`A->>A: text`) |
 | `sequence: unsupported syntax: KEYWORD` | `actor`, `box`, `create`, `destroy`, `autonumber`, `rect`, `link`, `links`, `properties`, `details`; or `<<->>` (two-headed arrows) |
-| `sequence: unsupported syntax: STATEMENT` | a statement that is not understood: a message with no `:`, an arrow that is not one of the eight in §14, `activate` of an unknown participant, an `else`, `and` or `option` outside its block, an `end` with no block open, a block never closed, a header with other text, `participant X@{ … }` |
+| `sequence: unsupported syntax: STATEMENT` | a statement that is not understood: a message with no `:`, an arrow that is not one of the eight in §14, `activate` of an unknown participant, a `-` after an arrow or a `deactivate` with no activation open (Mermaid rejects both), an `else`, `and` or `option` outside its block, an `end` with no block open, a block never closed, a header with other text, `participant X@{ … }` |
+| `sequence: overlap` | a message whose text would pass in front of an activation box, or other text and strokes that would share a cell (a check that catches a layout bug) |
 | `sequence: html in label`, `sequence: unsupported label: …`, `sequence: unsupported entity: …` | as for flowchart labels (§9), in a participant name, a message, a note or a block's text |
 | `sequence: unsupported front matter` | front matter that is not understood |
 | `sequence: empty diagram` | no participant at all |
@@ -618,11 +617,10 @@ graph LR
 A diagram that starts with `sequenceDiagram` is drawn as participants and messages.
 Each participant is a box at the top and, mirrored, at the bottom, with a dotted
 lifeline between them. Each message is a horizontal stroke from one lifeline to the
-other, with its text centred on the rows above it, then a blank row. Only
-participants and messages are drawn so far: notes, `loop`/`alt`/… blocks and
-messages to oneself are [declined](#2-diagrams-that-are-not-drawn-here) with a
-`sequence: not yet: …` reason, and the `+`/`-` activation marks and `activate` /
-`deactivate` are read and not drawn.
+other, with its text centred on the rows above it, then a blank row. A message to
+oneself is a loop to the right of the lifeline; a note is a filled box; an activation is
+a narrow box on a lifeline. `loop`/`alt`/… blocks are
+[declined](#2-diagrams-that-are-not-drawn-here) with `sequence: not yet: block`.
 
 ```mermaid
 sequenceDiagram
@@ -634,6 +632,19 @@ sequenceDiagram
     H-->>T: pids
     H->>C: Attach and dump
     C--)T: done
+```
+
+Notes and activations, with a message to oneself:
+
+```mermaid
+sequenceDiagram
+    participant D as client
+    participant R as mongod
+    Note over D,R: setClusterParameter
+    D->>+R: setClusterParameter
+    R->>R: insert / update (majority)
+    Note right of R: the new value is<br/>durable here
+    R-->>-D: status
 ```
 
 What is read, as Mermaid reads it:
@@ -652,8 +663,29 @@ What is read, as Mermaid reads it:
   front-matter `title:`) is drawn in bold above the boxes.
 - A message between lifelines that are not neighbours crosses the ones between; those
   lifelines stop short of its text, which they would otherwise run through.
+- A message to oneself (`A->>A: text`, in any of the arrow styles) leaves the lifeline
+  to the right, goes down one row and comes back with the arrowhead, with its text above
+  the loop. The next lifeline is moved right to make room for the text.
+- A note is `note over A`, `note over A,B`, `note left of A` or `note right of A`, with
+  `<br>` for more lines. It is a box of the text plus a column of padding on each side,
+  filled pale yellow on a light terminal and a muted olive on a dark one (the text colour
+  is set to match). Over one lifeline it is centred on it; over two it reaches two
+  columns past each; beside one it stands two columns away. A lifeline (or an activation
+  box) a note covers stops at its border, and a note beside a lifeline moves the
+  neighbouring lifeline to make room. A note left of the first lifeline or right of the
+  last widens the picture. A note over an unknown participant creates it.
+- `A->>+B` activates the receiver and `B-->>-A` deactivates the sender; `activate B` and
+  `deactivate B` do the same on the row of the message before. An activation is a box one
+  column wide on the lifeline, from its message's arrow to the closing one's (the
+  lifeline is not drawn inside it), and each nested level is shifted half a box to the
+  right. An arrow meets the side of the box, not the lifeline, and a self-message leaves
+  from the right side of the stack, as it stands when the message starts (a box that
+  message opens begins below its loop). A box still open at the end closes after the
+  last event. An `activate` followed at once by `deactivate` is one row tall; a box that
+  would have no height at all (the `+` of a self-message that is never closed) is not drawn.
 - Keywords ignore case. A box is as wide as its widest line plus four columns, made
   odd so that the lifeline runs down the middle of a column.
+- The text of a message has a blank column on each side between the lifelines it joins.
 
 ## Limits
 
@@ -686,7 +718,8 @@ swapped for boxes: `src/mongo/db/matcher/README.md:341` (two subgraphs) and
 three decisions). The layout does not reorder anything to get out of such a case.
 
 Not drawn at all: `direction` inside a graph, and the other diagram types
-(pie, class, state, Gantt, …). A sequence diagram with `actor`, `box`, `create`,
+(pie, class, state, Gantt, …). A sequence diagram with a message whose text would pass in front of an
+activation box (`sequence: overlap`), `actor`, `box`, `create`,
 `destroy`, `autonumber`, `rect`, `link`, `links`, `properties`, `details` or `<<->>`
 is declined too. The async arrows `-)` and `--)` are drawn as ordinary arrowheads. Colours, curves and other styling are read
 but have no effect, except the node colours described in [Syntax](#6-syntax). A flowchart that is declined goes to `mmdc` when it is
