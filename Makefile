@@ -33,9 +33,9 @@ $(B)/highlight.o: $(S)/highlight.cpp $(S)/highlight.h | $(B)
 $(B)/png_write.o: $(S)/png_write.cpp $(S)/png_write.h | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
 
-MERMAID_OBJS = $(B)/mermaid.o $(B)/mermaid_parse.o $(B)/mermaid_layout.o $(B)/mermaid_draw.o $(B)/mermaid_paint.o
+MERMAID_OBJS = $(B)/mermaid.o $(B)/mermaid_parse.o $(B)/mermaid_layout.o $(B)/mermaid_draw.o $(B)/mermaid_paint.o $(B)/mermaid_sequence.o
 
-$(MERMAID_OBJS): $(B)/%.o: $(S)/%.cpp $(S)/mermaid.h $(S)/mermaid_model.h $(S)/mermaid_shape.h $(S)/png_write.h | $(B)
+$(MERMAID_OBJS): $(B)/%.o: $(S)/%.cpp $(S)/mermaid.h $(S)/mermaid_model.h $(S)/mermaid_shape.h $(S)/mermaid_sequence.h $(S)/png_write.h | $(B)
 	$(CXX) $(CXXFLAGS) -I$(S) -c -o $@ $<
 
 # mdcat is being split into modules (docs/plan-mdcat-refactor.md). Each module adds its object
@@ -110,6 +110,8 @@ FMT_SRCS := \
 	$(S)/mermaid_model.h \
 	$(S)/mermaid_paint.cpp \
 	$(S)/mermaid_parse.cpp \
+	$(S)/mermaid_sequence.cpp \
+	$(S)/mermaid_sequence.h \
 	$(S)/mermaid_shape.h \
 	$(S)/png_write.cpp \
 	$(S)/png_write.h \

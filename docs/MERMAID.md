@@ -23,6 +23,7 @@ file with `mdcat` to see every example drawn; the design is in
 - [11. Cycles, self-loops and parallel edges](#11-cycles-self-loops-and-parallel-edges)
 - [12. Subgraphs](#12-subgraphs)
 - [13. Fitting the width](#13-fitting-the-width)
+- [14. Sequence diagrams](#14-sequence-diagrams)
 - [Limits](#limits)
 
 ## How a diagram is rendered
@@ -82,13 +83,13 @@ cells apart. A diagram too wide for the terminal is [fitted](#13-fitting-the-wid
 
 ## 2. Diagrams that are not drawn here
 
-The built-in renderer draws flowcharts, and declines anything it does not draw
-exactly. A declined diagram is never drawn wrongly; it goes to `mmdc` or to source.
+The built-in renderer draws flowcharts and, since §14, the start of sequence
+diagrams, and declines anything it does not draw exactly. A declined diagram is never drawn wrongly; it goes to `mmdc` or to source.
 The reasons, as `MDCAT_MERMAID_DEBUG=1` words them:
 
 | Reason | Example |
 | ------ | ------- |
-| `not a flowchart` | `sequenceDiagram`, `pie`, `gantt`, `classDiagram`, … |
+| `not a flowchart` | `pie`, `gantt`, `classDiagram`, … (a `sequenceDiagram` is read as one, see §14) |
 | `unsupported syntax: …` | `direction` inside a graph, `end` as an id, a link with mismatched ends such as `A o--> B`, an unclosed shape or quote |
 | `subgraph layout: depth` | subgraphs nested more than three levels deep |
 | `subgraph layout: title` | a subgraph title for which no place was found clear of the edges that enter the box (rare: the box is made wider first) |
@@ -101,6 +102,15 @@ The reasons, as `MDCAT_MERMAID_DEBUG=1` words them:
 | `unsupported syntax: style on subgraph S` | `style` or `class` naming a subgraph's id |
 | `unsupported syntax: empty subgraph S` | a subgraph with no node and no subgraph in it, or whose nodes an earlier-closing subgraph already holds (`mmdc` draws it as a plain box) |
 | `unsupported syntax: …` | also an `end` with no open `subgraph`, a `subgraph` never closed (the line that opened it is named), two subgraphs with one id, and a title that is empty (`id[]`) or has text after it |
+| `sequence: not yet: note` | a sequence diagram with a `note` (the first of the not-yet-drawn things in the source is named) |
+| `sequence: not yet: block` | a sequence diagram with `loop`, `alt`, `opt`, `par`, `critical` or `break` |
+| `sequence: not yet: self-message` | a message from a participant to itself (`A->>A: text`) |
+| `sequence: unsupported syntax: KEYWORD` | `actor`, `box`, `create`, `destroy`, `autonumber`, `rect`, `link`, `links`, `properties`, `details`; or `<<->>` (two-headed arrows) |
+| `sequence: unsupported syntax: STATEMENT` | a statement that is not understood: a message with no `:`, an arrow that is not one of the eight in §14, `activate` of an unknown participant, an `else`, `and` or `option` outside its block, an `end` with no block open, a block never closed, a header with other text, `participant X@{ … }` |
+| `sequence: html in label`, `sequence: unsupported label: …`, `sequence: unsupported entity: …` | as for flowchart labels (§9), in a participant name, a message, a note or a block's text |
+| `sequence: unsupported front matter` | front matter that is not understood |
+| `sequence: empty diagram` | no participant at all |
+| `sequence: too large` | more than 12 participants or 150 messages, notes and block lines (a complexity gate: shown as source, `mmdc` is not asked) |
 | `unsupported direction` | `graph XY` |
 | `unsupported shape: NAME` | `A@{ shape: doc }` and the other shapes that are not [drawn](#10-node-shapes) |
 | `unsupported label: …` | a label that is not valid where it stands, such as `"say "hi""`, `a[""]`, or a blank edge label |
@@ -603,6 +613,48 @@ graph LR
     check --> write[Write the output]
 ```
 
+## 14. Sequence diagrams
+
+A diagram that starts with `sequenceDiagram` is drawn as participants and messages.
+Each participant is a box at the top and, mirrored, at the bottom, with a dotted
+lifeline between them. Each message is a horizontal stroke from one lifeline to the
+other, with its text centred on the rows above it, then a blank row. Only
+participants and messages are drawn so far: notes, `loop`/`alt`/… blocks and
+messages to oneself are [declined](#2-diagrams-that-are-not-drawn-here) with a
+`sequence: not yet: …` reason, and the `+`/`-` activation marks and `activate` /
+`deactivate` are read and not drawn.
+
+```mermaid
+sequenceDiagram
+    title: Hang analyzer
+    participant T as Task
+    participant H as Hang Analyzer
+    participant C as Core Dumps
+    T->>H: Scan processes<br/>for resmoke
+    H-->>T: pids
+    H->>C: Attach and dump
+    C--)T: done
+```
+
+What is read, as Mermaid reads it:
+
+- A participant is declared with `participant A` or `participant A as Display name`
+  (`<br>` in the name makes more lines), or created by its first mention in a message.
+  Boxes are in order of first mention, left to right. A name may hold spaces and the
+  case matters: `Generate task script` and `Generate Task Script` are two participants.
+  A later `as` renames a participant a message created.
+- The arrows are `->>` and `-->>` (arrowhead), `->` and `-->` (no head), `-x` and `--x`
+  (cross) and `-)` and `--)` (drawn with an arrowhead, like `->>`: Mermaid's open
+  async head is not drawn). A single dash is a solid line and a double dash a dotted one.
+- Text follows a colon; `<br>` breaks a line, entity codes (`#35;`) are decoded, and a
+  `#` that is not an entity starts a comment, as in Mermaid. `;` ends a statement, and
+  a line that starts with `%%` is a comment. `title: Text` or `title Text` (or a
+  front-matter `title:`) is drawn in bold above the boxes.
+- A message between lifelines that are not neighbours crosses the ones between; those
+  lifelines stop short of its text, which they would otherwise run through.
+- Keywords ignore case. A box is as wide as its widest line plus four columns, made
+  odd so that the lifeline runs down the middle of a column.
+
 ## Limits
 
 | Limit | Value | Reason shown |
@@ -612,6 +664,8 @@ graph LR
 | edge label word | 40 columns | `label too wide` |
 | back edges | one per ten columns of the terminal's width | `back edges: N > M` |
 | crossings (bridges) | one per ten columns of the terminal's width | `crossings: N > M` |
+| sequence participants | 12 | `sequence: too large` |
+| sequence messages, notes and block lines | 150 | `sequence: too large` |
 
 For the last two, a terminal narrower than 72 columns counts as 72 wide, so an
 80-column terminal allows 8 of each. Beyond that, a diagram is too tangled to
@@ -632,6 +686,8 @@ swapped for boxes: `src/mongo/db/matcher/README.md:341` (two subgraphs) and
 three decisions). The layout does not reorder anything to get out of such a case.
 
 Not drawn at all: `direction` inside a graph, and the other diagram types
-(sequence, pie, class, state, Gantt, …). Colours, curves and other styling are read
+(pie, class, state, Gantt, …). A sequence diagram with `actor`, `box`, `create`,
+`destroy`, `autonumber`, `rect`, `link`, `links`, `properties`, `details` or `<<->>`
+is declined too. The async arrows `-)` and `--)` are drawn as ordinary arrowheads. Colours, curves and other styling are read
 but have no effect, except the node colours described in [Syntax](#6-syntax). A flowchart that is declined goes to `mmdc` when it is
 available.

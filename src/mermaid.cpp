@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "mermaid_model.h"
+#include "mermaid_sequence.h"
 
 namespace mermaid {
 
@@ -89,6 +90,8 @@ bool render(const std::vector<std::string>& body,
             std::string& reason,
             Decline* why) {
     if (why) *why = Decline::Unsupported;
+    if (diagramKeyword(body) == "sequenceDiagram")
+        return renderSequence(body, env, out, reason, why);
     Graph parsed;
     if (!parseFlowchart(body, parsed, reason)) return false;
     // Try each attempt until a diagram fits the width. If none does, the narrowest is drawn

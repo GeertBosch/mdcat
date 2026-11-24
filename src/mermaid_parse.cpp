@@ -1226,12 +1226,15 @@ struct Parser {
 
 }  // namespace
 
-bool parseFlowchart(const std::vector<std::string>& body, Graph& g, std::string& reason) {
-    Parser ps;
+bool splitDiagram(const std::vector<std::string>& body,
+                  std::vector<std::string>& frontMatter,
+                  bool& hasFrontMatter,
+                  std::string& text,
+                  std::string& reason) {
     size_t first = 0;
     while (first < body.size() && trim(body[first]).empty()) ++first;
-    std::vector<std::string> frontMatter;
-    bool hasFrontMatter = false;
+    frontMatter.clear();
+    hasFrontMatter = false;
     if (first < body.size() && trim(body[first]) == "---") {
         size_t close = first + 1;
         while (close < body.size() && trim(body[close]) != "---") ++close;
@@ -1244,8 +1247,40 @@ bool parseFlowchart(const std::vector<std::string>& body, Graph& g, std::string&
         hasFrontMatter = true;
         first = close + 1;
     }
-    std::string text;
+    text.clear();
     for (size_t i = first; i < body.size(); ++i) text += body[i] + '\n';
+    return true;
+}
+
+std::string diagramKeyword(const std::vector<std::string>& body) {
+    std::vector<std::string> frontMatter;
+    bool hasFrontMatter = false;
+    std::string text, reason, st;
+    if (!splitDiagram(body, frontMatter, hasFrontMatter, text, reason)) return "";
+    StatementReader reader(text);
+    if (reader.next(st) != StatementReader::Result::Statement) return "";
+    size_t p = 0;
+    while (p < st.size() && (std::isalpha(static_cast<unsigned char>(st[p])) || st[p] == '-')) ++p;
+    return st.substr(0, p);
+}
+
+bool plainLabelText(const std::string& raw, Label& label, std::string& reason) {
+    return plainLabel(raw, /*quoted=*/true, label, reason);
+}
+
+bool parseFrontMatterTitle(const std::vector<std::string>& frontMatter, std::string& title) {
+    Graph g;
+    if (!parseFrontMatter(frontMatter, g)) return false;
+    title = g.title;
+    return true;
+}
+
+bool parseFlowchart(const std::vector<std::string>& body, Graph& g, std::string& reason) {
+    Parser ps;
+    std::vector<std::string> frontMatter;
+    bool hasFrontMatter = false;
+    std::string text;
+    if (!splitDiagram(body, frontMatter, hasFrontMatter, text, reason)) return false;
 
     StatementReader reader(text);
     bool sawHeader = false;

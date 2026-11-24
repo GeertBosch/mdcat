@@ -3,12 +3,12 @@
 With `--mermaid builtin`, each of these shows its source as a code panel, and
 `MDCAT_MERMAID_DEBUG=1` names the reason on stderr. Checked by `mermaid-kitty.sh`.
 
-## Sequence diagram
+## Class diagram
 
 ```mermaid
-sequenceDiagram
-    Alice->>Bob: Hello
-    Bob-->>Alice: Hi
+classDiagram
+    Animal <|-- Duck
+    Animal : +int age
 ```
 
 ## Pie chart

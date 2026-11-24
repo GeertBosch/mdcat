@@ -1,0 +1,305 @@
+Built-in Mermaid sequence diagrams
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Step 2 of docs/plan-mermaid-sequence.md: participants, boxes at the top and the
+bottom, dotted lifelines and messages. Checked by mermaid-kitty.sh at width 80.
+
+Every arrow kind
+────────────────────────────────────────────────────────────────────────────────
+
+image @9,28 c=24 r=33 z=0 C=1 png=240x660
+                                  Arrow kinds
+
+                            ▗▄▄▄▄              ▗▄▄▄▄
+                            ▐ A ▐              ▐ B ▐
+                            ▐▄▄▄▟              ▐▄▄▄▟
+                              ▐                  ▐
+                              ▐ solid, arrowhead ▐
+                              ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟█
+                              ▐                  ▐
+                              ▐dotted, arrowhead ▐
+                              ▐█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                              ▐                  ▐
+                              ▐  solid, no head  ▐
+                              ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                              ▐                  ▐
+                              ▐ dotted, no head  ▐
+                              ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                              ▐                  ▐
+                              ▐   solid, cross   ▐
+                              ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟█
+                              ▐                  ▐
+                              ▐  dotted, cross   ▐
+                              ▐▙▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                              ▐                  ▐
+                              ▐   solid, async   ▐
+                              ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟█
+                              ▐                  ▐
+                              ▐  dotted, async   ▐
+                              ▐█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                              ▐                  ▐
+                            ▗▄▟▄▄              ▗▄▟▄▄
+                            ▐ A ▐              ▐ B ▐
+                            ▐▄▄▄▟              ▐▄▄▄▟
+
+Implicit participants
+────────────────────────────────────────────────────────────────────────────────
+
+Names may hold spaces and the case matters: Generate task script and Generate
+Task Script are two participants.
+
+image @49,0 c=98 r=17 z=0 C=1 png=980x340
+▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄      ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+▐ Task Shut Down  ▐      ▐ Generate task script  ▐  ▐ Generate Task Script  ▐  ▐ Generated Task  ▐
+▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟      ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+         ▐                           ▐                          ▐                       ▐
+         ▐If core dumps are present, ▐                          ▐                       ▐
+         ▐   generate task config    ▐                          ▐                       ▐
+         ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟█                          ▐                       ▐
+         ▐                           ▐                          ▐                       ▐
+         ▐                Write generated config                ▐                       ▐
+         ▐█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟                       ▐
+         ▐                           ▐                          ▐                       ▐
+         ▐                      Use evergreen to generate the task                      ▐
+         ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟█
+         ▐                           ▐                          ▐                       ▐
+▗▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄      ▗▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄
+▐ Task Shut Down  ▐      ▐ Generate task script  ▐  ▐ Generate Task Script  ▐  ▐ Generated Task  ▐
+▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟      ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+
+Aliases and declared participants
+────────────────────────────────────────────────────────────────────────────────
+
+The order of first mention is the order on the page, whether a participant is
+declared or not. A later as renames a participant that a message created.
+
+image @73,19 c=41 r=16 z=0 C=1 png=410x320
+                   ▗▄▄▄▄▄▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄  ▗▄▄▄▄
+                   ▐ Client  ▐  ▐ Server (renamed)  ▐  ▐ Z ▐
+                   ▐▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▟
+                        ▐                 ▐              ▐
+                        ▐     request     ▐              ▐
+                        ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟█              ▐
+                        ▐                 ▐              ▐
+                        ▐    response     ▐              ▐
+                        ▐█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟              ▐
+                        ▐                 ▐              ▐
+                        ▐              ping              ▐
+                        ▐█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                        ▐                 ▐              ▐
+                   ▗▄▄▄▄▟▄▄▄▄▄  ▗▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄  ▗▄▟▄▄
+                   ▐ Client  ▐  ▐ Server (renamed)  ▐  ▐ Z ▐
+                   ▐▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟  ▐▄▄▄▟
+
+A message that spans lifelines
+────────────────────────────────────────────────────────────────────────────────
+
+The lifelines it passes break behind its text.
+
+image @95,19 c=41 r=19 z=0 C=1 png=410x380
+                   ▗▄▄▄▄          ▗▄▄▄▄      ▗▄▄▄▄     ▗▄▄▄▄
+                   ▐ A ▐          ▐ B ▐      ▐ C ▐     ▐ D ▐
+                   ▐▄▄▄▟          ▐▄▄▄▟      ▐▄▄▄▟     ▐▄▄▄▟
+                     ▐              ▐          ▐         ▐
+                     ▐a long message that passes B and C ▐
+                     ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▟█
+                     ▐              ▐          ▐         ▐
+                     ▐ and one back, over the same three ▐
+                     ▐█▄▄▄▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▄▟
+                     ▐              ▐          ▐         ▐
+                     ▐  next door   ▐          ▐         ▐
+                     ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▟█          ▐         ▐
+                     ▐              ▐          ▐         ▐
+                     ▐              ▐      skips C       ▐
+                     ▐              ▐▄▄▄▄▄▄▄▄▄▄▟▄▄▄▄▄▄▄▄▟█
+                     ▐              ▐          ▐         ▐
+                   ▗▄▟▄▄          ▗▄▟▄▄      ▗▄▟▄▄     ▗▄▟▄▄
+                   ▐ A ▐          ▐ B ▐      ▐ C ▐     ▐ D ▐
+                   ▐▄▄▄▟          ▐▄▄▄▟      ▐▄▄▄▟     ▐▄▄▄▟
+
+Multi-line text
+────────────────────────────────────────────────────────────────────────────────
+
+image @118,28 c=23 r=20 z=0 C=1 png=230x400
+                            ▗▄▄▄▄             ▗▄▄▄▄
+                            ▐ A ▐             ▐ B ▐
+                            ▐▄▄▄▟             ▐▄▄▄▟
+                              ▐                 ▐
+                              ▐       one       ▐
+                              ▐       two       ▐
+                              ▐      three      ▐
+                              ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟█
+                              ▐                 ▐
+                              ▐      after      ▐
+                              ▐█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                              ▐                 ▐
+                              ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟█
+                              ▐                 ▐
+                              ▐empty text above ▐
+                              ▐█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                              ▐                 ▐
+                            ▗▄▟▄▄             ▗▄▟▄▄
+                            ▐ A ▐             ▐ B ▐
+                            ▐▄▄▄▟             ▐▄▄▄▟
+
+Syntax that is read
+────────────────────────────────────────────────────────────────────────────────
+
+; and newlines separate statements, %% lines and # comments are dropped, #35; is
+an entity, + and - after an arrow and activate / deactivate are read and not
+drawn yet, and the keywords ignore case.
+
+image @146,22 c=35 r=18 z=0 C=1 png=350x360
+                              Front matter title
+
+                      ▗▄▄▄▄▄▄▄▄                 ▗▄▄▄▄▄▄▄▄
+                      ▐ Alpha ▐                 ▐ Beta  ▐
+                      ▐▄▄▄▄▄▄▄▟                 ▐▄▄▄▄▄▄▄▟
+                          ▐                         ▐
+                          ▐          call           ▐
+                          ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟█
+                          ▐                         ▐
+                          ▐        return #1        ▐
+                          ▐█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+                          ▐                         ▐
+                          ▐no space after the arrow ▐
+                          ▐▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟█
+                          ▐                         ▐
+                      ▗▄▄▄▟▄▄▄▄                 ▗▄▄▄▟▄▄▄▄
+                      ▐ Alpha ▐                 ▐ Beta  ▐
+                      ▐▄▄▄▄▄▄▄▟                 ▐▄▄▄▄▄▄▄▟
+
+Not drawn yet
+────────────────────────────────────────────────────────────────────────────────
+
+  sequenceDiagram
+      A->>B: before
+      Note over A,B: a note
+
+  sequenceDiagram
+      loop every minute
+          A->>B: ping
+      end
+
+  sequenceDiagram
+      A->>B: before
+      A->>A: think
+
+Not supported
+────────────────────────────────────────────────────────────────────────────────
+
+  sequenceDiagram
+      actor A
+      A->>B: hello
+
+  sequenceDiagram
+      box Aqua Group
+          participant A
+      end
+      A->>B: hello
+
+  sequenceDiagram
+      A->>B: hello
+      create participant C
+      B->>C: new
+
+  sequenceDiagram
+      A->>B: hello
+      destroy B
+
+  sequenceDiagram
+      autonumber
+      A->>B: hello
+
+  sequenceDiagram
+      rect rgb(0, 255, 0)
+          A->>B: hello
+      end
+
+  sequenceDiagram
+      link A: Docs @ https://example.com
+      A->>B: hello
+
+  sequenceDiagram
+      links A: {"Docs": "https://example.com"}
+      A->>B: hello
+
+  sequenceDiagram
+      properties A: {"class": "x"}
+      A->>B: hello
+
+  sequenceDiagram
+      details A: {"Docs": "https://example.com"}
+      A->>B: hello
+
+  sequenceDiagram
+      A<<->>B: both ways
+
+  sequenceDiagram
+      A->>B
+
+  sequenceDiagram
+      A->>B: hello
+      A--|\B: half arrow
+
+  sequenceDiagram
+      A->>B: hello
+      activate C
+
+  sequenceDiagram
+      A->>B: hello
+      else nothing to else
+
+  sequenceDiagram
+      A->>B: hello
+      end
+
+  sequenceDiagram
+      loop never closed
+          A->>B: hello
+
+  sequenceDiagram
+      A->>B: <b>bold</b>
+
+  sequenceDiagram
+      title: Nothing happens
+
+Too large
+────────────────────────────────────────────────────────────────────────────────
+
+Thirteen participants:
+
+  sequenceDiagram
+      A->>B: 1
+      B->>C: 2
+      C->>D: 3
+      D->>E: 4
+      E->>F: 5
+      F->>G: 6
+      G->>H: 7
+      H->>I: 8
+      I->>J: 9
+      J->>K: 10
+      K->>L: 11
+      L->>M: 12
+
+A hundred and fifty-one messages:
+
+  sequenceDiagram
+      A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x
+      A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x
+      A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x
+      A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x
+      A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x
+      A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x
+      A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x
+      A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x
+      A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x
+      A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x
+      A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x
+      A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x
+      A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x
+      A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x
+      A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x; A->>B: x
+      A->>B: x
+

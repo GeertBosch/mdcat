@@ -196,6 +196,8 @@ constexpr int kClusterPadLr = 2;     // rows a left-to-right subgraph's box adds
 constexpr int kMaxClusterDepth = 3;  // subgraphs inside subgraphs this deep are drawn, no deeper
 constexpr int kMinCylinderLabel =
     8;  // columns a cylinder is at least as wide as its label ("database")
+constexpr int kMaxParticipants = 12;  // a sequence diagram with more participants is too large
+constexpr int kMaxEvents = 150;       // likewise for more messages, notes and block lines
 }  // namespace tune
 
 // The spacing the layout uses. Fitting a diagram to the width tries tighter ones in turn.
@@ -204,6 +206,27 @@ struct Fit {
     int gapLr = tune::kGapLr;      // columns between two left-to-right ranks, at least
     int nodePad = tune::kNodePad;  // columns a node adds around its label
 };
+
+// Split the body of a ```mermaid block into its front matter (the lines between the `---` lines
+// that open the body, if it has them) and the text of the diagram after it. Declines (false) an
+// unclosed front matter.
+bool splitDiagram(const std::vector<std::string>& body,
+                  std::vector<std::string>& frontMatter,
+                  bool& hasFrontMatter,
+                  std::string& text,
+                  std::string& reason);
+
+// The first word of the diagram's first statement, after front matter and comments
+// (`sequenceDiagram`, `graph`, `pie`, ...), or "" if there is none.
+std::string diagramKeyword(const std::vector<std::string>& body);
+
+// The title that a front matter gives, or false if the front matter is not understood.
+bool parseFrontMatterTitle(const std::vector<std::string>& frontMatter, std::string& title);
+
+// A label as written in a quoted string, the way node labels are read: whitespace collapses,
+// entity codes are decoded and `<br>` starts a new line. Other HTML is declined. Any other
+// character is text, whether or not it is Mermaid syntax.
+bool plainLabelText(const std::string& raw, Label& label, std::string& reason);
 
 // Parse the body of a ```mermaid block. On failure `reason` is one of the stable fallback reasons.
 bool parseFlowchart(const std::vector<std::string>& body, Graph& g, std::string& reason);

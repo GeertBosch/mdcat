@@ -189,6 +189,8 @@ out a painter that needs neither.
 
 ## Step 2 — Sequence I: parser, model, participants and messages
 
+**Status:** done in the commit that adds this line.
+
 **Assumes:** Step 1.
 
 **Start from:** `render()` in `src/mermaid.cpp`, `parseHeader` in
@@ -273,17 +275,17 @@ Its declined part has one case per decline reason added in this step.
 
 **Success criteria:**
 
-- [ ] `make check` passes. The flowchart goldens are unchanged, and the new
+- [x] `make check` passes. The flowchart goldens are unchanged, and the new
       goldens are judged in the pixel preview.
-- [ ] The sweep reports **12 OK**: the 10 before plus `hang_analyzer/README.md:32`
+- [x] The sweep reports **12 OK**: the 10 before plus `hang_analyzer/README.md:32`
       and `:98`. The other nine sequence diagrams decline with a `sequence: not
       yet: …` reason, not `not a flowchart`.
-- [ ] `hang_analyzer:98` draws **6** participants, the two case variants
+- [x] `hang_analyzer:98` draws **5** participants, the two case variants
       included. This matches mmdc.
-- [ ] Every new decline reason is in MERMAID.md §2. A new section *Sequence
+- [x] Every new decline reason is in MERMAID.md §2. A new section *Sequence
       diagrams* shows the fixture's main example. *Limits* lists the unsupported
       keywords.
-- [ ] Diagrams that the builtin declines still reach `mmdc` under `--mermaid
+- [x] Diagrams that the builtin declines still reach `mmdc` under `--mermaid
       auto`. Check this with `hang_analyzer`'s neighbour `idl.md:904` and mmdc
       on PATH.
 
